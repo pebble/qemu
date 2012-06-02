@@ -17,6 +17,8 @@
 #include "boards.h"
 #include "exec-memory.h"
 
+#include "stm32f2xx_defines.h"
+
 #define GPIO_A 0
 #define GPIO_B 1
 #define GPIO_C 2
@@ -325,14 +327,17 @@ typedef struct {
     uint32_t int_mask;
     uint32_t resc;
     uint32_t rcc;
+
+    uint32_t rcc_cr;
+    uint32_t rcc_cfgr;
+    uint32_t rcc_anything_else;
+
     uint32_t rcc2;
     uint32_t rcgc[3];
     uint32_t scgc[3];
     uint32_t dcgc[3];
     uint32_t clkvclr;
     uint32_t ldoarst;
-    uint32_t user0;
-    uint32_t user1;
     qemu_irq irq;
     stm32_board_info *board;
 } ssys_state;
@@ -341,44 +346,6 @@ static void ssys_update(ssys_state *s)
 {
   qemu_set_irq(s->irq, (s->int_status & s->int_mask) != 0);
 }
-
-static uint32_t pllcfg_sandstorm[16] = {
-    0x31c0, /* 1 Mhz */
-    0x1ae0, /* 1.8432 Mhz */
-    0x18c0, /* 2 Mhz */
-    0xd573, /* 2.4576 Mhz */
-    0x37a6, /* 3.57954 Mhz */
-    0x1ae2, /* 3.6864 Mhz */
-    0x0c40, /* 4 Mhz */
-    0x98bc, /* 4.906 Mhz */
-    0x935b, /* 4.9152 Mhz */
-    0x09c0, /* 5 Mhz */
-    0x4dee, /* 5.12 Mhz */
-    0x0c41, /* 6 Mhz */
-    0x75db, /* 6.144 Mhz */
-    0x1ae6, /* 7.3728 Mhz */
-    0x0600, /* 8 Mhz */
-    0x585b /* 8.192 Mhz */
-};
-
-static uint32_t pllcfg_fury[16] = {
-    0x3200, /* 1 Mhz */
-    0x1b20, /* 1.8432 Mhz */
-    0x1900, /* 2 Mhz */
-    0xf42b, /* 2.4576 Mhz */
-    0x37e3, /* 3.57954 Mhz */
-    0x1b21, /* 3.6864 Mhz */
-    0x0c80, /* 4 Mhz */
-    0x98ee, /* 4.906 Mhz */
-    0xd5b4, /* 4.9152 Mhz */
-    0x0a00, /* 5 Mhz */
-    0x4e27, /* 5.12 Mhz */
-    0x1902, /* 6 Mhz */
-    0xec1c, /* 6.144 Mhz */
-    0x1b23, /* 7.3728 Mhz */
-    0x0640, /* 8 Mhz */
-    0xb11c /* 8.192 Mhz */
-};
 
 #define DID0_VER_MASK        0x70000000
 #define DID0_VER_0           0x00000000
@@ -411,87 +378,22 @@ static uint64_t ssys_read(void *opaque, target_phys_addr_t offset,
 {
     ssys_state *s = (ssys_state *)opaque;
 
-    switch (offset) {
-    case 0x000: /* DID0 */
-        return s->board->did0;
-    case 0x004: /* DID1 */
-        return s->board->did1;
-    case 0x008: /* DC0 */
-        return s->board->dc0;
-    case 0x010: /* DC1 */
-        return s->board->dc1;
-    case 0x014: /* DC2 */
-        return s->board->dc2;
-    case 0x018: /* DC3 */
-        return s->board->dc3;
-    case 0x01c: /* DC4 */
-        return s->board->dc4;
-    case 0x030: /* PBORCTL */
-        return s->pborctl;
-    case 0x034: /* LDOPCTL */
-        return s->ldopctl;
-    case 0x040: /* SRCR0 */
-        return 0;
-    case 0x044: /* SRCR1 */
-        return 0;
-    case 0x048: /* SRCR2 */
-        return 0;
-    case 0x050: /* RIS */
-        return s->int_status;
-    case 0x054: /* IMC */
-        return s->int_mask;
-    case 0x058: /* MISC */
-        return s->int_status & s->int_mask;
-    case 0x05c: /* RESC */
-        return s->resc;
-    case 0x060: /* RCC */
-        return s->rcc;
-    case 0x064: /* PLLCFG */
-        {
-            int xtal;
-            xtal = (s->rcc >> 6) & 0xf;
-            switch (ssys_board_class(s)) {
-            case DID0_CLASS_FURY:
-                return pllcfg_fury[xtal];
-            case DID0_CLASS_SANDSTORM:
-                return pllcfg_sandstorm[xtal];
-            default:
-                hw_error("ssys_read: Unhandled class for PLLCFG read.\n");
-                return 0;
-            }
-        }
-    case 0x070: /* RCC2 */
-        return s->rcc2;
-    case 0x100: /* RCGC0 */
-        return s->rcgc[0];
-    case 0x104: /* RCGC1 */
-        return s->rcgc[1];
-    case 0x108: /* RCGC2 */
-        return s->rcgc[2];
-    case 0x110: /* SCGC0 */
-        return s->scgc[0];
-    case 0x114: /* SCGC1 */
-        return s->scgc[1];
-    case 0x118: /* SCGC2 */
-        return s->scgc[2];
-    case 0x120: /* DCGC0 */
-        return s->dcgc[0];
-    case 0x124: /* DCGC1 */
-        return s->dcgc[1];
-    case 0x128: /* DCGC2 */
-        return s->dcgc[2];
-    case 0x150: /* CLKVCLR */
-        return s->clkvclr;
-    case 0x160: /* LDOARST */
-        return s->ldoarst;
-    case 0x1e0: /* USER0 */
-        return s->user0;
-    case 0x1e4: /* USER1 */
-        return s->user1;
+    uint64_t result = 0;
+
+    switch (offset)
+    {
+    case 0x00:
+        result = s->rcc_cr; break;
+    case 0x08:
+        result = s->rcc_cfgr; break;
     default:
-        hw_error("ssys_read: Bad offset 0x%x\n", (int)offset);
-        return 0;
+        result = s->rcc_anything_else; break;
+        //hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
     }
+
+    printf("stm32_read running: offset %u result %llu (0x%llx)\n", offset, result, result);
+
+    return result;
 }
 
 static bool ssys_use_rcc2(ssys_state *s)
@@ -511,87 +413,43 @@ static void ssys_calculate_system_clock(ssys_state *s)
     }
 }
 
+static void print_selected_used(const char* str, uint32_t v)
+{
+    uint32_t selected = v & RCC_CFGR_SW;
+    uint32_t used = (v & RCC_CFGR_SWS) >> 2;
+    printf("%s: sel 0x%x used 0x%x\n", str, selected, used);
+}
+
 static void ssys_write(void *opaque, target_phys_addr_t offset,
                        uint64_t value, unsigned size)
 {
+    printf("stm32_write running: offset %u value %llu (0x%llx) size %u\n", offset, value, value, size);
     ssys_state *s = (ssys_state *)opaque;
 
     switch (offset) {
-    case 0x030: /* PBORCTL */
-        s->pborctl = value & 0xffff;
-        break;
-    case 0x034: /* LDOPCTL */
-        s->ldopctl = value & 0x1f;
-        break;
-    case 0x040: /* SRCR0 */
-    case 0x044: /* SRCR1 */
-    case 0x048: /* SRCR2 */
-        fprintf(stderr, "Peripheral reset not implemented\n");
-        break;
-    case 0x054: /* IMC */
-        s->int_mask = value & 0x7f;
-        break;
-    case 0x058: /* MISC */
-        s->int_status &= ~value;
-        break;
-    case 0x05c: /* RESC */
-        s->resc = value & 0x3f;
-        break;
-    case 0x060: /* RCC */
-        if ((s->rcc & (1 << 13)) != 0 && (value & (1 << 13)) == 0) {
-            /* PLL enable.  */
-            s->int_status |= (1 << 6);
+    case 0x00:
+        s->rcc_cr = value;
+        if (s->rcc_cr | RCC_CR_PLLON)
+        {
+            s->rcc_cr |= RCC_CR_PLLRDY;
         }
-        s->rcc = value;
-        ssys_calculate_system_clock(s);
         break;
-    case 0x070: /* RCC2 */
-        if (ssys_board_class(s) == DID0_CLASS_SANDSTORM) {
-            break;
-        }
+    case 0x08:
+    {
+        print_selected_used("incoming", value);
 
-        if ((s->rcc2 & (1 << 13)) != 0 && (value & (1 << 13)) == 0) {
-            /* PLL enable.  */
-            s->int_status |= (1 << 6);
-        }
-        s->rcc2 = value;
-        ssys_calculate_system_clock(s);
+        // Clear out the previously selected system clock and paste in the new ones.
+        // selected is the mask 0x03, used is the mask 0x0c
+        s->rcc_cfgr = value & (~RCC_CFGR_SWS);
+        s->rcc_cfgr |= (s->rcc_cfgr & RCC_CFGR_SW) << 2;
+
+        print_selected_used("after", s->rcc_cfgr);
+
         break;
-    case 0x100: /* RCGC0 */
-        s->rcgc[0] = value;
-        break;
-    case 0x104: /* RCGC1 */
-        s->rcgc[1] = value;
-        break;
-    case 0x108: /* RCGC2 */
-        s->rcgc[2] = value;
-        break;
-    case 0x110: /* SCGC0 */
-        s->scgc[0] = value;
-        break;
-    case 0x114: /* SCGC1 */
-        s->scgc[1] = value;
-        break;
-    case 0x118: /* SCGC2 */
-        s->scgc[2] = value;
-        break;
-    case 0x120: /* DCGC0 */
-        s->dcgc[0] = value;
-        break;
-    case 0x124: /* DCGC1 */
-        s->dcgc[1] = value;
-        break;
-    case 0x128: /* DCGC2 */
-        s->dcgc[2] = value;
-        break;
-    case 0x150: /* CLKVCLR */
-        s->clkvclr = value;
-        break;
-    case 0x160: /* LDOARST */
-        s->ldoarst = value;
-        break;
+    }
     default:
-        hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
+        s->rcc_anything_else = value; break;
+        //hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
     }
     ssys_update(s);
 }
@@ -653,25 +511,20 @@ static const VMStateDescription vmstate_stm32_sys = {
 };
 
 static int stm32_sys_init(uint32_t base, qemu_irq irq,
-                              stm32_board_info * board,
-                              uint8_t *macaddr)
+                          stm32_board_info * board)
 {
     ssys_state *s;
 
     s = (ssys_state *)g_malloc0(sizeof(ssys_state));
     s->irq = irq;
     s->board = board;
-    /* Most devices come preprogrammed with a MAC address in the user data. */
-    s->user0 = macaddr[0] | (macaddr[1] << 8) | (macaddr[2] << 16);
-    s->user1 = macaddr[3] | (macaddr[4] << 8) | (macaddr[5] << 16);
 
-    memory_region_init_io(&s->iomem, &ssys_ops, s, "ssys", 0x00001000);
+    memory_region_init_io(&s->iomem, &ssys_ops, s, "ssys", 0x00000500);
     memory_region_add_subregion(get_system_memory(), base, &s->iomem);
     ssys_reset(s);
     vmstate_register(NULL, -1, &vmstate_stm32_sys, s);
     return 0;
 }
-
 
 /* I2C controller.  */
 
@@ -1164,20 +1017,6 @@ typedef struct {
     SSIBus *bus[2];
 } stm32_ssi_bus_state;
 
-static void stm32_ssi_bus_select(void *opaque, int irq, int level)
-{
-    stm32_ssi_bus_state *s = (stm32_ssi_bus_state *)opaque;
-
-    s->current_dev = level;
-}
-
-static uint32_t stm32_ssi_bus_transfer(SSISlave *dev, uint32_t val)
-{
-    stm32_ssi_bus_state *s = FROM_SSI_SLAVE(stm32_ssi_bus_state, dev);
-
-    return ssi_transfer(s->bus[s->current_dev], val);
-}
-
 static const VMStateDescription vmstate_stm32_ssi_bus = {
     .name = "stm32_ssi_bus",
     .version_id = 1,
@@ -1189,21 +1028,11 @@ static const VMStateDescription vmstate_stm32_ssi_bus = {
     }
 };
 
-static int stm32_ssi_bus_init(SSISlave *dev)
-{
-    stm32_ssi_bus_state *s = FROM_SSI_SLAVE(stm32_ssi_bus_state, dev);
-
-    s->bus[0] = ssi_create_bus(&dev->qdev, "ssi0");
-    s->bus[1] = ssi_create_bus(&dev->qdev, "ssi1");
-    qdev_init_gpio_in(&dev->qdev, stm32_ssi_bus_select, 1);
-
-    vmstate_register(&dev->qdev, -1, &vmstate_stm32_ssi_bus, s);
-    return 0;
-}
-
 static void stm32_init(const char *kernel_filename, const char *cpu_model,
                            stm32_board_info *board)
 {
+    printf("stm32_init running\n");
+
     static const int uart_irq[] = {5, 6, 33, 34};
     static const int timer_irq[] = {19, 21, 23, 35};
     static const uint32_t gpio_addr[7] =
@@ -1247,7 +1076,7 @@ static void stm32_init(const char *kernel_filename, const char *cpu_model,
         }
     }
 
-    stm32_sys_init(0x400fe000, pic[28], board, nd_table[0].macaddr.a);
+    stm32_sys_init(0x40023800, pic[28], board);
 
     for (i = 0; i < 7; i++) {
         if (board->dc4 & (1 << i)) {
@@ -1331,14 +1160,6 @@ static void stm32_machine_init(void)
 }
 
 machine_init(stm32_machine_init);
-
-static void stm32_ssi_bus_class_init(ObjectClass *klass, void *data)
-{
-    SSISlaveClass *k = SSI_SLAVE_CLASS(klass);
-
-    k->init = stm32_ssi_bus_init;
-    k->transfer = stm32_ssi_bus_transfer;
-}
 
 static void stm32_i2c_class_init(ObjectClass *klass, void *data)
 {
