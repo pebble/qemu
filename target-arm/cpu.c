@@ -87,6 +87,11 @@ static void arm_cpu_reset(CPUState *s)
         uint8_t *rom;
         env->uncached_cpsr &= ~CPSR_I;
         rom = rom_ptr(0);
+        if (!rom) {
+            /* Pebble - bmurray
+               Our flash is actually located at 0x08000000 instead of 0. */
+            rom = rom_ptr(0x08000000);
+        }
         if (rom) {
             /* We should really use ldl_phys here, in case the guest
                modified flash and reset itself.  However images

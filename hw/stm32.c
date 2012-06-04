@@ -1047,16 +1047,19 @@ static void stm32_init(const char *kernel_filename, const char *cpu_model,
     qemu_irq gpio_out[7][8];
     qemu_irq adc;
     int sram_size;
+    target_phys_addr_t flash_location;
     int flash_size;
     i2c_bus *i2c;
     DeviceState *dev;
     int i;
     int j;
 
-    flash_size = ((board->dc0 & 0xffff) + 1) << 1;
-    sram_size = (board->dc0 >> 18) + 1;
+    flash_size = 256 * 1024; // 256k 
+    flash_location = 0x08000000;
+    sram_size = 128 * 1024; // 128k
     pic = armv7m_init(address_space_mem,
-                      flash_size, sram_size, kernel_filename, cpu_model);
+                      flash_size, flash_location, sram_size,
+                      kernel_filename, cpu_model);
 
     if (board->dc1 & (1 << 16)) {
         dev = sysbus_create_varargs("stm32-adc", 0x40038000,
