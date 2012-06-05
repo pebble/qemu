@@ -440,7 +440,17 @@ static void do_v7m_exception_exit(CPUARMState *env)
     env->regs[3] = v7m_pop(env);
     env->regs[12] = v7m_pop(env);
     env->regs[14] = v7m_pop(env);
-    env->regs[15] = v7m_pop(env);
+
+    /* Pebble - Brad Murray
+       HACK HACK HACK
+       See https://bugs.launchpad.net/qemu/+bug/657006
+       The actual hardware doesn't actually save the least significant
+       bit, and FreeRTOS has a bug where it tries to save a pc that has
+       that bit set. If we take that literally, we jump to the wrong
+       spot. We need to mask out that zero like the actual hardware does
+       to immitate that undefined behaviour. */
+    env->regs[15] = v7m_pop(env) & 0xfffffffe;
+
     xpsr = v7m_pop(env);
     xpsr_write(env, xpsr, 0xfffffdff);
     /* Undo stack alignment.  */
