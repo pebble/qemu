@@ -30,12 +30,12 @@ static uint64_t ssys_read(void *opaque, target_phys_addr_t offset,
     case 0x08:
         result = s->rcc_cfgr; break;
     default:
-        printf("stm32_sys_read: Ignoring read to offset %u", offset);
+        printf("stm32_sys_read: Ignoring read to offset %u\n", offset);
         return 0; 
         //hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
     }
 
-    printf("stm32_sys_read running: offset %u result %llu (0x%llx)\n", offset, result, result);
+    printf("stm32_sys_read: offset %u result %llu (0x%llx)\n", offset, result, result);
     return result;
 }
 
@@ -73,12 +73,12 @@ static void ssys_write(void *opaque, target_phys_addr_t offset,
         break;
     }
     default:
-        printf("stm32_sys_write: Ignoring write to offset %u value %llu (0x%llx)", offset, value, value);
+        printf("stm32_sys_write: Ignoring write to offset %u value %llu (0x%llx)\n", offset, value, value);
         return;
         //hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
     }
 
-    printf("stm32_sys_write running: offset %u value %llu (0x%llx) size %u\n", offset, value, value, size);
+    printf("stm32_sys_write: offset %u value %llu (0x%llx) size %u\n", offset, value, value, size);
     //ssys_update(s);
 }
 
