@@ -7,6 +7,7 @@ typedef struct {
     uint32_t rcc_cr;
     uint32_t rcc_pllcfgr;
     uint32_t rcc_cfgr;
+    uint32_t rcc_bdcr;
 } ssys_state;
 
 //static void ssys_update(ssys_state *s)
@@ -29,6 +30,8 @@ static uint64_t ssys_read(void *opaque, target_phys_addr_t offset,
         result = s->rcc_pllcfgr; break;
     case 0x08:
         result = s->rcc_cfgr; break;
+    case 0x70: // BDCR
+        result = s->rcc_bdcr; break;
     default:
         printf("stm32_sys_read: Ignoring read to offset %u\n", offset);
         return 0; 
@@ -62,8 +65,9 @@ static void ssys_write(void *opaque, target_phys_addr_t offset,
         }
         break;
     case 0x04:
-        s->rcc_pllcfgr = value; break;
+        s->rcc_pllcfgr = value;
         ssys_calculate_system_clock(s);
+        break;
     case 0x08:
     {
         // Clear out the previously selected system clock and paste in the new ones.
@@ -72,6 +76,16 @@ static void ssys_write(void *opaque, target_phys_addr_t offset,
         s->rcc_cfgr |= (s->rcc_cfgr & RCC_CFGR_SW) << 2;
         break;
     }
+    case 0x70:
+        if (value == 0x01) // LSEON
+        {
+            s->rcc_bdcr = 0x01 | 0x02; // ON and RDY
+        }
+        else
+        {
+            s->rcc_bdcr = value;
+        }
+        break;
     default:
         printf("stm32_sys_write: Ignoring write to offset %u value %llu (0x%llx)\n", offset, value, value);
         return;
@@ -93,6 +107,7 @@ static void ssys_reset(ssys_state* s)
     s->rcc_cr = 0x00000083;
     s->rcc_pllcfgr = 0x24003010;
     s->rcc_cfgr = 0;
+    s->rcc_bdcr = 0;
 
     ssys_calculate_system_clock(s);
 }
@@ -116,6 +131,7 @@ static const VMStateDescription vmstate_stm32_sys = {
         VMSTATE_UINT32(rcc_cr, ssys_state),
         VMSTATE_UINT32(rcc_pllcfgr, ssys_state),
         VMSTATE_UINT32(rcc_cfgr, ssys_state),
+        VMSTATE_UINT32(rcc_bdcr, ssys_state),
         VMSTATE_END_OF_LIST()
     }
 };
