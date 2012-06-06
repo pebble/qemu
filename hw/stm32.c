@@ -14,6 +14,7 @@ typedef const struct {
 /* Peripherials */
 #include "stm32_sys.h"
 #include "stm32_gpio.h"
+#include "stm32_uart.h"
 
 static void stm32_init(const char *kernel_filename, const char *cpu_model,
                            stm32_board_info *board)
@@ -30,6 +31,7 @@ static void stm32_init(const char *kernel_filename, const char *cpu_model,
 
     stm32_sys_init();
     stm32_gpio_init();
+    stm32_uart_init();
 }
 
 /* Board init */
