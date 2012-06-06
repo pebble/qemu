@@ -30,12 +30,12 @@ static uint64_t ssys_read(void *opaque, target_phys_addr_t offset,
     case 0x08:
         result = s->rcc_cfgr; break;
     default:
-        printf("stm32_read: Ignoring read to offset %u", offset);
+        printf("stm32_sys_read: Ignoring read to offset %u", offset);
         return 0; 
         //hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
     }
 
-    printf("stm32_read running: offset %u result %llu (0x%llx)\n", offset, result, result);
+    printf("stm32_sys_read running: offset %u result %llu (0x%llx)\n", offset, result, result);
     return result;
 }
 
@@ -73,12 +73,12 @@ static void ssys_write(void *opaque, target_phys_addr_t offset,
         break;
     }
     default:
-        printf("stm32_read: Ignoring write to offset %u value %llu (0x%llx)", offset, value, value);
+        printf("stm32_sys_write: Ignoring write to offset %u value %llu (0x%llx)", offset, value, value);
         return;
         //hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
     }
 
-    printf("stm32_write running: offset %u value %llu (0x%llx) size %u\n", offset, value, value, size);
+    printf("stm32_sys_write running: offset %u value %llu (0x%llx) size %u\n", offset, value, value, size);
     //ssys_update(s);
 }
 
@@ -88,10 +88,8 @@ static const MemoryRegionOps ssys_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-static void ssys_reset(void *opaque)
+static void ssys_reset(ssys_state* s)
 {
-    ssys_state *s = (ssys_state *)opaque;
-
     s->rcc_cr = 0x00000083;
     s->rcc_pllcfgr = 0x24003010;
     s->rcc_cfgr = 0;
@@ -110,7 +108,7 @@ static int stm32_sys_post_load(void *opaque, int version_id)
 
 static const VMStateDescription vmstate_stm32_sys = {
     .name = "stm32_sys",
-    .version_id = 2,
+    .version_id = 1,
     .minimum_version_id = 1,
     .minimum_version_id_old = 1,
     .post_load = stm32_sys_post_load,
@@ -122,14 +120,14 @@ static const VMStateDescription vmstate_stm32_sys = {
     }
 };
 
-static int stm32_sys_init(uint32_t base)
+static int stm32_sys_init(void)
 {
     ssys_state *s;
 
     s = (ssys_state *)g_malloc0(sizeof(ssys_state));
 
     memory_region_init_io(&s->iomem, &ssys_ops, s, "ssys", 0x00000500);
-    memory_region_add_subregion(get_system_memory(), base, &s->iomem);
+    memory_region_add_subregion(get_system_memory(), 0x40023800, &s->iomem);
     ssys_reset(s);
     vmstate_register(NULL, -1, &vmstate_stm32_sys, s);
     return 0;

@@ -11,8 +11,9 @@ typedef const struct {
     const char *name;
 } stm32_board_info;
 
-/* System controller */
+/* Peripherials */
 #include "stm32_sys.h"
+#include "stm32_gpio.h"
 
 static void stm32_init(const char *kernel_filename, const char *cpu_model,
                            stm32_board_info *board)
@@ -27,7 +28,8 @@ static void stm32_init(const char *kernel_filename, const char *cpu_model,
                                 kernel_filename, cpu_model);
     (void) pic;
 
-    stm32_sys_init(0x40023800);
+    stm32_sys_init();
+    stm32_gpio_init();
 }
 
 /* Board init */
