@@ -1,31 +1,18 @@
 
+/* Implements "system" registers, namely the RCC registers. */
+
+
 typedef struct {
     MemoryRegion iomem;
-    uint32_t pborctl;
-    uint32_t ldopctl;
-    uint32_t int_status;
-    uint32_t int_mask;
-    uint32_t resc;
-    uint32_t rcc;
-
     uint32_t rcc_cr;
+    uint32_t rcc_pllcfgr;
     uint32_t rcc_cfgr;
-    uint32_t rcc_anything_else;
-
-    uint32_t rcc2;
-    uint32_t rcgc[3];
-    uint32_t scgc[3];
-    uint32_t dcgc[3];
-    uint32_t clkvclr;
-    uint32_t ldoarst;
-    qemu_irq irq;
-    stm32_board_info *board;
 } ssys_state;
 
-static void ssys_update(ssys_state *s)
-{
-  qemu_set_irq(s->irq, (s->int_status & s->int_mask) != 0);
-}
+//static void ssys_update(ssys_state *s)
+//{
+//  qemu_set_irq(s->irq, (s->int_status & s->int_mask) != 0);
+//}
 
 static uint64_t ssys_read(void *opaque, target_phys_addr_t offset,
                           unsigned size)
@@ -38,21 +25,18 @@ static uint64_t ssys_read(void *opaque, target_phys_addr_t offset,
     {
     case 0x00:
         result = s->rcc_cr; break;
+    case 0x04:
+        result = s->rcc_pllcfgr; break;
     case 0x08:
         result = s->rcc_cfgr; break;
     default:
-        result = s->rcc_anything_else; break;
+        printf("stm32_read: Ignoring read to offset %u", offset);
+        return 0; 
         //hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
     }
 
     printf("stm32_read running: offset %u result %llu (0x%llx)\n", offset, result, result);
-
     return result;
-}
-
-static bool ssys_use_rcc2(ssys_state *s)
-{
-    return (s->rcc2 >> 31) & 0x1;
 }
 
 /*
@@ -60,17 +44,13 @@ static bool ssys_use_rcc2(ssys_state *s)
  */
 static void ssys_calculate_system_clock(ssys_state *s)
 {
-    if (ssys_use_rcc2(s)) {
-        system_clock_scale = 5 * (((s->rcc2 >> 23) & 0x3f) + 1);
-    } else {
-        system_clock_scale = 5 * (((s->rcc >> 23) & 0xf) + 1);
-    }
+    /* We assume you're using the PLL. */
+    system_clock_scale = 5 * (((s->rcc_pllcfgr >> 23) & 0xf) + 1);
 }
 
 static void ssys_write(void *opaque, target_phys_addr_t offset,
                        uint64_t value, unsigned size)
 {
-    printf("stm32_write running: offset %u value %llu (0x%llx) size %u\n", offset, value, value, size);
     ssys_state *s = (ssys_state *)opaque;
 
     switch (offset) {
@@ -81,6 +61,9 @@ static void ssys_write(void *opaque, target_phys_addr_t offset,
             s->rcc_cr |= RCC_CR_PLLRDY;
         }
         break;
+    case 0x04:
+        s->rcc_pllcfgr = value; break;
+        ssys_calculate_system_clock(s);
     case 0x08:
     {
         // Clear out the previously selected system clock and paste in the new ones.
@@ -90,10 +73,13 @@ static void ssys_write(void *opaque, target_phys_addr_t offset,
         break;
     }
     default:
-        s->rcc_anything_else = value; break;
+        printf("stm32_read: Ignoring write to offset %u value %llu (0x%llx)", offset, value, value);
+        return;
         //hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
     }
-    ssys_update(s);
+
+    printf("stm32_write running: offset %u value %llu (0x%llx) size %u\n", offset, value, value, size);
+    //ssys_update(s);
 }
 
 static const MemoryRegionOps ssys_ops = {
@@ -106,13 +92,10 @@ static void ssys_reset(void *opaque)
 {
     ssys_state *s = (ssys_state *)opaque;
 
-    s->pborctl = 0x7ffd;
-    s->rcc = 0x078e3ac0;
+    s->rcc_cr = 0x00000083;
+    s->rcc_pllcfgr = 0x24003010;
+    s->rcc_cfgr = 0;
 
-    s->rcc2 = 0;
-    s->rcgc[0] = 1;
-    s->scgc[0] = 1;
-    s->dcgc[0] = 1;
     ssys_calculate_system_clock(s);
 }
 
@@ -132,30 +115,18 @@ static const VMStateDescription vmstate_stm32_sys = {
     .minimum_version_id_old = 1,
     .post_load = stm32_sys_post_load,
     .fields      = (VMStateField[]) {
-        VMSTATE_UINT32(pborctl, ssys_state),
-        VMSTATE_UINT32(ldopctl, ssys_state),
-        VMSTATE_UINT32(int_mask, ssys_state),
-        VMSTATE_UINT32(int_status, ssys_state),
-        VMSTATE_UINT32(resc, ssys_state),
-        VMSTATE_UINT32(rcc, ssys_state),
-        VMSTATE_UINT32_V(rcc2, ssys_state, 2),
-        VMSTATE_UINT32_ARRAY(rcgc, ssys_state, 3),
-        VMSTATE_UINT32_ARRAY(scgc, ssys_state, 3),
-        VMSTATE_UINT32_ARRAY(dcgc, ssys_state, 3),
-        VMSTATE_UINT32(clkvclr, ssys_state),
-        VMSTATE_UINT32(ldoarst, ssys_state),
+        VMSTATE_UINT32(rcc_cr, ssys_state),
+        VMSTATE_UINT32(rcc_pllcfgr, ssys_state),
+        VMSTATE_UINT32(rcc_cfgr, ssys_state),
         VMSTATE_END_OF_LIST()
     }
 };
 
-static int stm32_sys_init(uint32_t base, qemu_irq irq,
-                          stm32_board_info * board)
+static int stm32_sys_init(uint32_t base)
 {
     ssys_state *s;
 
     s = (ssys_state *)g_malloc0(sizeof(ssys_state));
-    s->irq = irq;
-    s->board = board;
 
     memory_region_init_io(&s->iomem, &ssys_ops, s, "ssys", 0x00000500);
     memory_region_add_subregion(get_system_memory(), base, &s->iomem);

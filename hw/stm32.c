@@ -25,8 +25,9 @@ static void stm32_init(const char *kernel_filename, const char *cpu_model,
     qemu_irq *pic = armv7m_init(address_space_mem,
                                 flash_size, flash_location, sram_size,
                                 kernel_filename, cpu_model);
+    (void) pic;
 
-    stm32_sys_init(0x40023800, pic[28], board);
+    stm32_sys_init(0x40023800);
 }
 
 /* Board init */
