@@ -16,6 +16,7 @@ typedef const struct {
 #include "stm32_gpio.h"
 #include "stm32_uart.h"
 #include "stm32_pwr.h"
+#include "stm32_rtc.h"
 
 static void stm32_init(const char *kernel_filename, const char *cpu_model,
                            stm32_board_info *board)
@@ -34,6 +35,7 @@ static void stm32_init(const char *kernel_filename, const char *cpu_model,
     stm32_gpio_init();
     stm32_uart_init();
     stm32_pwr_init();
+    stm32_rtc_init();
 }
 
 /* Board init */
