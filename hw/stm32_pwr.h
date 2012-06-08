@@ -21,7 +21,7 @@ static void stm32_pwr_write(void *opaque, target_phys_addr_t offset,
 {
     (void) opaque;
     (void) size;
-    printf("stm32_pwr_write: Ignoring write to offset %u value %llu (0x%llx)", offset, value, value);
+    printf("stm32_pwr_write: Ignoring write to offset %u value %"PRIu64" (0x%"PRIx64")", offset, value, value);
 }
 
 static const MemoryRegionOps pwr_ops = {

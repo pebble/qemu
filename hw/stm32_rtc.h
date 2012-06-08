@@ -21,7 +21,8 @@ static void stm32_rtc_write(void *opaque, target_phys_addr_t offset,
 {
     (void) opaque;
     (void) size;
-    printf("stm32_rtc_write: Ignoring write to offset %u value %llu (0x%llx)\n", offset, value, value);
+    printf("stm32_rtc_write: Ignoring write to offset %u value %"PRIu64" (0x%"PRIx64")\n",
+           offset, value, value);
 }
 
 static const MemoryRegionOps stm32_rtc_ops = {

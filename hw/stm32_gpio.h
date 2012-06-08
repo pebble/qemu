@@ -11,7 +11,7 @@ static uint64_t gpio_read(void *opaque, target_phys_addr_t offset,
 {
     (void) opaque;
     (void) size;
-    printf("stm32_gpio_read: Ignoring read to offset %u", offset);
+    printf("stm32_gpio_read: Ignoring read to offset %u\n", offset);
 
     return 0;
 }
@@ -21,7 +21,8 @@ static void gpio_write(void *opaque, target_phys_addr_t offset,
 {
     (void) opaque;
     (void) size;
-    printf("stm32_gpio_write: Ignoring write to offset %u value %llu (0x%llx)", offset, value, value);
+    printf("stm32_gpio_write: Ignoring write to offset %u value %"PRIu64" (0x%"PRIx64")\n",
+	   offset, value, value);
 }
 
 static const MemoryRegionOps gpio_ops = {

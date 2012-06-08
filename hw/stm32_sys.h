@@ -38,7 +38,7 @@ static uint64_t ssys_read(void *opaque, target_phys_addr_t offset,
         //hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
     }
 
-    printf("stm32_sys_read: offset %u result %llu (0x%llx)\n", offset, result, result);
+    printf("stm32_sys_read: offset %u result %"PRIu64" (0x%"PRIx64")\n", offset, result, result);
     return result;
 }
 
@@ -87,12 +87,12 @@ static void ssys_write(void *opaque, target_phys_addr_t offset,
         }
         break;
     default:
-        printf("stm32_sys_write: Ignoring write to offset %u value %llu (0x%llx)\n", offset, value, value);
+        printf("stm32_sys_write: Ignoring write to offset %u value %"PRIu64" (0x%"PRIx64")\n", offset, value, value);
         return;
         //hw_error("ssys_write: Bad offset 0x%x\n", (int)offset);
     }
 
-    printf("stm32_sys_write: offset %u value %llu (0x%llx) size %u\n", offset, value, value, size);
+    printf("stm32_sys_write: offset %u value %"PRIu64" (0x%"PRIx64") size %u\n", offset, value, value, size);
     //ssys_update(s);
 }
 

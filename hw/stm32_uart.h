@@ -27,7 +27,7 @@ static uint64_t stm32_uart_read(void *opaque, target_phys_addr_t offset,
         return 0;
     }
 
-    printf("stm32_uart_read: offset %u result %llu (0x%llx)\n", offset, result, result);
+    printf("stm32_uart_read: offset %u result %"PRIu64" (0x%"PRIx64")\n", offset, result, result);
     return result;
 }
 
@@ -52,11 +52,11 @@ static void stm32_uart_write(void *opaque, target_phys_addr_t offset,
         }
     }
     default:
-        printf("stm32_uart_write: Ignoring write to offset %u value %llu (0x%llx)\n", offset, value, value);
+        printf("stm32_uart_write: Ignoring write to offset %u value %"PRIu64" (0x%"PRIx64")\n", offset, value, value);
         return;
     }
 
-    printf("stm32_sys_write: offset %u value %llu (0x%llx) size %u\n", offset, value, value, size);
+    printf("stm32_sys_write: offset %u value %"PRIu64" (0x%"PRIx64") size %u\n", offset, value, value, size);
 }
 
 static const MemoryRegionOps uart_ops = {
