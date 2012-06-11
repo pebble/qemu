@@ -23,11 +23,11 @@ static uint64_t stm32_uart_read(void *opaque, target_phys_addr_t offset,
     case 0x00:
         result = s->reg_sr; break;
     default:
-        printf("stm32_uart_read: Ignoring read to offset %u", offset);
+        printf("stm32_uart_read: Ignoring read to offset %u\n", offset);
         return 0;
     }
 
-    printf("stm32_uart_read: offset %u result %"PRIu64" (0x%"PRIx64")\n", offset, result, result);
+    //printf("stm32_uart_read: offset %u result %"PRIu64" (0x%"PRIx64")\n", offset, result, result);
     return result;
 }
 
@@ -50,13 +50,14 @@ static void stm32_uart_write(void *opaque, target_phys_addr_t offset,
         {
             qemu_chr_fe_write(s->char_driver, &c, 1);
         }
+        break;
     }
     default:
         printf("stm32_uart_write: Ignoring write to offset %u value %"PRIu64" (0x%"PRIx64")\n", offset, value, value);
         return;
     }
 
-    printf("stm32_sys_write: offset %u value %"PRIu64" (0x%"PRIx64") size %u\n", offset, value, value, size);
+    //printf("stm32_sys_write: offset %u value %"PRIu64" (0x%"PRIx64") size %u\n", offset, value, value, size);
 }
 
 static const MemoryRegionOps uart_ops = {
@@ -67,7 +68,7 @@ static const MemoryRegionOps uart_ops = {
 
 static void stm32_uart_reset(stm32_uart_state* s)
 {
-    s->reg_sr = 0x000000c0;
+    s->reg_sr = 0x000000c0; // USART_SR_TC | USART_SR_TXE
 }
 
 static int stm32_uart_post_load(void *opaque, int version_id)
@@ -99,7 +100,7 @@ static int stm32_uart_can_receive(void* opaque)
 
     return 1;
 }
-  
+
 static void stm32_uart_receive(void *opaque, const uint8_t *buf, int size)
 {
     (void) opaque;
@@ -107,7 +108,6 @@ static void stm32_uart_receive(void *opaque, const uint8_t *buf, int size)
     (void) size;
 
     printf("stm32_uart_receive: size %d\n", size);
-    abort();
 }
 
 static void stm32_uart_event(void *opaque, int event)
@@ -124,7 +124,7 @@ static int stm32_uart_init(void)
 
     s = (stm32_uart_state *)g_malloc0(sizeof(stm32_uart_state));
 
-    memory_region_init_io(&s->iomem, &uart_ops, s, "uart3", 0x00000500);
+    memory_region_init_io(&s->iomem, &uart_ops, s, "uart3", 0x00000400);
     memory_region_add_subregion(get_system_memory(), 0x40004800, &s->iomem);
     s->char_driver = qemu_char_get_next_serial();
 

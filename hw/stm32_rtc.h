@@ -11,7 +11,7 @@ static uint64_t stm32_rtc_read(void *opaque, target_phys_addr_t offset,
 {
     (void) opaque;
     (void) size;
-    printf("stm32_rtc_read: Ignoring read to offset %u\n", offset);
+    //printf("stm32_rtc_read: Ignoring read to offset %u\n", offset);
 
     return 0;
 }
