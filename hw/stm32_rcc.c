@@ -21,6 +21,7 @@
  */
 
 #include "stm32.h"
+#include "stm32_rcc_configs.h"
 #include "clktree.h"
 #include <stdio.h>
 
@@ -37,138 +38,12 @@
 #define DPRINTF(fmt, ...)
 #endif
 
-#define HSI_FREQ 8000000
-#define LSI_FREQ 40000
-
-#define RCC_CR_OFFSET 0x00
-#define RCC_CR_PLL3RDY_CL_BIT   29
-#define RCC_CR_PLL3ON_CL_BIT    28
-#define RCC_CR_PLL2RDY_CL_BIT   27
-#define RCC_CR_PLL2ON_CL_BIT    26
-#define RCC_CR_PLLRDY_BIT       25
-#define RCC_CR_PLLON_BIT        24
-#define RCC_CR_CSSON_BIT        19
-#define RCC_CR_HSEBYP_BIT       18
-#define RCC_CR_HSERDY_BIT       17
-#define RCC_CR_HSEON_BIT        16
-#define RCC_CR_HSICAL_START     8
-#define RCC_CR_HSICAL_MASK      0x0000ff00
-#define RCC_CR_HSITRIM_START    3
-#define RCC_CR_HSITRIM_MASK     0x000000f8
-#define RCC_CR_HSIRDY_BIT       1
-#define RCC_CR_HSION_BIT        0
-
-#define RCC_CFGR_OFFSET 0x04
-#define RCC_CFGR_MCO_START       24
-#define RCC_CFGR_MCO_MASK        0x07000000
-#define RCC_CFGR_MCO_CL_MASK     0x0f000000
-#define RCC_CFGR_USBPRE_BIT      22
-#define RCC_CFGR_OTGFSPRE_CL_BIT 22
-#define RCC_CFGR_PLLMUL_START    18
-#define RCC_CFGR_PLLMUL_MASK     0x003c0000
-#define RCC_CFGR_PLLXTPRE_BIT    17
-#define RCC_CFGR_PLLSRC_BIT      16
-#define RCC_CFGR_ADCPRE_START    14
-#define RCC_CFGR_ADCPRE_MASK     0x0000c000
-#define RCC_CFGR_PPRE2_START     11
-#define RCC_CFGR_PPRE2_MASK      0x00003c00
-#define RCC_CFGR_PPRE1_START     8
-#define RCC_CFGR_PPRE1_MASK      0x00000700
-#define RCC_CFGR_HPRE_START      4
-#define RCC_CFGR_HPRE_MASK       0x000000f0
-#define RCC_CFGR_SWS_START       2
-#define RCC_CFGR_SWS_MASK        0x0000000c
-#define RCC_CFGR_SW_START        0
-#define RCC_CFGR_SW_MASK         0x00000003
-
-#define RCC_CIR_OFFSET 0x08
-
-#define RCC_APB2RSTR_OFFSET 0x0c
-
-#define RCC_APB1RSTR_OFFSET 0x10
-
-#define RCC_AHBENR_OFFSET 0x14
-
-#define RCC_APB2ENR_OFFSET 0x18
-#define RCC_APB2ENR_ADC3EN_BIT   15
-#define RCC_APB2ENR_USART1EN_BIT 14
-#define RCC_APB2ENR_TIM8EN_BIT   13
-#define RCC_APB2ENR_SPI1EN_BIT   12
-#define RCC_APB2ENR_TIM1EN_BIT   11
-#define RCC_APB2ENR_ADC2EN_BIT   10
-#define RCC_APB2ENR_ADC1EN_BIT   9
-#define RCC_APB2ENR_IOPGEN_BIT   8
-#define RCC_APB2ENR_IOPFEN_BIT   7
-#define RCC_APB2ENR_IOPEEN_BIT   6
-#define RCC_APB2ENR_IOPDEN_BIT   5
-#define RCC_APB2ENR_IOPCEN_BIT   4
-#define RCC_APB2ENR_IOPBEN_BIT   3
-#define RCC_APB2ENR_IOPAEN_BIT   2
-#define RCC_APB2ENR_AFIOEN_BIT   0
-
-#define RCC_APB1ENR_OFFSET 0x1c
-#define RCC_APB1ENR_DACEN_BIT    29
-#define RCC_APB1ENR_PWREN_BIT    28
-#define RCC_APB1ENR_BKPEN_BIT    27
-#define RCC_APB1ENR_CAN2EN_BIT   26
-#define RCC_APB1ENR_CAN1EN_BIT   25
-#define RCC_APB1ENR_CANEN_BIT    25
-#define RCC_APB1ENR_USBEN_BIT    23
-#define RCC_APB1ENR_I2C2EN_BIT   22
-#define RCC_APB1ENR_I2C1EN_BIT   21
-#define RCC_APB1ENR_USART5EN_BIT 20
-#define RCC_APB1ENR_USART4EN_BIT 19
-#define RCC_APB1ENR_USART3EN_BIT 18
-#define RCC_APB1ENR_USART2EN_BIT 17
-#define RCC_APB1ENR_SPI3EN_BIT   15
-#define RCC_APB1ENR_SPI2EN_BIT   14
-#define RCC_APB1ENR_WWDGEN_BIT   11
-#define RCC_APB1ENR_TIM7EN_BIT   5
-#define RCC_APB1ENR_TIM6EN_BIT   4
-#define RCC_APB1ENR_TIM5EN_BIT   3
-#define RCC_APB1ENR_TIM4EN_BIT   2
-#define RCC_APB1ENR_TIM3EN_BIT   1
-#define RCC_APB1ENR_TIM2EN_BIT   0
-
-#define RCC_BDCR_OFFSET 0x20
-#define RCC_BDCR_RTCEN_BIT 15
-#define RCC_BDCR_RTCSEL_START 8
-#define RCC_BDCR_RTCSEL_MASK 0x00000300
-#define RCC_BDCR_LSERDY_BIT 1
-#define RCC_BDCR_LSEON_BIT 0
-
-#define RCC_CSR_OFFSET 0x24
-#define RCC_CSR_LSIRDY_BIT 1
-#define RCC_CSR_LSION_BIT 0
-
-#define RCC_AHBRSTR 0x28
-
-#define RCC_CFGR2_OFFSET 0x2c
-#define RCC_CFGR2_I2S3SRC_BIT    18
-#define RCC_CFGR2_I2S2SRC_BIT    17
-#define RCC_CFGR2_PREDIV1SRC_BIT 16
-#define RCC_CFGR2_PLL3MUL_START  12
-#define RCC_CFGR2_PLL3MUL_MASK   0x0000f000
-#define RCC_CFGR2_PLL2MUL_START  8
-#define RCC_CFGR2_PLL2MUL_MASK   0x00000f00
-#define RCC_CFGR2_PREDIV2_START  4
-#define RCC_CFGR2_PREDIV2_MASK   0x000000f0
-#define RCC_CFGR2_PREDIV_START   0
-#define RCC_CFGR2_PREDIV_MASK    0x0000000f
-#define RCC_CFGR2_PLLXTPRE_BIT   0
-
-#define PLLSRC_HSI_SELECTED 0
-#define PLLSRC_HSE_SELECTED 1
-
-#define SW_HSI_SELECTED 0
-#define SW_HSE_SELECTED 1
-#define SW_PLL_SELECTED 2
-
 struct Stm32Rcc {
     /* Inherited */
     SysBusDevice busdev;
 
     /* Properties */
+    const Stm32RccConfig *config;
     uint32_t osc_freq;
     uint32_t osc32_freq;
 
@@ -238,12 +113,12 @@ static uint32_t stm32_rcc_RCC_CR_read(Stm32Rcc *s)
     /* build the register value based on the clock states.  If a clock is on,
      * then its ready bit is always set.
      */
-    return GET_BIT_MASK(RCC_CR_PLLRDY_BIT, PLLON) |
-           GET_BIT_MASK(RCC_CR_PLLON_BIT, PLLON) |
-           GET_BIT_MASK(RCC_CR_HSERDY_BIT, HSEON) |
-           GET_BIT_MASK(RCC_CR_HSEON_BIT, HSEON) |
-           GET_BIT_MASK(RCC_CR_HSIRDY_BIT, HSION) |
-           GET_BIT_MASK(RCC_CR_HSION_BIT, HSION);
+    return GET_BIT_MASK(s->config->RCC_CR_PLLRDY_BIT, PLLON) |
+           GET_BIT_MASK(s->config->RCC_CR_PLLON_BIT, PLLON) |
+           GET_BIT_MASK(s->config->RCC_CR_HSERDY_BIT, HSEON) |
+           GET_BIT_MASK(s->config->RCC_CR_HSEON_BIT, HSEON) |
+           GET_BIT_MASK(s->config->RCC_CR_HSIRDY_BIT, HSION) |
+           GET_BIT_MASK(s->config->RCC_CR_HSION_BIT, HSION);
 }
 
 /* Write the Configuration Register.
@@ -255,27 +130,27 @@ static void stm32_rcc_RCC_CR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 {
     bool new_PLLON, new_HSEON, new_HSION;
 
-    new_PLLON = IS_BIT_SET(new_value, RCC_CR_PLLON_BIT);
+    new_PLLON = IS_BIT_SET(new_value, s->config->RCC_CR_PLLON_BIT);
     if((clktree_is_enabled(s->PLLCLK) && !new_PLLON) &&
-       s->RCC_CFGR_SW == SW_PLL_SELECTED) {
+       s->RCC_CFGR_SW == s->config->SW_PLL_SELECTED) {
         stm32_hw_warn("PLL cannot be disabled while it is selected as the system clock.");
     }
     clktree_set_enabled(s->PLLCLK, new_PLLON);
 
-    new_HSEON = IS_BIT_SET(new_value, RCC_CR_HSEON_BIT);
+    new_HSEON = IS_BIT_SET(new_value, s->config->RCC_CR_HSEON_BIT);
     if((clktree_is_enabled(s->HSECLK) && !new_HSEON) &&
-       (s->RCC_CFGR_SW == SW_HSE_SELECTED ||
-        (s->RCC_CFGR_SW == SW_PLL_SELECTED && s->RCC_CFGR_PLLSRC == PLLSRC_HSE_SELECTED)
+       (s->RCC_CFGR_SW == s->config->SW_HSE_SELECTED ||
+        (s->RCC_CFGR_SW == s->config->SW_PLL_SELECTED && s->RCC_CFGR_PLLSRC == s->config->PLLSRC_HSE_SELECTED)
        )
       ) {
         stm32_hw_warn("HSE oscillator cannot be disabled while it is driving the system clock.");
     }
     clktree_set_enabled(s->HSECLK, new_HSEON);
 
-    new_HSION = IS_BIT_SET(new_value, RCC_CR_HSION_BIT);
+    new_HSION = IS_BIT_SET(new_value, s->config->RCC_CR_HSION_BIT);
     if((clktree_is_enabled(s->HSECLK) && !new_HSEON) &&
-       (s->RCC_CFGR_SW == SW_HSI_SELECTED ||
-        (s->RCC_CFGR_SW == SW_PLL_SELECTED && s->RCC_CFGR_PLLSRC == PLLSRC_HSI_SELECTED)
+       (s->RCC_CFGR_SW == s->config->SW_HSI_SELECTED ||
+        (s->RCC_CFGR_SW == s->config->SW_PLL_SELECTED && s->RCC_CFGR_PLLSRC == s->config->PLLSRC_HSI_SELECTED)
        )
       ) {
         stm32_hw_warn("HSI oscillator cannot be disabled while it is driving the system clock.");
@@ -286,14 +161,14 @@ static void stm32_rcc_RCC_CR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 
 static uint32_t stm32_rcc_RCC_CFGR_read(Stm32Rcc *s)
 {
-    return (s->RCC_CFGR_PLLMUL << RCC_CFGR_PLLMUL_START) |
-           (s->RCC_CFGR_PLLXTPRE << RCC_CFGR_PLLXTPRE_BIT) |
-           (s->RCC_CFGR_PLLSRC << RCC_CFGR_PLLSRC_BIT) |
-           (s->RCC_CFGR_PPRE2 << RCC_CFGR_PPRE2_START) |
-           (s->RCC_CFGR_PPRE1 << RCC_CFGR_PPRE1_START) |
-           (s->RCC_CFGR_HPRE << RCC_CFGR_HPRE_START) |
-           (s->RCC_CFGR_SW << RCC_CFGR_SW_START) |
-           (s->RCC_CFGR_SW << RCC_CFGR_SWS_START);
+    return (s->RCC_CFGR_PLLMUL << s->config->RCC_CFGR_PLLMUL_START) |
+           (s->RCC_CFGR_PLLXTPRE << s->config->RCC_CFGR_PLLXTPRE_BIT) |
+           (s->RCC_CFGR_PLLSRC << s->config->RCC_CFGR_PLLSRC_BIT) |
+           (s->RCC_CFGR_PPRE2 << s->config->RCC_CFGR_PPRE2_START) |
+           (s->RCC_CFGR_PPRE1 << s->config->RCC_CFGR_PPRE1_START) |
+           (s->RCC_CFGR_HPRE << s->config->RCC_CFGR_HPRE_START) |
+           (s->RCC_CFGR_SW << s->config->RCC_CFGR_SW_START) |
+           (s->RCC_CFGR_SW << s->config->RCC_CFGR_SWS_START);
 }
 
 
@@ -302,7 +177,7 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
     uint32_t new_PLLMUL, new_PLLXTPRE, new_PLLSRC;
 
     /* PLLMUL */
-    new_PLLMUL = (new_value & RCC_CFGR_PLLMUL_MASK) >> RCC_CFGR_PLLMUL_START;
+    new_PLLMUL = (new_value & s->config->RCC_CFGR_PLLMUL_MASK) >> s->config->RCC_CFGR_PLLMUL_START;
     if(!init) {
           if(clktree_is_enabled(s->PLLCLK) &&
            (new_PLLMUL != s->RCC_CFGR_PLLMUL)) {
@@ -318,7 +193,7 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
     s->RCC_CFGR_PLLMUL = new_PLLMUL;
 
     /* PLLXTPRE */
-    new_PLLXTPRE = GET_BIT_VALUE(new_value, RCC_CFGR_PLLXTPRE_BIT);
+    new_PLLXTPRE = GET_BIT_VALUE(new_value, s->config->RCC_CFGR_PLLXTPRE_BIT);
     if(!init) {
         if(clktree_is_enabled(s->PLLCLK) &&
            (new_PLLXTPRE != s->RCC_CFGR_PLLXTPRE)) {
@@ -329,7 +204,7 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
     s->RCC_CFGR_PLLXTPRE = new_PLLXTPRE;
 
     /* PLLSRC */
-    new_PLLSRC = GET_BIT_VALUE(new_value, RCC_CFGR_PLLSRC_BIT);
+    new_PLLSRC = GET_BIT_VALUE(new_value, s->config->RCC_CFGR_PLLSRC_BIT);
     if(!init) {
         if(clktree_is_enabled(s->PLLCLK) &&
            (new_PLLSRC != s->RCC_CFGR_PLLSRC)) {
@@ -340,7 +215,7 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
     s->RCC_CFGR_PLLSRC = new_PLLSRC;
 
     /* PPRE2 */
-    s->RCC_CFGR_PPRE2 = (new_value & RCC_CFGR_PPRE2_MASK) >> RCC_CFGR_PPRE2_START;
+    s->RCC_CFGR_PPRE2 = (new_value & s->config->RCC_CFGR_PPRE2_MASK) >> s->config->RCC_CFGR_PPRE2_START;
     if(s->RCC_CFGR_PPRE2 < 0x4) {
         clktree_set_scale(s->PCLK2, 1, 1);
     } else {
@@ -348,7 +223,7 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
     }
 
     /* PPRE1 */
-    s->RCC_CFGR_PPRE1 = (new_value & RCC_CFGR_PPRE1_MASK) >> RCC_CFGR_PPRE1_START;
+    s->RCC_CFGR_PPRE1 = (new_value & s->config->RCC_CFGR_PPRE1_MASK) >> s->config->RCC_CFGR_PPRE1_START;
     if(s->RCC_CFGR_PPRE1 < 4) {
         clktree_set_scale(s->PCLK1, 1, 1);
     } else {
@@ -356,7 +231,7 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
     }
 
     /* HPRE */
-    s->RCC_CFGR_HPRE = (new_value & RCC_CFGR_HPRE_MASK) >> RCC_CFGR_HPRE_START;
+    s->RCC_CFGR_HPRE = (new_value & s->config->RCC_CFGR_HPRE_MASK) >> s->config->RCC_CFGR_HPRE_START;
     if(s->RCC_CFGR_HPRE < 8) {
         clktree_set_scale(s->HCLK, 1, 1);
     } else {
@@ -364,7 +239,7 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
     }
 
     /* SW */
-    s->RCC_CFGR_SW = (new_value & RCC_CFGR_SW_MASK) >> RCC_CFGR_SW_START;
+    s->RCC_CFGR_SW = (new_value & s->config->RCC_CFGR_SW_MASK) >> s->config->RCC_CFGR_SW_START;
     switch(s->RCC_CFGR_SW) {
         case 0x0:
         case 0x1:
@@ -383,23 +258,23 @@ static void stm32_rcc_RCC_APB2ENR_write(Stm32Rcc *s, uint32_t new_value,
                                         bool init)
 {
     stm32_rcc_periph_enable(s, new_value, init, STM32_UART1,
-                            RCC_APB2ENR_USART1EN_BIT);
+                            s->config->RCC_APB2ENR_USART1EN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_GPIOE,
-                            RCC_APB2ENR_IOPEEN_BIT);
+                            s->config->RCC_APB2ENR_IOPEEN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_GPIOD,
-                            RCC_APB2ENR_IOPDEN_BIT);
+                            s->config->RCC_APB2ENR_IOPDEN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_GPIOC,
-                            RCC_APB2ENR_IOPCEN_BIT);
+                            s->config->RCC_APB2ENR_IOPCEN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_GPIOB,
-                            RCC_APB2ENR_IOPBEN_BIT);
+                            s->config->RCC_APB2ENR_IOPBEN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_GPIOA,
-                            RCC_APB2ENR_IOPAEN_BIT);
+                            s->config->RCC_APB2ENR_IOPAEN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_AFIO,
-                            RCC_APB2ENR_AFIOEN_BIT);
+                            s->config->RCC_APB2ENR_AFIOEN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_GPIOG,
-                            RCC_APB2ENR_IOPGEN_BIT);
+                            s->config->RCC_APB2ENR_IOPGEN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_GPIOF,
-                            RCC_APB2ENR_IOPFEN_BIT);
+                            s->config->RCC_APB2ENR_IOPFEN_BIT);
 
     s->RCC_APB2ENR = new_value & 0x0000fffd;
 }
@@ -410,13 +285,13 @@ static void stm32_rcc_RCC_APB1ENR_write(Stm32Rcc *s, uint32_t new_value,
                     bool init)
 {
     stm32_rcc_periph_enable(s, new_value, init, STM32_UART5,
-                            RCC_APB1ENR_USART5EN_BIT);
+                            s->config->RCC_APB1ENR_USART5EN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_UART4,
-                            RCC_APB1ENR_USART4EN_BIT);
+                            s->config->RCC_APB1ENR_USART4EN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_UART3,
-                            RCC_APB1ENR_USART3EN_BIT);
+                            s->config->RCC_APB1ENR_USART3EN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32_UART2,
-                            RCC_APB1ENR_USART2EN_BIT);
+                            s->config->RCC_APB1ENR_USART2EN_BIT);
 
     s->RCC_APB1ENR = new_value & 0x00005e7d;
 }
@@ -425,13 +300,13 @@ static uint32_t stm32_rcc_RCC_BDCR_read(Stm32Rcc *s)
 {
     bool lseon = clktree_is_enabled(s->LSECLK);
 
-    return GET_BIT_MASK(RCC_BDCR_LSERDY_BIT, lseon) |
-           GET_BIT_MASK(RCC_BDCR_LSEON_BIT, lseon);
+    return GET_BIT_MASK(s->config->RCC_BDCR_LSERDY_BIT, lseon) |
+           GET_BIT_MASK(s->config->RCC_BDCR_LSEON_BIT, lseon);
 }
 
 static void stm32_rcc_RCC_BDCR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 {
-    clktree_set_enabled(s->LSECLK, IS_BIT_SET(new_value, RCC_BDCR_LSEON_BIT));
+    clktree_set_enabled(s->LSECLK, IS_BIT_SET(new_value, s->config->RCC_BDCR_LSEON_BIT));
 }
 
 /* Works the same way as stm32_rcc_RCC_CR_read */
@@ -439,14 +314,14 @@ static uint32_t stm32_rcc_RCC_CSR_read(Stm32Rcc *s)
 {
     bool lseon = clktree_is_enabled(s->LSICLK);
 
-    return GET_BIT_MASK(RCC_CSR_LSIRDY_BIT, lseon) |
-           GET_BIT_MASK(RCC_CSR_LSION_BIT, lseon);
+    return GET_BIT_MASK(s->config->RCC_CSR_LSIRDY_BIT, lseon) |
+           GET_BIT_MASK(s->config->RCC_CSR_LSION_BIT, lseon);
 }
 
 /* Works the same way as stm32_rcc_RCC_CR_write */
 static void stm32_rcc_RCC_CSR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 {
-    clktree_set_enabled(s->LSICLK, IS_BIT_SET(new_value, RCC_CSR_LSION_BIT));
+    clktree_set_enabled(s->LSICLK, IS_BIT_SET(new_value, s->config->RCC_CSR_LSION_BIT));
 }
 
 
@@ -455,35 +330,34 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
 {
     Stm32Rcc *s = (Stm32Rcc *)opaque;
 
-    switch (offset) {
-        case RCC_CR_OFFSET:
-            return stm32_rcc_RCC_CR_read(s);
-        case RCC_CFGR_OFFSET:
-            return stm32_rcc_RCC_CFGR_read(s);
-        case RCC_CIR_OFFSET:
-            return 0;
-        case RCC_APB2RSTR_OFFSET:
-        case RCC_APB1RSTR_OFFSET:
-        case RCC_AHBENR_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
-            return 0;
-        case RCC_APB2ENR_OFFSET:
-            return s->RCC_APB2ENR;
-        case RCC_APB1ENR_OFFSET:
-            return s->RCC_APB1ENR;
-        case RCC_BDCR_OFFSET:
-            return stm32_rcc_RCC_BDCR_read(s);
-        case RCC_CSR_OFFSET:
-            return stm32_rcc_RCC_CSR_read(s);
-        case RCC_AHBRSTR:
-            STM32_NOT_IMPL_REG(offset, 4);
-            return 0;
-        case RCC_CFGR2_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
-            return 0;
-        default:
-            STM32_BAD_REG(offset, 4);
-            break;
+    if (offset == s->config->RCC_CR_OFFSET) {
+        return stm32_rcc_RCC_CR_read(s);
+    } else if (offset == s->config->RCC_CFGR_OFFSET) {
+        return stm32_rcc_RCC_CFGR_read(s);
+    } else if (offset == s->config->RCC_CIR_OFFSET) {
+        return 0;
+    } else if (offset == s->config->RCC_APB2RSTR_OFFSET ||
+               offset == s->config->RCC_APB1RSTR_OFFSET ||
+               offset == s->config->RCC_AHBENR_OFFSET) {
+        STM32_NOT_IMPL_REG(offset, 4);
+        return 0;
+    } else if (offset == s->config->RCC_APB2ENR_OFFSET) {
+        return s->RCC_APB2ENR;
+    } else if (offset == s->config->RCC_APB1ENR_OFFSET) {
+        return s->RCC_APB1ENR;
+    } else if (offset == s->config->RCC_BDCR_OFFSET) {
+        return stm32_rcc_RCC_BDCR_read(s);
+    } else if (offset == s->config->RCC_CSR_OFFSET) {
+        return stm32_rcc_RCC_CSR_read(s);
+    } else if (offset == s->config->RCC_AHBRSTR) {
+        STM32_NOT_IMPL_REG(offset, 4);
+        return 0;
+    } else if (offset == s->config->RCC_CFGR2_OFFSET) {
+        STM32_NOT_IMPL_REG(offset, 4);
+        return 0;
+    } else {
+        STM32_BAD_REG(offset, 4);
+        return 0;
     }
 }
 
@@ -492,42 +366,30 @@ static void stm32_rcc_writew(void *opaque, hwaddr offset, uint64_t value)
 {
     Stm32Rcc *s = (Stm32Rcc *)opaque;
 
-    switch(offset) {
-        case RCC_CR_OFFSET:
-            stm32_rcc_RCC_CR_write(s, value, false);
-            break;
-        case RCC_CFGR_OFFSET:
-            stm32_rcc_RCC_CFGR_write(s, value, false);
-            break;
-        case RCC_CIR_OFFSET:
-            /* Allow a write but don't take any action */
-            break;
-        case RCC_APB2RSTR_OFFSET:
-        case RCC_APB1RSTR_OFFSET:
-        case RCC_AHBENR_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
-            break;
-        case RCC_APB2ENR_OFFSET:
-            stm32_rcc_RCC_APB2ENR_write(s, value, false);
-            break;
-        case RCC_APB1ENR_OFFSET:
-            stm32_rcc_RCC_APB1ENR_write(s, value, false);
-            break;
-        case RCC_BDCR_OFFSET:
-            stm32_rcc_RCC_BDCR_write(s, value, false);
-            break;
-        case RCC_CSR_OFFSET:
-            stm32_rcc_RCC_CSR_write(s, value, false);
-            break;
-        case RCC_AHBRSTR:
-            STM32_NOT_IMPL_REG(offset, 4);
-            break;
-        case RCC_CFGR2_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
-            break;
-        default:
-            STM32_BAD_REG(offset, 4);
-            break;
+    if (offset == s->config->RCC_CR_OFFSET) {
+        stm32_rcc_RCC_CR_write(s, value, false);
+    } else if (offset == s->config->RCC_CFGR_OFFSET) {
+        stm32_rcc_RCC_CFGR_write(s, value, false);
+    } else if (offset == s->config->RCC_CIR_OFFSET) {
+        /* Allow a write but don't take any action */
+    } else if (offset == s->config->RCC_APB2RSTR_OFFSET || 
+               offset == s->config->RCC_APB1RSTR_OFFSET ||
+               offset == s->config->RCC_AHBENR_OFFSET) {
+        STM32_NOT_IMPL_REG(offset, 4);
+    } else if (offset == s->config->RCC_APB2ENR_OFFSET) {
+        stm32_rcc_RCC_APB2ENR_write(s, value, false);
+    } else if (offset == s->config->RCC_APB1ENR_OFFSET) {
+        stm32_rcc_RCC_APB1ENR_write(s, value, false);
+    } else if (offset == s->config->RCC_BDCR_OFFSET) {
+        stm32_rcc_RCC_BDCR_write(s, value, false);
+    } else if (offset == s->config->RCC_CSR_OFFSET) {
+        stm32_rcc_RCC_CSR_write(s, value, false);
+    } else if (offset == s->config->RCC_AHBRSTR) {
+        STM32_NOT_IMPL_REG(offset, 4);
+    } else if (offset == s->config->RCC_CFGR2_OFFSET) {
+        STM32_NOT_IMPL_REG(offset, 4);
+    } else {
+        STM32_BAD_REG(offset, 4);
     }
 }
 
@@ -686,8 +548,8 @@ static void stm32_rcc_init_clk(Stm32Rcc *s)
      * a disabled oscillator.  Enabling the clock represents
      * turning the clock on.
      */
-    s->HSICLK = clktree_create_src_clk("HSI", HSI_FREQ, false);
-    s->LSICLK = clktree_create_src_clk("LSI", LSI_FREQ, false);
+    s->HSICLK = clktree_create_src_clk("HSI", s->config->HSI_FREQ, false);
+    s->LSICLK = clktree_create_src_clk("LSI", s->config->LSI_FREQ, false);
     s->HSECLK = clktree_create_src_clk("HSE", s->osc_freq, false);
     s->LSECLK = clktree_create_src_clk("LSE", s->osc32_freq, false);
 
@@ -759,6 +621,7 @@ static int stm32_rcc_init(SysBusDevice *dev)
 static Property stm32_rcc_properties[] = {
     DEFINE_PROP_UINT32("osc_freq", Stm32Rcc, osc_freq, 0),
     DEFINE_PROP_UINT32("osc32_freq", Stm32Rcc, osc32_freq, 0),
+    DEFINE_PROP("config", Stm32Rcc, config, qdev_prop_ptr, const Stm32RccConfig*),
     DEFINE_PROP_END_OF_LIST()
 };
 

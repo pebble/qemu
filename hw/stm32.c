@@ -153,13 +153,14 @@ void stm32_init(
     pic = armv7m_init(address_space_mem, flash_size, ram_size, kernel_filename, "cortex-m3");
 
     DeviceState *flash_dev = qdev_create(NULL, "stm32_flash");
-    qdev_prop_set_uint32(flash_dev, "size", 0x1FFFF);
+    qdev_prop_set_uint32(flash_dev, "size", flash_size);
     qdev_init_nofail(flash_dev);
-    sysbus_mmio_map(SYS_BUS_DEVICE(flash_dev), 0, 0x08000000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(flash_dev), 0, STM32_FLASH_ADDR_START);
 
     DeviceState *rcc_dev = qdev_create(NULL, "stm32_rcc");
     qdev_prop_set_uint32(rcc_dev, "osc_freq", osc_freq);
     qdev_prop_set_uint32(rcc_dev, "osc32_freq", osc32_freq);
+    qdev_prop_set_ptr(rcc_dev, "config", (void *) &STM32F1_RCC_CONFIG);
     stm32_init_periph(rcc_dev, STM32_RCC, 0x40021000, pic[STM32_RCC_IRQ]);
 
     DeviceState **gpio_dev = (DeviceState **)g_malloc0(sizeof(DeviceState *) * STM32_GPIO_COUNT);

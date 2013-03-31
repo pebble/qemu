@@ -33,6 +33,7 @@
 #define HALFWORD_ACCESS_SIZE 2
 #define WORD_ACCESS_SIZE 4
 
+#define STM32_FLASH_ADDR_START (0x08000000)
 
 /* VALUE_BETWEEN is inclusive */
 #define VALUE_BETWEEN(value, start, end) ((value >= start) && (value <= end))
@@ -264,6 +265,10 @@ uint8_t stm32_gpio_get_config_bits(Stm32Gpio *s, unsigned pin);
 
 
 /* RCC */
+typedef struct Stm32RccConfig Stm32RccConfig;
+
+extern const Stm32RccConfig STM32F1_RCC_CONFIG;
+
 typedef struct Stm32Rcc Stm32Rcc;
 
 /* Checks if the specified peripheral clock is enabled.
