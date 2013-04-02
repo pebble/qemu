@@ -92,11 +92,8 @@ static void stm32_p103_key_event(void *opaque, int keycode)
 }
 
 
-static void stm32_p103_init(ram_addr_t ram_size,
-                     const char *boot_device,
-                     const char *kernel_filename, const char *kernel_cmdline,
-                     const char *initrd_filename, const char *cpu_model)
-{
+static void stm32_p103_init(QEMUMachineInitArgs *args) {
+    
     qemu_irq *led_irq;
     Stm32P103 *s;
     Stm32Gpio *stm32_gpio[STM32_GPIO_COUNT];
@@ -106,7 +103,7 @@ static void stm32_p103_init(ram_addr_t ram_size,
 
     stm32_init(/*flash_size*/0x0001ffff,
                /*ram_size*/0x00004fff,
-               kernel_filename,
+               args->kernel_filename,
                stm32_gpio,
                stm32_uart,
                8000000,

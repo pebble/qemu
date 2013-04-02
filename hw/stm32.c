@@ -150,7 +150,7 @@ void stm32_init(
     qemu_irq *pic;
     int i;
 
-    pic = armv7m_init(address_space_mem, flash_size, ram_size,    kernel_filename, "cortex-m3");
+    pic = armv7m_init(address_space_mem, flash_size, ram_size, kernel_filename, "cortex-m3");
 
     DeviceState *flash_dev = qdev_create(NULL, "stm32_flash");
     qdev_prop_set_uint32(flash_dev, "size", 0x1FFFF);
