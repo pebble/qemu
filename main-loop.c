@@ -42,6 +42,7 @@ static void sigfd_handler(void *opaque)
     struct qemu_signalfd_siginfo info;
     struct sigaction action;
     ssize_t len;
+    int result;
 
     while (1) {
         do {
@@ -57,7 +58,11 @@ static void sigfd_handler(void *opaque)
             return;
         }
 
-        sigaction(info.ssi_signo, NULL, &action);
+        result = sigaction(info.ssi_signo, NULL, &action);
+        if (result != 0) {
+            printf("sigaction() returned: %i", result);
+            return;
+        }
         if ((action.sa_flags & SA_SIGINFO) && action.sa_sigaction) {
             action.sa_sigaction(info.ssi_signo,
                                 (siginfo_t *)&info, NULL);
