@@ -1,11 +1,4 @@
 /*
- * Olimex STM32 P103 Development Board
- *
- * Copyright (C) 2010 Andre Beckus
- *
- * Implementation based on
- * Olimex "STM-P103 Development Board Users Manual Rev. A, April 2008"
- *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
  * published by the Free Software Foundation; either version 2 of
@@ -34,7 +27,7 @@ typedef struct {
 
     bool last_button_pressed;
     qemu_irq button_irq;
-} Stm32P103;
+} Stm32P205;
 
 
 
@@ -57,9 +50,9 @@ static void led_irq_handler(void *opaque, int n, int level)
     }
 }
 
-static void stm32_p103_key_event(void *opaque, int keycode)
+static void stm32_p205_key_event(void *opaque, int keycode)
 {
-    Stm32P103 *s = (Stm32P103 *)opaque;
+    Stm32P205 *s = (Stm32P205 *)opaque;
     bool make;
     int core_keycode;
 
@@ -92,14 +85,14 @@ static void stm32_p103_key_event(void *opaque, int keycode)
 }
 
 
-static void stm32_p103_init(QEMUMachineInitArgs *args) {
+static void stm32_p205_init(QEMUMachineInitArgs *args) {
     
     qemu_irq *led_irq;
-    Stm32P103 *s;
+    Stm32P205 *s;
     Stm32Gpio *stm32_gpio[STM32_GPIO_COUNT];
     Stm32Uart *stm32_uart[STM32_UART_COUNT];
 
-    s = (Stm32P103 *)g_malloc0(sizeof(Stm32P103));
+    s = (Stm32P205 *)g_malloc0(sizeof(Stm32P205));
 
     stm32f103_init(/*flash_size*/0x0001ffff,
                /*ram_size*/0x00004fff,
@@ -115,7 +108,7 @@ static void stm32_p103_init(QEMUMachineInitArgs *args) {
 
     /* Connect button to GPIO A pin 0 */
     s->button_irq = qdev_get_gpio_in((DeviceState *)stm32_gpio[STM32_GPIOA_INDEX], 0);
-    qemu_add_kbd_event_handler(stm32_p103_key_event, s);
+    qemu_add_kbd_event_handler(stm32_p205_key_event, s);
 
     /* Connect RS232 to UART */
     stm32_uart_connect(
@@ -124,16 +117,16 @@ static void stm32_p103_init(QEMUMachineInitArgs *args) {
             STM32_USART2_NO_REMAP);
  }
 
-static QEMUMachine stm32_p103_machine = {
-    .name = "stm32-p103",
-    .desc = "Olimex STM32 p103 Dev Board",
-    .init = stm32_p103_init
+static QEMUMachine stm32_p205_machine = {
+    .name = "stm32-p205",
+    .desc = "Olimex STM32 p205 Dev Board",
+    .init = stm32_p205_init
 };
 
 
-static void stm32_p103_machine_init(void)
+static void stm32_p205_machine_init(void)
 {
-    qemu_register_machine(&stm32_p103_machine);
+    qemu_register_machine(&stm32_p205_machine);
 }
 
-machine_init(stm32_p103_machine_init);
+machine_init(stm32_p205_machine_init);

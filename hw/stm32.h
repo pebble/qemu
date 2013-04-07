@@ -267,7 +267,8 @@ uint8_t stm32_gpio_get_config_bits(Stm32Gpio *s, unsigned pin);
 /* RCC */
 typedef struct Stm32RccConfig Stm32RccConfig;
 
-extern const Stm32RccConfig STM32F1_RCC_CONFIG;
+extern const Stm32RccConfig STM32F103_RCC_CONFIG;
+extern const Stm32RccConfig STM32F205_RCC_CONFIG;
 
 typedef struct Stm32Rcc Stm32Rcc;
 
@@ -301,6 +302,13 @@ uint32_t stm32_rcc_get_periph_freq(
 
 typedef struct Stm32Uart Stm32Uart;
 
+Stm32Uart *stm32_create_uart_dev(stm32_periph_t periph,
+                                 DeviceState *rcc_dev,
+                                 DeviceState **gpio_dev,
+                                 DeviceState *afio_dev,
+                                 hwaddr addr,
+                                 qemu_irq irq);
+
 /* Connects the character driver to the specified UART.  The
  * board's pin mapping should be passed in.  This will be used to
  * verify the correct mapping is configured by the software.
@@ -309,14 +317,16 @@ void stm32_uart_connect(Stm32Uart *s, CharDriverState *chr,
                         uint32_t afio_board_map);
 
 
-
+/* STM32 PERIPHERALS - GENERAL */
+DeviceState *stm32_init_periph(DeviceState *dev, stm32_periph_t periph,
+                               hwaddr addr, qemu_irq irq);
 
 /* STM32 MICROCONTROLLER - GENERAL */
 typedef struct Stm32 Stm32;
 
 /* Initialize the STM32 microcontroller.  Returns arrays
  * of GPIOs and UARTs so that connections can be made. */
-void stm32_init(
+void stm32f103_init(
             ram_addr_t flash_size,
             ram_addr_t ram_size,
             const char *kernel_filename,
@@ -325,4 +335,12 @@ void stm32_init(
             uint32_t osc_freq,
             uint32_t osc32_freq);
 
+void stm32f205_init(
+                    ram_addr_t flash_size,
+                    ram_addr_t ram_size,
+                    const char *kernel_filename,
+                    Stm32Gpio **stm32_gpio,
+                    Stm32Uart **stm32_uart,
+                    uint32_t osc_freq,
+                    uint32_t osc32_freq);
 #endif /* STM32_H */
