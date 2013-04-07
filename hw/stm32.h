@@ -265,11 +265,6 @@ uint8_t stm32_gpio_get_config_bits(Stm32Gpio *s, unsigned pin);
 
 
 /* RCC */
-typedef struct Stm32RccConfig Stm32RccConfig;
-
-extern const Stm32RccConfig STM32F103_RCC_CONFIG;
-extern const Stm32RccConfig STM32F205_RCC_CONFIG;
-
 typedef struct Stm32Rcc Stm32Rcc;
 
 /* Checks if the specified peripheral clock is enabled.

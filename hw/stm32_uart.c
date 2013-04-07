@@ -22,7 +22,7 @@
 
 #include "sysbus.h"
 #include "stm32.h"
-
+#include "char/char.h"
 
 
 /* DEFINITIONS*/

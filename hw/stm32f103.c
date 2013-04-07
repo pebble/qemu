@@ -42,10 +42,9 @@ void stm32f103_init(
     qdev_init_nofail(flash_dev);
     sysbus_mmio_map(SYS_BUS_DEVICE(flash_dev), 0, STM32_FLASH_ADDR_START);
 
-    DeviceState *rcc_dev = qdev_create(NULL, "stm32_rcc");
+    DeviceState *rcc_dev = qdev_create(NULL, "stm32f103_rcc");
     qdev_prop_set_uint32(rcc_dev, "osc_freq", osc_freq);
     qdev_prop_set_uint32(rcc_dev, "osc32_freq", osc32_freq);
-    qdev_prop_set_ptr(rcc_dev, "config", (void *) &STM32F103_RCC_CONFIG);
     stm32_init_periph(rcc_dev, STM32_RCC, 0x40021000, pic[STM32_RCC_IRQ]);
 
     DeviceState **gpio_dev = (DeviceState **)g_malloc0(sizeof(DeviceState *) * STM32_GPIO_COUNT);
