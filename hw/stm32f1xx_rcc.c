@@ -679,7 +679,7 @@ static void stm32_rcc_class_init(ObjectClass *klass, void *data)
 }
 
 static TypeInfo stm32_rcc_info = {
-    .name  = "stm32f103_rcc",
+    .name  = "stm32f1xx_rcc",
     .parent = TYPE_SYS_BUS_DEVICE,
     .instance_size  = sizeof(Stm32Rcc),
     .class_init = stm32_rcc_class_init

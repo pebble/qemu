@@ -20,7 +20,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stm32.h"
+#include "stm32f1xx.h"
 #include "sysbus.h"
 #include "arm-misc.h"
 #include "devices.h"
@@ -96,12 +96,12 @@ static void stm32_p103_init(QEMUMachineInitArgs *args) {
     
     qemu_irq *led_irq;
     Stm32P103 *s;
-    Stm32Gpio *stm32_gpio[STM32_GPIO_COUNT];
+    Stm32Gpio *stm32_gpio[STM32F1XX_GPIO_COUNT];
     Stm32Uart *stm32_uart[STM32_UART_COUNT];
 
     s = (Stm32P103 *)g_malloc0(sizeof(Stm32P103));
 
-    stm32f103_init(/*flash_size*/0x0001ffff,
+    stm32f1xx_init(/*flash_size*/0x0001ffff,
                /*ram_size*/0x00004fff,
                args->kernel_filename,
                stm32_gpio,

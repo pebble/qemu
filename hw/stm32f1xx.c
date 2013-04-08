@@ -20,9 +20,10 @@
  */
 
 #include "stm32.h"
+#include "stm32f1xx.h"
 #include "exec/address-spaces.h"
 
-void stm32f103_init(
+void stm32f1xx_init(
             ram_addr_t flash_size,
             ram_addr_t ram_size,
             const char *kernel_filename,
@@ -38,17 +39,17 @@ void stm32f103_init(
     pic = armv7m_init(address_space_mem, flash_size, ram_size, kernel_filename, "cortex-m3");
 
     DeviceState *flash_dev = qdev_create(NULL, "stm32_flash");
-    qdev_prop_set_uint32(flash_dev, "size", flash_size);
+    qdev_prop_set_uint32(flash_dev, "size", flash_size * 1024);
     qdev_init_nofail(flash_dev);
     sysbus_mmio_map(SYS_BUS_DEVICE(flash_dev), 0, STM32_FLASH_ADDR_START);
 
-    DeviceState *rcc_dev = qdev_create(NULL, "stm32f103_rcc");
+    DeviceState *rcc_dev = qdev_create(NULL, "stm32f1xx_rcc");
     qdev_prop_set_uint32(rcc_dev, "osc_freq", osc_freq);
     qdev_prop_set_uint32(rcc_dev, "osc32_freq", osc32_freq);
     stm32_init_periph(rcc_dev, STM32_RCC, 0x40021000, pic[STM32_RCC_IRQ]);
 
-    DeviceState **gpio_dev = (DeviceState **)g_malloc0(sizeof(DeviceState *) * STM32_GPIO_COUNT);
-    for(i = 0; i < STM32_GPIO_COUNT; i++) {
+    DeviceState **gpio_dev = (DeviceState **)g_malloc0(sizeof(DeviceState *) * STM32F1XX_GPIO_COUNT);
+    for(i = 0; i < STM32F1XX_GPIO_COUNT; i++) {
         stm32_periph_t periph = STM32_GPIOA + i;
         gpio_dev[i] = qdev_create(NULL, "stm32_gpio");
         QDEV_PROP_SET_PERIPH_T(gpio_dev[i], "periph", periph);

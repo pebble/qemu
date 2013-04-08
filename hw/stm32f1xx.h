@@ -1,0 +1,3 @@
+#include "stm32.h"
+
+#define STM32F1XX_GPIO_COUNT (STM32_GPIOG - STM32_GPIOA + 1)

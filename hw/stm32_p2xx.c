@@ -13,7 +13,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stm32.h"
+#include "stm32f2xx.h"
 #include "sysbus.h"
 #include "arm-misc.h"
 #include "devices.h"
@@ -87,34 +87,34 @@ static void stm32_p205_key_event(void *opaque, int keycode)
 
 static void stm32_p205_init(QEMUMachineInitArgs *args) {
     
-    qemu_irq *led_irq;
+//    qemu_irq *led_irq;
     Stm32P205 *s;
-    Stm32Gpio *stm32_gpio[STM32_GPIO_COUNT];
+    Stm32Gpio *stm32_gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *stm32_uart[STM32_UART_COUNT];
 
     s = (Stm32P205 *)g_malloc0(sizeof(Stm32P205));
 
-    stm32f205_init(/*flash_size*/0x0001ffff,
-               /*ram_size*/0x00004fff,
+    stm32f2xx_init(/*flash_size*/ 1024 * 1024,
+               /*ram_size*/ 128 * 1024,
                args->kernel_filename,
                stm32_gpio,
                stm32_uart,
                8000000,
                32768);
 
-    /* Connect LED to GPIO C pin 12 */
-    led_irq = qemu_allocate_irqs(led_irq_handler, NULL, 1);
-    qdev_connect_gpio_out((DeviceState *)stm32_gpio[STM32_GPIOC_INDEX], 12, led_irq[0]);
-
-    /* Connect button to GPIO A pin 0 */
-    s->button_irq = qdev_get_gpio_in((DeviceState *)stm32_gpio[STM32_GPIOA_INDEX], 0);
-    qemu_add_kbd_event_handler(stm32_p205_key_event, s);
+//    /* Connect LED to GPIO C pin 12 */
+//    led_irq = qemu_allocate_irqs(led_irq_handler, NULL, 1);
+//    qdev_connect_gpio_out((DeviceState *)stm32_gpio[STM32_GPIOC_INDEX], 12, led_irq[0]);
+//
+//    /* Connect button to GPIO A pin 0 */
+//    s->button_irq = qdev_get_gpio_in((DeviceState *)stm32_gpio[STM32_GPIOA_INDEX], 0);
+//    qemu_add_kbd_event_handler(stm32_p205_key_event, s);
 
     /* Connect RS232 to UART */
-    stm32_uart_connect(
-            stm32_uart[STM32_UART2_INDEX],
-            serial_hds[0],
-            STM32_USART2_NO_REMAP);
+//    stm32_uart_connect(
+//            stm32_uart[STM32_UART2_INDEX],
+//            serial_hds[0],
+//            STM32_USART2_NO_REMAP);
  }
 
 static QEMUMachine stm32_p205_machine = {

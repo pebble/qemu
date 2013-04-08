@@ -32,10 +32,10 @@ obj-y += imx_serial.o imx_ccm.o imx_timer.o imx_avic.o
 obj-y += kzm.o
 obj-$(CONFIG_FDT) += ../device_tree.o
 
-obj-y += stm32.o stm32f103.o stm32f205.o stm32_flash.o
-obj-y += stm32_rcc.o stm32f103_rcc.o stm32f205_rcc.o stm32_gpio.o stm32_uart.o
-obj-y += stm32_afio.o stm32_exti.o
-obj-y += stm32_p103.o stm32_p205.o
+obj-y += stm32.o stm32f1xx.o stm32f2xx.o stm32_flash.o
+obj-y += stm32_rcc.o stm32f1xx_rcc.o stm32f2xx_rcc.o stm32_gpio.o stm32_uart.o
+obj-y += stm32_afio.o stm32_exti.o stm32f2xx_syscfg.o
+obj-y += stm32_p103.o stm32_p2xx.o
 obj-y += clktree.o
 
 obj-y := $(addprefix ../,$(obj-y))
