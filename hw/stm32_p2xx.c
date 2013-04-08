@@ -94,8 +94,8 @@ static void stm32_p205_init(QEMUMachineInitArgs *args) {
 
     s = (Stm32P205 *)g_malloc0(sizeof(Stm32P205));
 
-    stm32f2xx_init(/*flash_size*/ 1024 * 1024,
-               /*ram_size*/ 128 * 1024,
+    stm32f2xx_init(/*flash_size*/ 1024,
+               /*ram_size*/ 128,
                args->kernel_filename,
                stm32_gpio,
                stm32_uart,

@@ -101,8 +101,8 @@ static void stm32_p103_init(QEMUMachineInitArgs *args) {
 
     s = (Stm32P103 *)g_malloc0(sizeof(Stm32P103));
 
-    stm32f1xx_init(/*flash_size*/0x0001ffff,
-               /*ram_size*/0x00004fff,
+    stm32f1xx_init(/*flash_size*/ 128,
+               /*ram_size*/ 20,
                args->kernel_filename,
                stm32_gpio,
                stm32_uart,

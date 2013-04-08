@@ -55,6 +55,7 @@ void stm32f2xx_init(
     MemoryRegionSection mrs = memory_region_find(address_space_mem, ARMV7_FLASH_ADDR, WORD_ACCESS_SIZE);
     MemoryRegion *flash_alias = g_new(MemoryRegion, 1);
     memory_region_init_alias(flash_alias, "stm32f2xx.flash.alias", mrs.mr, STM32_FLASH_ADDR_START, flash_size * 1024);
+    memory_region_add_subregion(address_space_mem, STM32_FLASH_ADDR_START, flash_alias);
 
     DeviceState *rcc_dev = qdev_create(NULL, "stm32f2xx_rcc");
     qdev_prop_set_uint32(rcc_dev, "osc_freq", osc_freq);
