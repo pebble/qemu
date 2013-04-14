@@ -28,7 +28,7 @@
  flash_size and sram_size are in kb. */
 
 static uint64_t kernel_load_translate_fn(void *opaque, uint64_t from_addr) {
-    if (from_addr == 0x08000000) {
+    if (from_addr == STM32_FLASH_ADDR_START) {
         return 0x00000000;
     }
     return from_addr;
@@ -51,10 +51,9 @@ void stm32f2xx_init(
 
     // Create alias at 0x08000000 for internal flash, that is hard-coded at 0x00000000 in armv7m.c:
     // TODO: Let BOOT0 and BOOT1 configuration pins determine what is mapped at 0x00000000, see SYSCFG_MEMRMP.
-    const hwaddr ARMV7_FLASH_ADDR = 0x00000000;
-    MemoryRegionSection mrs = memory_region_find(address_space_mem, ARMV7_FLASH_ADDR, WORD_ACCESS_SIZE);
+    MemoryRegionSection mrs = memory_region_find(address_space_mem, 0, WORD_ACCESS_SIZE);
     MemoryRegion *flash_alias = g_new(MemoryRegion, 1);
-    memory_region_init_alias(flash_alias, "stm32f2xx.flash.alias", mrs.mr, STM32_FLASH_ADDR_START, flash_size * 1024);
+    memory_region_init_alias(flash_alias, "stm32f2xx.flash.alias", mrs.mr, 0, flash_size * 1024);
     memory_region_add_subregion(address_space_mem, STM32_FLASH_ADDR_START, flash_alias);
 
     DeviceState *rcc_dev = qdev_create(NULL, "stm32f2xx_rcc");
