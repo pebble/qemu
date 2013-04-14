@@ -23,7 +23,7 @@
 
 
 typedef struct {
-    Stm32 *stm32;
+    Stm32 *stm32; // FIXME: what is this used for? cruft?
 
     bool last_button_pressed;
     qemu_irq button_irq;

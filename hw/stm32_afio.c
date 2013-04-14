@@ -19,7 +19,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stm32.h"
+#include "stm32f1xx.h"
 
 
 
@@ -113,10 +113,10 @@ static void stm32_afio_AFIO_EXTICR_write(Stm32Afio *s, unsigned index,
 
         if(!init) {
             old_gpio_index = (s->AFIO_EXTICR[index] >> start) & 0xf;
-            stm32_exti_reset_gpio(s->stm32_exti, exti_line, STM32_GPIO_PERIPH_FROM_INDEX(old_gpio_index));
+            stm32_exti_reset_gpio(s->stm32_exti, exti_line, old_gpio_index);
         }
         new_gpio_index = (new_value >> start) & 0xf;
-        stm32_exti_set_gpio(s->stm32_exti, exti_line, STM32_GPIO_PERIPH_FROM_INDEX(new_gpio_index));
+        stm32_exti_set_gpio(s->stm32_exti, exti_line, new_gpio_index);
     }
 
     s->AFIO_EXTICR[index] = new_value;
@@ -176,7 +176,7 @@ static uint64_t stm32_afio_read(void *opaque, hwaddr offset, unsigned size)
 {
     Stm32Afio *s = (Stm32Afio *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32_AFIO);
+    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F1XX_AFIO, &s->busdev);
 
     switch(size) {
         case 4:
@@ -192,7 +192,7 @@ static void stm32_afio_write(void *opaque, hwaddr offset, uint64_t value,
 {
     Stm32Afio *s = (Stm32Afio *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32_AFIO);
+    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F1XX_AFIO, &s->busdev);
 
     switch(size) {
         case 4:
@@ -231,11 +231,11 @@ static void stm32_afio_reset(DeviceState *dev)
 uint32_t stm32_afio_get_periph_map(Stm32Afio *s, stm32_periph_t periph)
 {
     switch(periph) {
-        case STM32_UART1:
+        case STM32F1XX_UART1:
             return s->USART1_REMAP;
-        case STM32_UART2:
+        case STM32F1XX_UART2:
             return s->USART2_REMAP;
-        case STM32_UART3:
+        case STM32F1XX_UART3:
             return s->USART3_REMAP;
         default:
             hw_error("Invalid peripheral");

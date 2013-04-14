@@ -59,13 +59,13 @@ void stm32f2xx_init(
     DeviceState *rcc_dev = qdev_create(NULL, "stm32f2xx_rcc");
     qdev_prop_set_uint32(rcc_dev, "osc_freq", osc_freq);
     qdev_prop_set_uint32(rcc_dev, "osc32_freq", osc32_freq);
-    stm32_init_periph(rcc_dev, STM32_RCC, 0x40023800, pic[STM32_RCC_IRQ]);
+    stm32_init_periph(rcc_dev, STM32F2XX_RCC, 0x40023800, pic[STM32_RCC_IRQ]);
 
     DeviceState **gpio_dev = (DeviceState **)g_malloc0(sizeof(DeviceState *) * STM32F2XX_GPIO_COUNT);
     for(i = 0; i < STM32F2XX_GPIO_COUNT; i++) {
-        stm32_periph_t periph = STM32_GPIOA + i;
+        stm32_periph_t periph = STM32F2XX_GPIOA + i;
         gpio_dev[i] = qdev_create(NULL, "stm32_gpio");
-        QDEV_PROP_SET_PERIPH_T(gpio_dev[i], "periph", periph);
+        qdev_prop_set_int32(gpio_dev[i], "periph", periph);
         qdev_prop_set_ptr(gpio_dev[i], "stm32_rcc", rcc_dev);
         stm32_init_periph(gpio_dev[i], periph, 0x40020000 + (i * 0x400), NULL);
         stm32_gpio[i] = (Stm32Gpio *)gpio_dev[i];
@@ -73,7 +73,7 @@ void stm32f2xx_init(
 
     DeviceState *exti_dev = qdev_create(NULL, "stm32_exti");
     qdev_prop_set_ptr(exti_dev, "stm32_gpio", gpio_dev);
-    stm32_init_periph(exti_dev, STM32_EXTI, 0x40013C00, NULL);
+    stm32_init_periph(exti_dev, STM32F2XX_EXTI, 0x40013C00, NULL);
     SysBusDevice *exti_busdev = SYS_BUS_DEVICE(exti_dev);
     sysbus_connect_irq(exti_busdev, 0, pic[STM32_EXTI0_IRQ]);
     sysbus_connect_irq(exti_busdev, 1, pic[STM32_EXTI1_IRQ]);
@@ -91,7 +91,7 @@ void stm32f2xx_init(
     qdev_prop_set_ptr(syscfg_dev, "stm32_exti", exti_dev);
     qdev_prop_set_bit(syscfg_dev, "boot0", 0);
     qdev_prop_set_bit(syscfg_dev, "boot1", 0);
-    stm32_init_periph(syscfg_dev, STM32_SYSCFG, 0x40013800, NULL);
+    stm32_init_periph(syscfg_dev, STM32F2XX_SYSCFG, 0x40013800, NULL);
 
 //    stm32_uart[STM32_UART1_INDEX] = stm32_create_uart_dev(STM32_UART1, rcc_dev, gpio_dev, afio_dev, 0x40011000, pic[STM32_UART1_IRQ]);
 //    stm32_uart[STM32_UART2_INDEX] = stm32_create_uart_dev(STM32_UART2, rcc_dev, gpio_dev, afio_dev, 0x40004400, pic[STM32_UART2_IRQ]);

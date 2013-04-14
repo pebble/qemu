@@ -309,7 +309,7 @@ static void stm32_gpio_write(void *opaque, hwaddr offset, uint64_t value,
 {
     Stm32Gpio *s = (Stm32Gpio *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, s->periph);
+    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, s->periph, &s->busdev);
 
     switch(size) {
         case WORD_ACCESS_SIZE:
@@ -387,7 +387,7 @@ static int stm32_gpio_init(SysBusDevice *dev)
 }
 
 static Property stm32_gpio_properties[] = {
-    DEFINE_PROP_PERIPH_T("periph", Stm32Gpio, periph, STM32_PERIPH_UNDEFINED),
+    DEFINE_PROP_INT32("periph", Stm32Gpio, periph, -1),
     DEFINE_PROP_PTR("stm32_rcc", Stm32Gpio, stm32_rcc_prop),
     DEFINE_PROP_END_OF_LIST()
 };

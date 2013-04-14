@@ -19,7 +19,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stm32.h"
+#include "stm32f2xx.h"
 
 
 
@@ -108,10 +108,10 @@ static void stm32_syscfg_SYSCFG_EXTICR_write(Stm32Syscfg *s, unsigned index,
 
         if(!init) {
             old_gpio_index = (s->SYSCFG_EXTICR[index] >> start) & 0xf;
-            stm32_exti_reset_gpio(s->stm32_exti, exti_line, STM32_GPIO_PERIPH_FROM_INDEX(old_gpio_index));
+            stm32_exti_reset_gpio(s->stm32_exti, exti_line, old_gpio_index);
         }
         new_gpio_index = (new_value >> start) & 0xf;
-        stm32_exti_set_gpio(s->stm32_exti, exti_line, STM32_GPIO_PERIPH_FROM_INDEX(new_gpio_index));
+        stm32_exti_set_gpio(s->stm32_exti, exti_line, new_gpio_index);
     }
 
     s->SYSCFG_EXTICR[index] = new_value;
@@ -179,7 +179,7 @@ static uint64_t stm32_syscfg_read(void *opaque, hwaddr offset,
 {
     Stm32Syscfg *s = (Stm32Syscfg *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32_SYSCFG);
+    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F2XX_SYSCFG, &s->busdev);
 
     switch(size) {
         case 4:
@@ -195,7 +195,7 @@ static void stm32_syscfg_write(void *opaque, hwaddr offset,
 {
     Stm32Syscfg *s = (Stm32Syscfg *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32_SYSCFG);
+    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F2XX_SYSCFG, &s->busdev);
 
     switch(size) {
         case 4:

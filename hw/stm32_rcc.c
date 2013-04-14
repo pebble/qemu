@@ -4,7 +4,7 @@
 
 /* PUBLIC FUNCTIONS */
 
-void stm32_rcc_check_periph_clk(Stm32Rcc *s, stm32_periph_t periph)
+void stm32_rcc_check_periph_clk(Stm32Rcc *s, stm32_periph_t periph, SysBusDevice *busdev)
 {
     Clk clk = s->PERIPHCLK[periph];
 
@@ -16,7 +16,7 @@ void stm32_rcc_check_periph_clk(Stm32Rcc *s, stm32_periph_t periph)
          * When I made this mistake on real hardware the write had no effect.
          */
         hw_error("Warning: You are attempting to use the %s peripheral while "
-                 "its clock is disabled.\n", stm32_periph_name(periph));
+                 "its clock is disabled.\n", busdev->qdev.id);
     }
 }
 

@@ -320,20 +320,20 @@ static void stm32_exti_reset(DeviceState *dev)
 
 /* PUBLIC FUNCTIONS */
 
-void stm32_exti_set_gpio(Stm32Exti *s, unsigned exti_line, stm32_periph_t gpio)
+void stm32_exti_set_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_index)
 {
     assert(exti_line < EXTI_LINE_COUNT);
 
     /* Call the GPIO module with the EXTI lines IRQ handler. */
-    stm32_gpio_set_exti_irq(s->stm32_gpio[STM32_GPIO_INDEX_FROM_PERIPH(gpio)], exti_line, s->gpio_in_irqs[exti_line]);
+    stm32_gpio_set_exti_irq(s->stm32_gpio[gpio_index], exti_line, s->gpio_in_irqs[exti_line]);
 }
 
-void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, stm32_periph_t gpio)
+void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_index)
 {
     assert(exti_line < EXTI_LINE_COUNT);
 
     /* Call the GPIO module to clear its IRQ assignment. */
-    stm32_gpio_set_exti_irq(s->stm32_gpio[STM32_GPIO_INDEX_FROM_PERIPH(gpio)], exti_line, NULL);
+    stm32_gpio_set_exti_irq(s->stm32_gpio[gpio_index], exti_line, NULL);
 }
 
 

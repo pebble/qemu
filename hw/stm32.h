@@ -26,7 +26,8 @@
 #include "qemu-common.h"
 #include "sysbus.h"
 
-
+#define ENUM_STRING(x) [x] = #x
+#define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))
 
 /* COMMON */
 #define BYTE_ACCESS_SIZE 1
@@ -85,63 +86,6 @@ void stm32_hw_warn(const char *fmt, ...)
 
 /* Used for uniquely identifying a peripheral */
 typedef int32_t stm32_periph_t;
-
-#define DEFINE_PROP_PERIPH_T DEFINE_PROP_INT32
-#define QDEV_PROP_SET_PERIPH_T qdev_prop_set_int32
-
-enum {
-    STM32_PERIPH_UNDEFINED = -1,
-    STM32_RCC = 0,
-    STM32_GPIOA,
-    STM32_GPIOB,
-    STM32_GPIOC,
-    STM32_GPIOD,
-    STM32_GPIOE,
-    STM32_GPIOF,
-    STM32_GPIOG,
-    STM32_GPIOH,
-    STM32_GPIOI,
-    STM32_AFIO,
-    STM32_SYSCFG,
-    STM32_UART1,
-    STM32_UART2,
-    STM32_UART3,
-    STM32_UART4,
-    STM32_UART5,
-    STM32_UART6,
-    STM32_ADC1,
-    STM32_ADC2,
-    STM32_ADC3,
-    STM32_DAC,
-    STM32_TIM1,
-    STM32_TIM2,
-    STM32_TIM3,
-    STM32_TIM4,
-    STM32_TIM5,
-    STM32_TIM6,
-    STM32_TIM7,
-    STM32_TIM8,
-    STM32_BKP,
-    STM32_PWR,
-    STM32_I2C1,
-    STM32_I2C2,
-    STM32_I2S2,
-    STM32_I2S3,
-    STM32_WWDG,
-    STM32_CAN1,
-    STM32_CAN2,
-    STM32_CAN,
-    STM32_USB,
-    STM32_SPI1,
-    STM32_SPI2,
-    STM32_SPI3,
-    STM32_EXTI,
-    STM32_SDIO,
-    STM32_FSMC,
-    STM32_PERIPH_COUNT,
-};
-
-const char *stm32_periph_name(stm32_periph_t periph);
 
 /* Convert between a GPIO array index and stm32_periph_t, and vice-versa */
 #define STM32_GPIO_INDEX_FROM_PERIPH(gpio_periph) (gpio_periph - STM32_GPIOA)
@@ -204,37 +148,14 @@ const char *stm32_periph_name(stm32_periph_t periph);
 
 
 
-
-/* AFIO */
-typedef struct Stm32Afio Stm32Afio;
-
-/* AFIO Peripheral Mapping */
-#define STM32_USART1_NO_REMAP 0
-#define STM32_USART1_REMAP 1
-
-#define STM32_USART2_NO_REMAP 0
-#define STM32_USART2_REMAP 1
-
-#define STM32_USART3_NO_REMAP 0
-#define STM32_USART3_PARTIAL_REMAP 1
-#define STM32_USART3_FULL_REMAP 3
-
-/* Gets the pin mapping for the specified peripheral.  Will return one
- * of the mapping values defined above. */
-uint32_t stm32_afio_get_periph_map(Stm32Afio *s, int32_t periph_num);
-
-
-
-
-
 /* EXTI */
 typedef struct Stm32Exti Stm32Exti;
 
 /* Assigns the specified EXTI line to the specified GPIO. */
-void stm32_exti_set_gpio(Stm32Exti *s, unsigned exti_line, stm32_periph_t gpio);
+void stm32_exti_set_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_index);
 
 /* Unassigns the specified EXTI line from the specified GPIO. */
-void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, stm32_periph_t gpio);
+void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_index);
 
 
 
@@ -279,7 +200,7 @@ typedef struct Stm32Rcc Stm32Rcc;
 /* Checks if the specified peripheral clock is enabled.
  * Generates a hardware error if not.
  */
-void stm32_rcc_check_periph_clk(Stm32Rcc *s, stm32_periph_t periph);
+void stm32_rcc_check_periph_clk(Stm32Rcc *s, stm32_periph_t periph, SysBusDevice *busdev);
 
 /* Sets the IRQ to be called when the specified peripheral clock changes
  * frequency. */
@@ -306,19 +227,36 @@ uint32_t stm32_rcc_get_periph_freq(
 
 typedef struct Stm32Uart Stm32Uart;
 
-Stm32Uart *stm32_create_uart_dev(stm32_periph_t periph,
-                                 DeviceState *rcc_dev,
-                                 DeviceState **gpio_dev,
-                                 DeviceState *afio_dev,
-                                 hwaddr addr,
-                                 qemu_irq irq);
-
 /* Connects the character driver to the specified UART.  The
  * board's pin mapping should be passed in.  This will be used to
  * verify the correct mapping is configured by the software.
  */
 void stm32_uart_connect(Stm32Uart *s, CharDriverState *chr,
                         uint32_t afio_board_map);
+
+
+
+
+/* AFIO (STM32F1XX) */
+typedef struct Stm32Afio Stm32Afio;
+
+/* AFIO Peripheral Mapping */
+#define STM32_USART1_NO_REMAP 0
+#define STM32_USART1_REMAP 1
+
+#define STM32_USART2_NO_REMAP 0
+#define STM32_USART2_REMAP 1
+
+#define STM32_USART3_NO_REMAP 0
+#define STM32_USART3_PARTIAL_REMAP 1
+#define STM32_USART3_FULL_REMAP 3
+
+/* Gets the pin mapping for the specified peripheral.  Will return one
+ * of the mapping values defined above. */
+uint32_t stm32_afio_get_periph_map(Stm32Afio *s, int32_t periph_num);
+
+void stm32_afio_uart_check_tx_pin_callback(Stm32Uart *s);
+
 
 
 /* STM32 PERIPHERALS - GENERAL */
@@ -348,3 +286,5 @@ void stm32f2xx_init(
                     uint32_t osc_freq,
                     uint32_t osc32_freq);
 #endif /* STM32_H */
+
+
