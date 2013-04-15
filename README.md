@@ -2,11 +2,11 @@
 
 ## Overview
 This is a copy of QEMU that has been modified to include an implementation of the STM32F2xx microcontroller.
+This is based off of a QEMU fork that is targeting the STM32F103: https://github.com/beckus/qemu_stm32
+This repo contains both beckus' STM32F1xx implementation and my STM32F2xx additions.
+My repo is a bit more up to date (QEMU v1.4) than beckus' repo.
 
 __DANGER DANGER: It is very much a work-in-progress! Only some of the peripherals are working at the moment. Please contribute!__
-
-This is based off of a QEMU fork that is targeting the STM32F103: https://github.com/beckus/qemu_stm32
-However, this repo has been fast-forwarded to QEMU v1.4, so the QEMU code base is a bit newer than beckus' repo.
 
 ## Building
 
