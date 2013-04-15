@@ -122,7 +122,6 @@ typedef int32_t stm32_periph_t;
 
 
 
-
 /* IRQs */
 #define STM32_RCC_IRQ 5
 

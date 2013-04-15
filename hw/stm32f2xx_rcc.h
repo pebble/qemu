@@ -28,8 +28,11 @@ typedef struct Stm32f2xxRcc {
     LSECLK,
     LSICLK,
     SYSCLK,
+    IWDGCLK,
+    RTCCLK,
     PLLXTPRECLK,
     PLLCLK,
+    PLLI2S,
     HCLK, /* Output from AHB Prescaler */
     PCLK1, /* Output from APB1 Prescaler */
     PCLK2; /* Output from APB2 Prescaler */
@@ -41,9 +44,6 @@ typedef struct Stm32f2xxRcc {
 
     /* Register Field Values */
     uint32_t
-    RCC_CFGR_PLLMUL,
-    RCC_CFGR_PLLXTPRE,
-    RCC_CFGR_PLLSRC,
     RCC_CFGR_PPRE1,
     RCC_CFGR_PPRE2,
     RCC_CFGR_HPRE,
