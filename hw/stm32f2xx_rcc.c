@@ -130,9 +130,41 @@ do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
 
 #define RCC_APB1RSTR_OFFSET 0x20
 
-#define RCC_APB2RSTR_OFFSET 0x24
+#define RCC_APB2RSTR_RESET_VALUE     0x00000000
+#define RCC_APB2RSTR_OFFSET          0x24
+#define RCC_APB2RSTR_TIM11RST_BIT    18
+#define RCC_APB2RSTR_TIM10RST_BIT    17
+#define RCC_APB2RSTR_TIM9RST_BIT     16
+#define RCC_APB2RSTR_SYSCFGRST       14
+#define RCC_APB2RSTR_SPI1_BIT        12
+#define RCC_APB2RSTR_SDIORST_BIT     11
+#define RCC_APB2RSTR_ADCRST_BIT      8
+#define RCC_APB2RSTR_USART6RST       5
+#define RCC_APB2RSTR_USART1RST       4
+#define RCC_APB2RSTR_TIM8RST_BIT     1
+#define RCC_APB2RSTR_TIM1RST_BIT     0
 
-#define RCC_AHB1ENR_OFFSET 0x30
+#define RCC_AHB1ENR_RESET_VALUE      0x00000000
+#define RCC_AHB1ENR_OFFSET           0x30
+#define RCC_AHB1ENR_OTGHSULPIEN_BIT  30
+#define RCC_AHB1ENR_OTGHSEN_BIT      29
+#define RCC_AHB1ENR_ETHMACPTPEN_BIT  28
+#define RCC_AHB1ENR_ETHMACRXEN_BIT   27
+#define RCC_AHB1ENR_ETHMACTXEN_BIT   26
+#define RCC_AHB1ENR_ETHMACEN_BIT     25
+#define RCC_AHB1ENR_DMA2EN_BIT       22
+#define RCC_AHB1ENR_DMA1EN_BIT       21
+#define RCC_AHB1ENR_BKPSRAMEN_BIT    18
+#define RCC_AHB1ENR_CRCEN_BIT        12
+#define RCC_AHB1ENR_GPIOIEN_BIT      8
+#define RCC_AHB1ENR_GPIOHEN_BIT      7
+#define RCC_AHB1ENR_GPIOGEN_BIT      6
+#define RCC_AHB1ENR_GPIOFEN_BIT      5
+#define RCC_AHB1ENR_GPIOEEN_BIT      4
+#define RCC_AHB1ENR_GPIODEN_BIT      3
+#define RCC_AHB1ENR_GPIOCEN_BIT      2
+#define RCC_AHB1ENR_GPIOBEN_BIT      1
+#define RCC_AHB1ENR_GPIOAEN_BIT      0
 
 #define RCC_AHB2ENR_OFFSET 0x34
 
@@ -458,6 +490,38 @@ static void stm32_rcc_RCC_CIR_write(Stm32f2xxRcc *s, uint32_t new_value, bool in
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_CIR_LSIRDYF_BIT , RCC_CIR_RESET_VALUE);
 }
 
+static uint32_t stm32_rcc_RCC_AHB1ENR_read(Stm32f2xxRcc *s)
+{
+    return s->RCC_AHB1ENR;
+}
+
+static void stm32_rcc_RCC_AHB1ENR_write(Stm32f2xxRcc *s, uint32_t new_value, bool init)
+{
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOI], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOIEN_BIT));
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOH], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOHEN_BIT));
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOG], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOGEN_BIT));
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOF], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOFEN_BIT));
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOE], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOEEN_BIT));
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOD], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIODEN_BIT));
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOC], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOCEN_BIT));
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOB], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOBEN_BIT));
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOA], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOAEN_BIT));
+
+    s->RCC_AHB1ENR = new_value;
+
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_OTGHSULPIEN_BIT, RCC_AHB1ENR_RESET_VALUE);
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_OTGHSEN_BIT, RCC_AHB1ENR_RESET_VALUE);
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_ETHMACPTPEN_BIT, RCC_AHB1ENR_RESET_VALUE);
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_ETHMACRXEN_BIT, RCC_AHB1ENR_RESET_VALUE);
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_ETHMACTXEN_BIT, RCC_AHB1ENR_RESET_VALUE);
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_ETHMACEN_BIT, RCC_AHB1ENR_RESET_VALUE);
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_DMA2EN_BIT, RCC_AHB1ENR_RESET_VALUE);
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_DMA1EN_BIT, RCC_AHB1ENR_RESET_VALUE);
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_BKPSRAMEN_BIT, RCC_AHB1ENR_RESET_VALUE);
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_CRCEN_BIT, RCC_AHB1ENR_RESET_VALUE);
+}
+
+
 /* Write the APB2 peripheral clock enable register
  * Enables/Disables the peripheral clocks based on each bit. */
 static void stm32_rcc_RCC_APB2ENR_write(Stm32f2xxRcc *s, uint32_t new_value,
@@ -541,7 +605,10 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
         case RCC_AHB3RSTR_OFFSET:
         case RCC_APB1RSTR_OFFSET:
         case RCC_APB2RSTR_OFFSET:
+            STM32_NOT_IMPL_REG(offset, 4);
+            return 0;
         case RCC_AHB1ENR_OFFSET:
+            return stm32_rcc_RCC_AHB1ENR_read(s);
         case RCC_AHB2ENR_OFFSET:
         case RCC_AHB3ENR_OFFSET:
             STM32_NOT_IMPL_REG(offset, 4);
@@ -592,7 +659,11 @@ static void stm32_rcc_writew(void *opaque, hwaddr offset,
         case RCC_APB1RSTR_OFFSET:
         case RCC_APB2RSTR_OFFSET:
         case RCC_AHB3RSTR_OFFSET:
+            STM32_NOT_IMPL_REG(offset, 4);
+            break;
         case RCC_AHB1ENR_OFFSET:
+            stm32_rcc_RCC_AHB1ENR_write(s, value, false);
+            break;
         case RCC_AHB2ENR_OFFSET:
         case RCC_AHB3ENR_OFFSET:
         case RCC_APB1LPENR_OFFSET:
@@ -762,7 +833,9 @@ static void stm32_rcc_init_clk(Stm32f2xxRcc *s)
     s->PERIPHCLK[STM32F2XX_GPIOE] = clktree_create_clk("GPIOE", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
     s->PERIPHCLK[STM32F2XX_GPIOF] = clktree_create_clk("GPIOF", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
     s->PERIPHCLK[STM32F2XX_GPIOG] = clktree_create_clk("GPIOG", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
-
+    s->PERIPHCLK[STM32F2XX_GPIOH] = clktree_create_clk("GPIOG", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
+    s->PERIPHCLK[STM32F2XX_GPIOI] = clktree_create_clk("GPIOG", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
+    
     s->PERIPHCLK[STM32F2XX_SYSCFG] = clktree_create_clk("SYSCFG", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
 
     s->PERIPHCLK[STM32F2XX_UART1] = clktree_create_clk("UART1", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);

@@ -49,6 +49,7 @@ typedef struct Stm32f2xxRcc {
     RCC_CFGR_PPRE1,
     RCC_CFGR_PPRE2,
     RCC_CFGR_HPRE,
+    RCC_AHB1ENR,
     RCC_CFGR_SW;
 
     uint8_t
