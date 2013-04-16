@@ -137,7 +137,7 @@ void stm32f1xx_init(
         {0x40004c00, STM32_UART4_IRQ},
         {0x40005000, STM32_UART5_IRQ},
     };
-    for (int i = 0; i < ARRAY_LENGTH(uart_desc); ++i) {
+    for (i = 0; i < ARRAY_LENGTH(uart_desc); ++i) {
         const stm32_periph_t periph = STM32F1XX_UART1 + i;
         DeviceState *uart_dev = qdev_create(NULL, "stm32_uart");
         uart_dev->id = stm32f1xx_periph_name_arr[periph];
