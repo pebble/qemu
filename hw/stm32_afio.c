@@ -238,7 +238,7 @@ uint32_t stm32_afio_get_periph_map(Stm32Afio *s, stm32_periph_t periph)
         case STM32F1XX_UART3:
             return s->USART3_REMAP;
         default:
-            hw_error("Invalid peripheral");
+            hw_error("Invalid peripheral %u", periph);
             break;
     }
 }
