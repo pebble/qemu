@@ -603,7 +603,11 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
         case RCC_AHB1RSTR_OFFSET:
         case RCC_AHB2RSTR_OFFSET:
         case RCC_AHB3RSTR_OFFSET:
+            STM32_NOT_IMPL_REG(offset, 4);
+            return 0;
         case RCC_APB1RSTR_OFFSET:
+            stm32_hw_warn("Unimplemented read: RCC_APB1RSTR_OFFSET");
+            return 0;
         case RCC_APB2RSTR_OFFSET:
             STM32_NOT_IMPL_REG(offset, 4);
             return 0;
@@ -657,6 +661,8 @@ static void stm32_rcc_writew(void *opaque, hwaddr offset,
             stm32_rcc_RCC_CIR_write(s, value, false);
             break;
         case RCC_APB1RSTR_OFFSET:
+            stm32_hw_warn("Unimplemented write: RCC_APB1RSTR_OFFSET 0x%x", (uint32_t)value);
+            break;
         case RCC_APB2RSTR_OFFSET:
         case RCC_AHB3RSTR_OFFSET:
             STM32_NOT_IMPL_REG(offset, 4);
@@ -843,6 +849,7 @@ static void stm32_rcc_init_clk(Stm32f2xxRcc *s)
     s->PERIPHCLK[STM32F2XX_UART3] = clktree_create_clk("UART3", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK1, NULL);
     s->PERIPHCLK[STM32F2XX_UART4] = clktree_create_clk("UART4", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK1, NULL);
     s->PERIPHCLK[STM32F2XX_UART5] = clktree_create_clk("UART5", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK1, NULL);
+    s->PERIPHCLK[STM32F2XX_UART6] = clktree_create_clk("UART6", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK1, NULL);
 }
 
 
