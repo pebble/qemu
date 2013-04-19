@@ -264,6 +264,26 @@ do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
 #define SW_PLL_SELECTED 2
 
 /* HELPER FUNCTIONS */
+struct Clk {                                                                    
+    const char *name;                                                           
+                                                                                
+    bool enabled;                                                               
+                                                                                
+    uint32_t input_freq, output_freq, max_output_freq;                          
+                                                                                
+    uint16_t multiplier, divisor;                                               
+                                                                                
+    unsigned user_count;                                                        
+    qemu_irq user[CLKTREE_MAX_IRQ]; /* Who to notify on change */               
+                                                                                
+    unsigned output_count;                                                      
+    struct Clk *output[CLKTREE_MAX_OUTPUT];                                     
+                                                                                
+    unsigned input_count;                                                       
+    int selected_input;                                                         
+    struct Clk *input[CLKTREE_MAX_INPUT];                                       
+};                                                                              
+                                                                                
 
 /* Enable the peripheral clock if the specified bit is set in the value. */
 static void stm32_rcc_periph_enable(
@@ -273,6 +293,7 @@ static void stm32_rcc_periph_enable(
                                     int periph,
                                     uint32_t bit_mask)
 {
+    printf("set enabled 0x%x %s %d %x: %s\n", new_value, s->PERIPHCLK[periph]->name, periph, bit_mask, IS_BIT_SET(new_value, bit_mask)?"en":"dis");
     clktree_set_enabled(s->PERIPHCLK[periph], IS_BIT_SET(new_value, bit_mask));
 }
 
@@ -540,6 +561,7 @@ static void stm32_rcc_RCC_APB2ENR_write(Stm32f2xxRcc *s, uint32_t new_value,
 static void stm32_rcc_RCC_APB1ENR_write(Stm32f2xxRcc *s, uint32_t new_value,
                                         bool init)
 {
+printf("%s\n", __func__);
     stm32_rcc_periph_enable(s, new_value, init, STM32F2XX_UART5,
                             RCC_APB1ENR_USART5EN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32F2XX_UART4,
@@ -549,7 +571,8 @@ static void stm32_rcc_RCC_APB1ENR_write(Stm32f2xxRcc *s, uint32_t new_value,
     stm32_rcc_periph_enable(s, new_value, init, STM32F2XX_UART2,
                             RCC_APB1ENR_USART2EN_BIT);
 
-    s->RCC_APB1ENR = new_value & 0x00005e7d;
+    /* 0b00110110111111101100100111111111 */
+    s->RCC_APB1ENR = new_value & 0x36fec9ff;
 }
 
 static uint32_t stm32_rcc_RCC_BDCR_read(Stm32f2xxRcc *s)
@@ -560,14 +583,20 @@ static uint32_t stm32_rcc_RCC_BDCR_read(Stm32f2xxRcc *s)
     GET_BIT_MASK(RCC_BDCR_LSEON_BIT, lseon);
 }
 
-static void stm32_rcc_RCC_BDCR_write(Stm32f2xxRcc *s, uint32_t new_value, bool init)
+static void stm32_rcc_RCC_BDCR_writeb0(Stm32f2xxRcc *s, uint8_t new_value, bool init)
 {
     clktree_set_enabled(s->LSECLK, IS_BIT_SET(new_value, RCC_BDCR_LSEON_BIT));
+    
+    WARN_UNIMPLEMENTED(new_value, 1 << RCC_BDCR_LSEBYP_BIT, RCC_BDCR_RESET_VALUE);
+}
+
+static void stm32_rcc_RCC_BDCR_write(Stm32f2xxRcc *s, uint32_t new_value, bool init)
+{
+    stm32_rcc_RCC_BDCR_writeb0(s, new_value & 0xff, init);
 
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_BDCR_BDRST_BIT, RCC_BDCR_RESET_VALUE);
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_BDCR_RTCEN_BIT, RCC_BDCR_RESET_VALUE);
     WARN_UNIMPLEMENTED(new_value, RCC_BDCR_RTCSEL_MASK, RCC_BDCR_RESET_VALUE);
-    WARN_UNIMPLEMENTED(new_value, 1 << RCC_BDCR_LSEBYP_BIT, RCC_BDCR_RESET_VALUE);
 }
 
 /* Works the same way as stm32_rcc_RCC_CR_read */
@@ -609,7 +638,7 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
             stm32_hw_warn("Unimplemented read: RCC_APB1RSTR_OFFSET");
             return 0;
         case RCC_APB2RSTR_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
+            stm32_hw_warn("Unimplemented read: RCC_APB2RSTR_OFFSET");
             return 0;
         case RCC_AHB1ENR_OFFSET:
             return stm32_rcc_RCC_AHB1ENR_read(s);
@@ -641,6 +670,19 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
     }
 }
 
+static void stm32_rcc_writeb(void *opaque, hwaddr offset, uint64_t value)
+{
+    Stm32f2xxRcc *s = (Stm32f2xxRcc *)opaque;
+
+    switch (offset) {
+    case RCC_BDCR_OFFSET:
+        stm32_rcc_RCC_BDCR_writeb0(s, value, false);
+        break;
+    default:
+        STM32_BAD_REG(offset, 1);
+        break;
+    }
+}
 
 static void stm32_rcc_writew(void *opaque, hwaddr offset,
                              uint64_t value)
@@ -664,6 +706,8 @@ static void stm32_rcc_writew(void *opaque, hwaddr offset,
             stm32_hw_warn("Unimplemented write: RCC_APB1RSTR_OFFSET 0x%x", (uint32_t)value);
             break;
         case RCC_APB2RSTR_OFFSET:
+            stm32_hw_warn("Unimplemented write: RCC_APB2RSTR_OFFSET 0x%x", (uint32_t)value);
+            break;
         case RCC_AHB3RSTR_OFFSET:
             STM32_NOT_IMPL_REG(offset, 4);
             break;
@@ -724,6 +768,9 @@ static void stm32_rcc_write(void *opaque, hwaddr offset,
     switch(size) {
         case 4:
             stm32_rcc_writew(opaque, offset, value);
+            break;
+        case 1:
+            stm32_rcc_writeb(opaque, offset, value);
             break;
         default:
             STM32_NOT_IMPL_REG(offset, size);
