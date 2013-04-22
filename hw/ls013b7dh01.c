@@ -26,9 +26,10 @@
 
 /*
  * TODO:
+ * Add part number attribute and set ROWS/COLS appropriately.
  * Add attribute for 'off' bit colour for simulating backlight.
  * Add display rotation attribute.
- * Handle 24bpp displays.
+ * Handle 24bpp host displays.
  */
 
 #include "qemu-common.h"
