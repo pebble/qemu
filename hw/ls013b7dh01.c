@@ -76,7 +76,10 @@ sm_lcd_transfer(SSISlave *dev, uint32_t data)
         case 0x00: /* Toggle VCOM */
             break;
         default:
-            abort();
+            /* Simulate confused display controller. */
+            memset(s->framebuffer, 0x55, sizeof(*s->framebuffer));
+            s->redraw = true;
+            break;
         }
         break;
     case LINENO:
