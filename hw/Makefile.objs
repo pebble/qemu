@@ -175,6 +175,7 @@ common-obj-$(CONFIG_TMP105) += tmp105.o
 common-obj-$(CONFIG_STELLARIS_INPUT) += stellaris_input.o
 common-obj-$(CONFIG_SSD0303) += ssd0303.o
 common-obj-$(CONFIG_SSD0323) += ssd0323.o
+common-obj-$(CONFIG_LS013B7DH01) += ls013b7dh01.o
 common-obj-$(CONFIG_ADS7846) += ads7846.o
 common-obj-$(CONFIG_MAX111X) += max111x.o
 common-obj-$(CONFIG_DS1338) += ds1338.o
