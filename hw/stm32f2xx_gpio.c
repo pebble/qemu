@@ -150,4 +150,4 @@ stm32f2xx_gpio_register_types(void)
     type_register_static(&stm32f2xx_gpio_info);
 }
 
-type_init(stm32f2xx_gpio_register_types);
+type_init(stm32f2xx_gpio_register_types)
