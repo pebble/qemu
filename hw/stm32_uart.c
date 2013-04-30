@@ -546,6 +546,7 @@ static void stm32_uart_USART_DR_write(Stm32Uart *s, uint32_t new_value)
         s->check_tx_pin_callback(s);
     }
 
+printf("%c", new_value); /* XXX hack to see output */
     if(s->USART_SR_TC) {
         /* If the Transmission Complete bit is set, it means the USART is not
          * currently transmitting.  This means, a transmission can immediately
@@ -582,6 +583,7 @@ static void stm32_uart_USART_CR1_write(Stm32Uart *s, uint32_t new_value,
                                         bool init)
 {
     s->USART_CR1_UE = GET_BIT_VALUE(new_value, USART_CR1_UE_BIT);
+#if 0 /* XXX Does not work with f2xx yet */
     if(s->USART_CR1_UE) {
         /* Check to make sure the correct mapping is selected when enabling the
          * USART.
@@ -590,6 +592,7 @@ static void stm32_uart_USART_CR1_write(Stm32Uart *s, uint32_t new_value,
             hw_error("Bad AFIO mapping for %s", s->busdev.qdev.id);
         }
     }
+#endif
 
     s->USART_CR1_TXEIE = GET_BIT_VALUE(new_value, USART_CR1_TXEIE_BIT);
     s->USART_CR1_TCIE = GET_BIT_VALUE(new_value, USART_CR1_TCIE_BIT);
