@@ -11,13 +11,13 @@
  */
 
 #include "sysbus.h"
-#include "qemu-timer.h"
+#include "qemu/timer.h"
 #include "arm-misc.h"
-#include "exec-memory.h"
+#include "exec/address-spaces.h"
 #include "arm_gic_internal.h"
 
 typedef struct {
-    gic_state gic;
+    GICState gic;
     struct {
         uint32_t control;
         uint32_t reload;
@@ -139,9 +139,8 @@ void armv7m_nvic_complete_irq(void *opaque, int irq)
     gic_complete_irq(&s->gic, 0, irq);
 }
 
-static uint32_t nvic_readb(void *opaque, uint32_t offset)
+static uint32_t nvic_readb(nvic_state *s, uint32_t offset)
 {
-    nvic_state *s = (nvic_state *)opaque;
     uint32_t val;
     int irq;
 
@@ -159,9 +158,8 @@ bad_reg:
     return 0;
 }
 
-static uint32_t nvic_readl(void *opaque, uint32_t offset)
+static uint32_t nvic_readl(nvic_state *s, uint32_t offset)
 {
-    nvic_state *s = (nvic_state *)opaque;
     uint32_t val;
     int irq;
 
@@ -432,13 +430,13 @@ static void nvic_writel(void *opaque, uint32_t offset, uint32_t value)
     }
 }
 
-static uint64_t nvic_sysreg_read(void *opaque, target_phys_addr_t addr,
-                                 unsigned size)
+static uint64_t nvic_sysreg_read(void *opaque, hwaddr addr, unsigned size)
 {
     /* At the moment we only support the ID registers for byte/word access.
      * This is not strictly correct as a few of the other registers also
      * allow byte access.
      */
+    nvic_state *s = opaque;
     uint32_t offset = addr;
     if (offset >= 0xfe0) {
         if (offset & 3) {
@@ -447,15 +445,15 @@ static uint64_t nvic_sysreg_read(void *opaque, target_phys_addr_t addr,
         return nvic_id[(offset - 0xfe0) >> 2];
     }
     if (size == 4) {
-        return nvic_readl(opaque, offset);
+        return nvic_readl(s, offset);
     } else if (size == 1) {
-        return nvic_readb(opaque, offset);
+        return nvic_readb(s, offset);
     }
     hw_error("NVIC: Bad read of size %d at offset 0x%x\n", size, offset);
 }
 
-static void nvic_sysreg_write(void *opaque, target_phys_addr_t addr,
-                              uint64_t value, unsigned size)
+static void nvic_sysreg_write(void *opaque, hwaddr addr, uint64_t value,
+                              unsigned size)
 {
     uint32_t offset = addr;
     if (size == 4) {
@@ -550,9 +548,9 @@ static void armv7m_nvic_instance_init(Object *obj)
      * than our superclass. This function runs after qdev init
      * has set the defaults from the Property array and before
      * any user-specified property setting, so just modify the
-     * value in the gic_state struct.
+     * value in the GICState struct.
      */
-    gic_state *s = ARM_GIC_COMMON(obj);
+    GICState *s = ARM_GIC_COMMON(obj);
     /* The ARM v7m may have anything from 0 to 496 external interrupt
      * IRQ lines. We default to 64. Other boards may differ and should
      * set the num-irq property appropriately.

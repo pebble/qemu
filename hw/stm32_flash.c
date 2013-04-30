@@ -38,8 +38,7 @@ typedef struct {
     uint32_t size;
 } Stm32Flash;
 
-static uint64_t stm32_flash_read(void *opaque, target_phys_addr_t offset,
-                          unsigned size)
+static uint64_t stm32_flash_read(void *opaque, hwaddr offset, unsigned size)
 {
     uint32_t v = 0;
 
@@ -50,8 +49,8 @@ static uint64_t stm32_flash_read(void *opaque, target_phys_addr_t offset,
     return v;
 }
 
-static void stm32_flash_write(void *opaque, target_phys_addr_t offset,
-                       uint64_t value, unsigned size)
+static void stm32_flash_write(void *opaque, hwaddr offset, uint64_t value,
+                              unsigned size)
 {
     /* Flash is treated as read only memory. */
     hw_error("stm32_flash: Attempted to write flash memory (read only)");

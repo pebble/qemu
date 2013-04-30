@@ -24,8 +24,8 @@
 #include "sysbus.h"
 #include "arm-misc.h"
 #include "devices.h"
-#include "console.h"
-#include "sysemu.h"
+#include "ui/console.h"
+#include "sysemu/sysemu.h"
 #include "boards.h"
 
 

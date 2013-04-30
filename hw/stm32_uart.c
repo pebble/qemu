@@ -603,7 +603,7 @@ static void stm32_uart_USART_CR3_write(Stm32Uart *s, uint32_t new_value,
 
 static void stm32_uart_reset(DeviceState *dev)
 {
-    Stm32Uart *s = FROM_SYSBUS(Stm32Uart, sysbus_from_qdev(dev));
+    Stm32Uart *s = FROM_SYSBUS(Stm32Uart, SYS_BUS_DEVICE(dev));
 
     /* Initialize the status registers.  These are mostly
      * read-only, so we do not call the "write" routine
@@ -625,7 +625,7 @@ static void stm32_uart_reset(DeviceState *dev)
 }
 
 
-static uint64_t stm32_uart_readw(Stm32Uart *s, target_phys_addr_t offset)
+static uint64_t stm32_uart_readw(Stm32Uart *s, hwaddr offset)
 {
     uint32_t value;
 
@@ -654,7 +654,7 @@ static uint64_t stm32_uart_readw(Stm32Uart *s, target_phys_addr_t offset)
 
 static void stm32_uart_writew(
         Stm32Uart *s,
-        target_phys_addr_t offset,
+        hwaddr offset,
         uint64_t value)
 {
     switch (offset) {
@@ -686,7 +686,7 @@ static void stm32_uart_writew(
 }
 
 
-static uint64_t stm32_uart_readh(Stm32Uart *s, target_phys_addr_t offset)
+static uint64_t stm32_uart_readh(Stm32Uart *s, hwaddr offset)
 {
     uint32_t value;
 
@@ -715,7 +715,7 @@ static uint64_t stm32_uart_readh(Stm32Uart *s, target_phys_addr_t offset)
 
 static void stm32_uart_writeh(
         Stm32Uart *s,
-        target_phys_addr_t offset,
+        hwaddr offset,
         uint64_t value)
 {
     switch (offset) {
@@ -754,8 +754,7 @@ static void stm32_uart_writeh(
     }
 }
 
-static uint64_t stm32_uart_read(void *opaque, target_phys_addr_t offset,
-                          unsigned size)
+static uint64_t stm32_uart_read(void *opaque, hwaddr offset, unsigned size)
 {
     Stm32Uart *s = (Stm32Uart *)opaque;
 
@@ -770,7 +769,7 @@ static uint64_t stm32_uart_read(void *opaque, target_phys_addr_t offset,
     }
 }
 
-static void stm32_uart_write(void *opaque, target_phys_addr_t offset,
+static void stm32_uart_write(void *opaque, hwaddr offset,
                        uint64_t value, unsigned size)
 {
     Stm32Uart *s = (Stm32Uart *)opaque;

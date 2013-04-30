@@ -451,7 +451,7 @@ static void stm32_rcc_RCC_CSR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 
 
 
-static uint64_t stm32_rcc_readw(void *opaque, target_phys_addr_t offset)
+static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
 {
     Stm32Rcc *s = (Stm32Rcc *)opaque;
 
@@ -488,8 +488,7 @@ static uint64_t stm32_rcc_readw(void *opaque, target_phys_addr_t offset)
 }
 
 
-static void stm32_rcc_writew(void *opaque, target_phys_addr_t offset,
-                          uint64_t value)
+static void stm32_rcc_writew(void *opaque, hwaddr offset, uint64_t value)
 {
     Stm32Rcc *s = (Stm32Rcc *)opaque;
 
@@ -532,8 +531,7 @@ static void stm32_rcc_writew(void *opaque, target_phys_addr_t offset,
     }
 }
 
-static uint64_t stm32_rcc_read(void *opaque, target_phys_addr_t offset,
-                          unsigned size)
+static uint64_t stm32_rcc_read(void *opaque, hwaddr offset, unsigned size)
 {
     switch(size) {
         case 4:
@@ -544,8 +542,8 @@ static uint64_t stm32_rcc_read(void *opaque, target_phys_addr_t offset,
     }
 }
 
-static void stm32_rcc_write(void *opaque, target_phys_addr_t offset,
-                       uint64_t value, unsigned size)
+static void stm32_rcc_write(void *opaque, hwaddr offset, uint64_t value,
+                            unsigned size)
 {
     switch(size) {
         case 4:
@@ -566,7 +564,7 @@ static const MemoryRegionOps stm32_rcc_ops = {
 
 static void stm32_rcc_reset(DeviceState *dev)
 {
-    Stm32Rcc *s = FROM_SYSBUS(Stm32Rcc, sysbus_from_qdev(dev));
+    Stm32Rcc *s = FROM_SYSBUS(Stm32Rcc, SYS_BUS_DEVICE(dev));
 
     stm32_rcc_RCC_CR_write(s, 0x00000083, true);
     stm32_rcc_RCC_CFGR_write(s, 0x00000000, true);
