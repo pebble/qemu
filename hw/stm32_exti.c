@@ -325,7 +325,9 @@ void stm32_exti_set_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_in
     assert(exti_line < EXTI_LINE_COUNT);
 
     /* Call the GPIO module with the EXTI lines IRQ handler. */
+#if 0
     stm32_gpio_set_exti_irq(s->stm32_gpio[gpio_index], exti_line, s->gpio_in_irqs[exti_line]);
+#endif
 }
 
 void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_index)
@@ -333,7 +335,9 @@ void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_
     assert(exti_line < EXTI_LINE_COUNT);
 
     /* Call the GPIO module to clear its IRQ assignment. */
+#if 0
     stm32_gpio_set_exti_irq(s->stm32_gpio[gpio_index], exti_line, NULL);
+#endif
 }
 
 
@@ -346,7 +350,9 @@ static int stm32_exti_init(SysBusDevice *dev)
 
     Stm32Exti *s = FROM_SYSBUS(Stm32Exti, dev);
 
+#if 0
     s->stm32_gpio = (Stm32Gpio **)s->stm32_gpio_prop;
+#endif
 
     memory_region_init_io(&s->iomem, &stm32_exti_ops, s,
             "exti", 0x03ff);

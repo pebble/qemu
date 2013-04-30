@@ -82,6 +82,7 @@ void stm32f2xx_init(
         stm32_gpio[i] = (Stm32Gpio *)gpio_dev[i];
     }
 
+#if 0
     DeviceState *exti_dev = qdev_create(NULL, "stm32_exti");
     qdev_prop_set_ptr(exti_dev, "stm32_gpio", gpio_dev);
     stm32_init_periph(exti_dev, STM32F2XX_EXTI, 0x40013C00, NULL);
@@ -96,10 +97,13 @@ void stm32f2xx_init(
     sysbus_connect_irq(exti_busdev, 7, pic[STM32_PVD_IRQ]);
     sysbus_connect_irq(exti_busdev, 8, pic[STM32_RTCAlarm_IRQ]);
     sysbus_connect_irq(exti_busdev, 9, pic[STM32_OTG_FS_WKUP_IRQ]);
+#endif
 
     DeviceState *syscfg_dev = qdev_create(NULL, "stm32f2xx_syscfg");
     qdev_prop_set_ptr(syscfg_dev, "stm32_rcc", rcc_dev);
+#if 0
     qdev_prop_set_ptr(syscfg_dev, "stm32_exti", exti_dev);
+#endif
     qdev_prop_set_bit(syscfg_dev, "boot0", 0);
     qdev_prop_set_bit(syscfg_dev, "boot1", 0);
     stm32_init_periph(syscfg_dev, STM32F2XX_SYSCFG, 0x40013800, NULL);
