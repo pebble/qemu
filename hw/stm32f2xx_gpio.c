@@ -56,7 +56,7 @@ stm32f2xx_gpio_read(void *arg, hwaddr offset, unsigned int size)
 
     offset >>= 2;
     r = s->regs[offset];
-printf("unit %d reg %x return 0x%x\n", s->periph, (int)offset << 2, r);
+//printf("GPIO unit %d reg %x return 0x%x\n", s->periph, (int)offset << 2, r);
     return r;
 }
 
@@ -68,7 +68,7 @@ stm32f2xx_gpio_write(void *arg, hwaddr offset, uint64_t data, unsigned int size)
     offset >>= 2;
     switch (offset) {
     default:
-printf("unit %d reg %x write 0x%x\n", s->periph, (int)offset << 2, (int)data);
+printf("GPIO unit %d reg %x write 0x%x\n", s->periph, (int)offset << 2, (int)data);
         if (offset < R_GPIO_MAX) {
             s->regs[offset] = data;
         }
