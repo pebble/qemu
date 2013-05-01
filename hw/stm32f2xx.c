@@ -158,6 +158,7 @@ void stm32f2xx_init(
 
     SSIBus *spi = (SSIBus *)qdev_get_child_bus(spi_dev[0], "ssi");
     DeviceState *flash_dev = ssi_create_slave_no_init(spi, "m25p80");
+    qdev_prop_set_string(flash_dev, "partname", "n25q032a");
     qdev_init_nofail(flash_dev);
 
     spi = (SSIBus *)qdev_get_child_bus(spi_dev[1], "ssi");
