@@ -96,19 +96,11 @@ static void arm_cpu_reset(CPUState *s)
        clear at reset.  Initial SP and PC are loaded from ROM.  */
     if (IS_M(env)) {
         uint32_t pc;
-        uint8_t *rom;
         env->uncached_cpsr &= ~CPSR_I;
-        rom = rom_ptr(0);
-        if (rom) {
-            /* We should really use ldl_phys here, in case the guest
-               modified flash and reset itself.  However images
-               loaded via -kernel have not been copied yet, so load the
-               values directly from there.  */
-            env->regs[13] = ldl_p(rom);
-            pc = ldl_p(rom + 4);
-            env->thumb = pc & 1;
-            env->regs[15] = pc & ~1;
-        }
+        env->regs[13] = ldl_phys(0);
+        pc = ldl_phys(4);
+        env->thumb = pc & 1;
+        env->regs[15] = pc & ~1;
     }
     env->vfp.xregs[ARM_VFP_FPEXC] = 0;
 #endif

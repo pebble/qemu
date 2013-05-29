@@ -24,6 +24,8 @@
 #include "exec/address-spaces.h"
 #include "exec/memory.h"
 #include "ssi.h"
+#include "flash.h"
+#include "sysemu/blockdev.h" // drive_get
 
 static const char *stm32f2xx_periph_name_arr[] = {
     ENUM_STRING(STM32F2XX_UART1),
@@ -55,17 +57,23 @@ void stm32f2xx_init(
             uint32_t osc32_freq)
 {
     MemoryRegion *address_space_mem = get_system_memory();
+    DriveInfo *dinfo;
     qemu_irq *pic;
     int i;
 
     pic = armv7m_translated_init(address_space_mem, flash_size, ram_size, kernel_filename, kernel_load_translate_fn, NULL, "cortex-m3");
+    dinfo = drive_get(IF_PFLASH, 0, 0);
+    if (dinfo) {
+        f2xx_flash_register(dinfo->bdrv, 1 * 0x08000000, flash_size * 1024);
+    }
 
     // Create alias at 0x08000000 for internal flash, that is hard-coded at 0x00000000 in armv7m.c:
     // TODO: Let BOOT0 and BOOT1 configuration pins determine what is mapped at 0x00000000, see SYSCFG_MEMRMP.
-    MemoryRegionSection mrs = memory_region_find(address_space_mem, 0, WORD_ACCESS_SIZE);
+
+    MemoryRegionSection mrs = memory_region_find(address_space_mem, STM32_FLASH_ADDR_START, WORD_ACCESS_SIZE);
     MemoryRegion *flash_alias = g_new(MemoryRegion, 1);
     memory_region_init_alias(flash_alias, "stm32f2xx.flash.alias", mrs.mr, 0, flash_size * 1024);
-    memory_region_add_subregion(address_space_mem, STM32_FLASH_ADDR_START, flash_alias);
+    memory_region_add_subregion(address_space_mem, 0, flash_alias);
 
     DeviceState *rcc_dev = qdev_create(NULL, "stm32f2xx_rcc");
     qdev_prop_set_uint32(rcc_dev, "osc_freq", osc_freq);

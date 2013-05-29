@@ -183,8 +183,12 @@ qemu_irq *armv7m_translated_init(MemoryRegion *address_space_mem,
     int i;
     int big_endian;
     MemoryRegion *sram = g_new(MemoryRegion, 1);
-    MemoryRegion *flash = g_new(MemoryRegion, 1);
+    MemoryRegion *flash;
     MemoryRegion *hack = g_new(MemoryRegion, 1);
+
+    if (kernel_filename) {
+        flash = g_new(MemoryRegion, 1);
+    }
 
     flash_size *= 1024;
     sram_size *= 1024;
@@ -212,10 +216,13 @@ qemu_irq *armv7m_translated_init(MemoryRegion *address_space_mem,
 #endif
 
     /* Flash programming is done via the SCU, so pretend it is ROM.  */
-    memory_region_init_ram(flash, "armv7m.flash", flash_size);
-    vmstate_register_ram_global(flash);
-    memory_region_set_readonly(flash, true);
-    memory_region_add_subregion(address_space_mem, 0, flash);
+    if (kernel_filename) {
+        memory_region_init_ram(flash, "armv7m.flash", flash_size);
+        vmstate_register_ram_global(flash);
+        memory_region_set_readonly(flash, true);
+        memory_region_add_subregion(address_space_mem, 0, flash);
+    }
+
     memory_region_init_ram(sram, "armv7m.sram", sram_size);
     vmstate_register_ram_global(sram);
     memory_region_add_subregion(address_space_mem, 0x20000000, sram);
@@ -236,21 +243,18 @@ qemu_irq *armv7m_translated_init(MemoryRegion *address_space_mem,
     big_endian = 0;
 #endif
 
-    if (!kernel_filename) {
-        fprintf(stderr, "Guest image must be specified (using -kernel)\n");
-        exit(1);
-    }
-
-    image_size = load_elf(kernel_filename, translate_fn, translate_opaque, &entry, &lowaddr,
-                          NULL, big_endian, ELF_MACHINE, 1);
-    if (image_size < 0) {
-        image_size = load_image_targphys(kernel_filename, 0, flash_size);
-	lowaddr = 0;
-    }
-    if (image_size < 0) {
-        fprintf(stderr, "qemu: could not load kernel '%s'\n",
-                kernel_filename);
-        exit(1);
+    if (kernel_filename) {
+        image_size = load_elf(kernel_filename, translate_fn, translate_opaque, &entry, &lowaddr,
+                              NULL, big_endian, ELF_MACHINE, 1);
+        if (image_size < 0) {
+            image_size = load_image_targphys(kernel_filename, 0, flash_size);
+	    lowaddr = 0;
+        }
+        if (image_size < 0) {
+            fprintf(stderr, "qemu: could not load kernel '%s'\n",
+                    kernel_filename);
+            exit(1);
+        }
     }
 
     /* Hack to map an additional page of ram at the top of the address
