@@ -2171,6 +2171,10 @@ static inline uint32_t ldl_phys_internal(hwaddr addr,
 
     section = phys_page_find(address_space_memory.dispatch, addr >> TARGET_PAGE_BITS);
 
+    if (section == NULL) {
+        return UINT32_MAX;
+    }
+
     if (!(memory_region_is_ram(section->mr) ||
           memory_region_is_romd(section->mr))) {
         /* I/O case */
