@@ -386,7 +386,7 @@ static void nvic_writel(void *opaque, uint32_t offset, uint32_t value)
                 hw_error("VECTCLRACTIVE not implemented");
             }
             if (value & 5) {
-                hw_error("System reset");
+                qemu_system_reset_request();
             }
         }
         break;
