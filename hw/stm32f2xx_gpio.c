@@ -108,6 +108,8 @@ stm32f2xx_gpio_reset(DeviceState *dev)
         s->regs[R_GPIO_PUPDR] = 0x00000000;
         break;
     }
+    /* XXX default IDR to all-1s */
+    s->regs[R_GPIO_IDR] = 0xffffffff;
 }
 
 static int
