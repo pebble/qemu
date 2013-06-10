@@ -15,6 +15,7 @@
 #include "arm-misc.h"
 #include "exec/address-spaces.h"
 #include "arm_gic_internal.h"
+#include "sysemu/sysemu.h"
 
 typedef struct {
     GICState gic;
