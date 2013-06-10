@@ -580,7 +580,7 @@ static uint32_t stm32_rcc_RCC_BDCR_read(Stm32f2xxRcc *s)
     bool lseon = clktree_is_enabled(s->LSECLK);
 
     return GET_BIT_MASK(RCC_BDCR_LSERDY_BIT, lseon) |
-    GET_BIT_MASK(RCC_BDCR_LSEON_BIT, lseon);
+    GET_BIT_MASK(RCC_BDCR_LSEON_BIT, lseon) | 0x100; /* XXX force LSE */
 }
 
 static void stm32_rcc_RCC_BDCR_writeb0(Stm32f2xxRcc *s, uint8_t new_value, bool init)
