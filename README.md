@@ -29,12 +29,21 @@ Useful make commands when rebuilding:
         make defconfig
         make clean
 
+## Generating Images
+QEMU's -pflash argument is used to specify a file to use as the micro flash.
+An image can be created by concatenating the boot and main firmware files,
+like so:
+
+	truncate -s 64k tintin_boot.bin
+	cat tintin_boot.bin tintin_fw.bin > micro_flash.bin
+	truncate -s 1m micro_flash.bin
+
 ## Running
 The generated executable is arm-softmmu/qemu-system-arm .
 
 Example:
 
-        qemu-system-arm -M stm32-p205 -s -S -kernel your_firmware.elf
+        qemu-system-arm -M stm32-p205 -s -S -pflash micro_flash.bin
 
 `stm32-p205` is the identifier of the fictive board/machine that I'm using to test stuff out.
 
