@@ -25,7 +25,6 @@
 
 #include "sysbus.h"
 #include "stm32.h"
-#include "stm32f2xx_reg.h"
 #include "ssi.h"
 
 #define	R_CR1      (0x00 / 4)
