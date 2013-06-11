@@ -32,6 +32,7 @@
 #ifdef DEBUG_STM32_RCC
 #define DPRINTF(fmt, ...)                                       \
 do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
+#define STM32_RCC_WARN_ALL
 #else
 #define DPRINTF(fmt, ...)
 #endif
@@ -293,7 +294,7 @@ static void stm32_rcc_periph_enable(
                                     int periph,
                                     uint32_t bit_mask)
 {
-    printf("set enabled 0x%x %s %d %x: %s\n", new_value, s->PERIPHCLK[periph]->name, periph, bit_mask, IS_BIT_SET(new_value, bit_mask)?"en":"dis");
+    printf("rcc set 0x%x %s %d %x: %sable\n", new_value, s->PERIPHCLK[periph]->name, periph, bit_mask, IS_BIT_SET(new_value, bit_mask)?"en":"dis");
     clktree_set_enabled(s->PERIPHCLK[periph], IS_BIT_SET(new_value, bit_mask));
 }
 
@@ -359,7 +360,10 @@ static void stm32_rcc_RCC_CR_write(Stm32f2xxRcc *s, uint32_t new_value, bool ini
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_CR_PLLI2SON_CL_BIT, RCC_CR_RESET_VALUE);
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_CR_CSSON_BIT, RCC_CR_RESET_VALUE);
     WARN_UNIMPLEMENTED(new_value, RCC_CR_HSICAL_MASK, RCC_CR_RESET_VALUE);
+#ifdef STM32_RCC_WARN_ALL
+    /* Don't really care about trim settings for normal use. */
     WARN_UNIMPLEMENTED(new_value, RCC_CR_HSITRIM_MASK, RCC_CR_RESET_VALUE);
+#endif
 }
 
 static void stm32_rcc_RCC_PLLCFGR_write(Stm32f2xxRcc *s, uint32_t new_value, bool init)
@@ -561,7 +565,6 @@ static void stm32_rcc_RCC_APB2ENR_write(Stm32f2xxRcc *s, uint32_t new_value,
 static void stm32_rcc_RCC_APB1ENR_write(Stm32f2xxRcc *s, uint32_t new_value,
                                         bool init)
 {
-printf("%s\n", __func__);
     stm32_rcc_periph_enable(s, new_value, init, STM32F2XX_UART5,
                             RCC_APB1ENR_USART5EN_BIT);
     stm32_rcc_periph_enable(s, new_value, init, STM32F2XX_UART4,
