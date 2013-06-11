@@ -49,42 +49,87 @@ typedef struct f2xx_rtc {
     SysBusDevice busdev;
     MemoryRegion iomem;
     uint32_t regs[R_RTC_MAX];
+    int wp_count; /* Number of correct writes to WP reg */
 } f2xx_rtc;
 
 static uint64_t
-f2xx_rtc_read(void *arg, hwaddr offset, unsigned int size)
+f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
 {
     f2xx_rtc *s = arg;
     uint32_t r;
+    int offset = addr & 0x3;
 
-    offset >>= 2;
-    if (offset >= R_RTC_MAX) {
-        printf("unimpl\n");
+    addr >>= 2;
+    if (addr >= R_RTC_MAX) {
+        printf("guest error; unimpl\n");
         return 0;
     }
-    switch(offset) {
-    default:
-//        printf("%s: reg 0x%x\n", __func__, (int)offset << 2);
-        r = s->regs[offset];
-    }
+    r = (s->regs[addr] >> offset * 8) & ((1ull << (8 * size)) - 1);
+//    if (addr < R_RTC_BKPxR) {
+//        printf("%s: reg 0x%x offset %x ret 0x%x\n", __func__, (int)addr << 2, offset, r);
+//    }
     return r;
 }
 
 static void
-f2xx_rtc_write(void *arg, hwaddr offset, uint64_t data, unsigned int size)
+f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
 {
     f2xx_rtc *s = arg;
+    int offset = addr & 0x3;
 
-    offset >>= 2;
-    if (offset >= R_RTC_MAX) {
+    addr >>= 2;
+    if (addr >= R_RTC_MAX) {
         printf("unimpl\n");
         return;
     }
-    switch(offset) {
-    default:
-        printf("%s: reg 0x%x write\n", __func__, (int)offset << 2);
-        s->regs[offset] = data;
+
+    /* Special case for write protect state machine. */
+    if (addr == R_RTC_WPR) {
+        if (offset > 0) {
+            return;
+        }
+        data &= 0xff;
+        if ((s->wp_count == 0 && data == 0xca) ||
+          (s->wp_count == 1 && data == 0x53)) {
+            s->wp_count++;
+        } else {
+            s->wp_count = 0;
+        }
+        s->regs[addr] = data;
+        return;
     }
+
+    switch(size) {
+    case 1:
+        data = (s->regs[addr] & ~(0xff << (offset * 8))) | data << (offset * 8);
+        break;
+    case 2:
+        data = (s->regs[addr] & ~(0xffff << (offset * 8))) | data << (offset * 8);
+        break;
+    case 4:
+        break;
+    default:
+        printf("unimpl\n");
+        return;
+    }
+    if (addr >= R_RTC_BKPxR && addr <= R_RTC_BKPxR_LAST) {
+        s->regs[addr] = data;
+        return;
+    }
+    /* Write protect */
+    if (s->wp_count < 2 && addr != R_RTC_TAFCR && addr != R_RTC_ISR &&
+      addr != R_RTC_WPR) {
+        printf("write to RTC reg 0x%x w/o write protect disable first\n",
+          (int)addr << 2);
+        return;
+    }
+    switch(addr) {
+    case R_RTC_ISR:
+        break;
+    default:
+        printf("%s: reg 0x%x %d write %d\n", __func__, (int)addr << 2, offset, size);
+    }
+    s->regs[addr] = data;
 
 }
 
@@ -125,6 +170,9 @@ f2xx_rtc_init(SysBusDevice *dev)
     memory_region_init_io(&s->iomem, &f2xx_rtc_ops, s, "rtc", 0xa0);
     sysbus_init_mmio(dev, &s->iomem);
     f2xx_rtc_set_from_host(s);
+    s->regs[R_RTC_ISR] = R_RTC_ISR_RESET;
+    s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
+    s->regs[R_RTC_WUTR] = R_RTC_WUTR_RESET;
     return 0;
 }
 
