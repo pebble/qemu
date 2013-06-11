@@ -25,12 +25,6 @@
 #include "sysbus.h"
 #include "qemu/timer.h"
 
-#ifdef DEBUG_COALESCED
-# define DPRINTF_C(format, ...)      printf(format, ## __VA_ARGS__)
-#else
-# define DPRINTF_C(format, ...)      do { } while (0)
-#endif
-
 #define R_RTC_TR     (0x00 / 4)
 #define R_RTC_DR     (0x04 / 4)
 #define R_RTC_CR     (0x08 / 4)
