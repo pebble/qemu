@@ -43,9 +43,7 @@ The generated executable is arm-softmmu/qemu-system-arm .
 
 Example:
 
-        qemu-system-arm -M stm32-p205 -s -S -pflash micro_flash.bin
-
-`stm32-p205` is the identifier of the fictive board/machine that I'm using to test stuff out.
+        qemu-system-arm -M pebble -s -S -pflash micro_flash.bin
 
 ## QEMU Docs
 Read original the documentation in qemu-doc.html or on http://wiki.qemu.org
