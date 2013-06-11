@@ -181,13 +181,16 @@ static void sm_lcd_invalidate_display(void *arg)
     s->redraw = true;
 }
 
+static const GraphicHwOps sm_lcd_ops = {
+    .invalidate = sm_lcd_update_display,
+    .gfx_update = sm_lcd_invalidate_display,
+};
+
 static int sm_lcd_init(SSISlave *dev)
 {
     lcd_state *s = FROM_SSI_SLAVE(lcd_state, dev);
 
-    s->ds = graphic_console_init(sm_lcd_update_display,
-                                 sm_lcd_invalidate_display,
-                                 NULL, NULL, s);
+    s->ds = graphic_console_init(DEVICE(dev), &sm_lcd_ops, s);
     qemu_console_resize(s->ds, NUM_COLS, NUM_ROWS);
     return 0;
 }
