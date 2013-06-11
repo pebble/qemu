@@ -175,6 +175,11 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     case R_RTC_ISR:
         break;
     case R_RTC_PRER:
+        /*
+         * XXX currently updates upon next clock tick.  To do this properly we
+         * would need to account for the time already elapsed, and then update
+         * the timer for the remaining period.
+         */
         break;
     default:
         printf("%s: reg 0x%x %d write %d\n", __func__, (int)addr << 2, offset, size);
