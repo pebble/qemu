@@ -54,7 +54,10 @@ The generated executable is arm-softmmu/qemu-system-arm .
 
 Example:
 
-        qemu-system-arm -rtc base=localtime -M pebble -s -S -pflash micro_flash.bin
+        qemu-system-arm -rtc base=localtime -M pebble -s -pflash micro_flash.bin
+
+Adding `-S` to the commandline will have QEMU wait in the monitor at start;
+the _c_ontinue command is necessary to start the virtual CPU.
 
 ## QEMU Docs
 Read original the documentation in qemu-doc.html or on http://wiki.qemu.org
