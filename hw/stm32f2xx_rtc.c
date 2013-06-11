@@ -124,7 +124,13 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         return;
     }
     switch(addr) {
+    case R_RTC_TR:
+        break;
+    case R_RTC_CR:
+        break;
     case R_RTC_ISR:
+        break;
+    case R_RTC_PRER:
         break;
     default:
         printf("%s: reg 0x%x %d write %d\n", __func__, (int)addr << 2, offset, size);
