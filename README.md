@@ -54,7 +54,7 @@ The generated executable is arm-softmmu/qemu-system-arm .
 
 Example:
 
-        qemu-system-arm -M pebble -s -S -pflash micro_flash.bin
+        qemu-system-arm -rtc base=localtime -M pebble -s -S -pflash micro_flash.bin
 
 ## QEMU Docs
 Read original the documentation in qemu-doc.html or on http://wiki.qemu.org
