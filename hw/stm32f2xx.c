@@ -172,4 +172,7 @@ void stm32f2xx_init(
 //    stm32_uart[STM32_UART6_INDEX] = stm32_create_uart_dev(STM32_UART6, rcc_dev, gpio_dev, afio_dev, 0x40011400, pic[STM32_UART6_IRQ]);
     DeviceState *adc_dev = qdev_create(NULL, "stm32f2xx_adc");
     stm32_init_periph(adc_dev, STM32F2XX_ADC1, 0x40012000, NULL);
+
+    DeviceState *rtc_dev = qdev_create(NULL, "f2xx_rtc");
+    stm32_init_periph(rtc_dev, STM32F2XX_RTC, 0x40002800, NULL);
 }
