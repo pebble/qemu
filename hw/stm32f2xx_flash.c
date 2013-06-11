@@ -42,12 +42,11 @@ f2xx_flash_t *f2xx_flash_register(BlockDriverState *bdrv, hwaddr base,
     //SysBusDevice *busdev = SYS_BUS_DEVICE(dev);
     f2xx_flash_t *flash = (f2xx_flash_t *)object_dynamic_cast(OBJECT(dev),
                                                               "f2xx.flash");
-    printf("%s\n", __func__);
     if (bdrv) {
         if (qdev_prop_set_drive(dev, "drive", bdrv)) {
-            printf("huh?\n");
+            printf("%s, have no drive???\n", __func__);
+            return NULL;
         }
-        printf("got bdrv\n");
     }
     qdev_init_nofail(dev);
     //sysbus_mmio_map(busdev, 0, base);
@@ -81,22 +80,18 @@ MemoryRegion *get_system_memory(void); /* XXX */
 static int f2xx_flash_init(SysBusDevice *dev)
 {
     f2xx_flash_t *flash = FROM_SYSBUS(typeof(*flash), dev);
-    uint64_t size = 512 * 1024;
+    uint64_t size = 512 * 1024; /* XXX */
 
-    printf("%s size=%ju\n", __func__, (uintmax_t)size);
 //    memory_region_init_rom_device(&flash->mem, &f2xx_flash_ops, flash, "name",
 //      size);
     memory_region_init_ram(&flash->mem, "f2xx.flash", size);
 
     vmstate_register_ram(&flash->mem, DEVICE(flash));
     //vmstate_register_ram_global(&flash->mem);
-    printf("%p\n", memory_region_get_ram_ptr(&flash->mem));
     memory_region_set_readonly(&flash->mem, true);
     memory_region_add_subregion(get_system_memory(), 0x8000000, &flash->mem);
-//    memory_region_a
 //    sysbus_init_mmio(dev, &flash->mem);
 
-//    flash->data = qemu_blockalign(flash->bdrv, flash->size);
     flash->data = memory_region_get_ram_ptr(&flash->mem);
     memset(flash->data, 0xff, size);
     if (flash->bdrv) {
