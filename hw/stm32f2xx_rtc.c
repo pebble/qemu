@@ -31,6 +31,10 @@
 #define R_RTC_ISR    (0x0c / 4)
 #define R_RTC_ISR_RESET 0x00000007
 #define R_RTC_PRER   (0x10 / 4)
+#define R_RTC_PRER_PREDIV_A_MASK 0x7f
+#define R_RTC_PRER_PREDIV_A_SHIFT 16
+#define R_RTC_PRER_PREDIV_S_MASK 0x1fff
+#define R_RTC_PRER_PREDIV_S_SHIFT 0
 #define R_RTC_PRER_RESET 0x007f00ff
 #define R_RTC_WUTR   (0x14 / 4)
 #define R_RTC_WUTR_RESET 0x0000ffff
@@ -48,9 +52,49 @@
 typedef struct f2xx_rtc {
     SysBusDevice busdev;
     MemoryRegion iomem;
+    QEMUTimer *timer;
+    time_t t;
     uint32_t regs[R_RTC_MAX];
     int wp_count; /* Number of correct writes to WP reg */
 } f2xx_rtc;
+
+static void
+f2xx_rtc_set_tdr(f2xx_rtc *s)
+{
+    struct tm tm;
+    uint8_t wday;
+
+    localtime_r(&s->t, &tm);
+    wday = tm.tm_wday == 0 ? tm.tm_wday : 7;
+    s->regs[R_RTC_TR] = to_bcd(tm.tm_sec) |
+                        to_bcd(tm.tm_min) << 8 |
+                        to_bcd(tm.tm_hour) << 16;
+    s->regs[R_RTC_DR] = to_bcd(tm.tm_mday) |
+                        to_bcd(tm.tm_mon + 1) << 8 |
+                        wday << 13 |
+                        to_bcd(tm.tm_year % 100) << 16;
+}
+
+static uint32_t
+f2xx_period(f2xx_rtc *s)
+{
+    uint32_t prer = s->regs[R_RTC_PRER];
+    unsigned int prescale;
+
+    prescale = (((prer >> R_RTC_PRER_PREDIV_A_SHIFT) & R_RTC_PRER_PREDIV_A_MASK) + 1) *
+               (((prer >> R_RTC_PRER_PREDIV_S_SHIFT) & R_RTC_PRER_PREDIV_S_MASK) + 1);
+    return 1000000000LL * prescale / 32768;
+}
+
+static void
+f2xx_timer(void *arg)
+{
+    f2xx_rtc *s = arg;
+
+    s->t++;
+    f2xx_rtc_set_tdr(s);
+    qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_period(s));
+}
 
 static uint64_t
 f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
@@ -153,17 +197,10 @@ static void
 f2xx_rtc_set_from_host(f2xx_rtc *s)
 {
     struct tm now;
-    uint8_t wday;
 
     qemu_get_timedate(&now, 0);
-    wday = now.tm_wday == 0 ? now.tm_wday : 7;
-    s->regs[R_RTC_TR] = to_bcd(now.tm_sec) |
-                        to_bcd(now.tm_min) << 8 |
-                        to_bcd(now.tm_hour) << 16;
-    s->regs[R_RTC_DR] = to_bcd(now.tm_mday) |
-                        to_bcd(now.tm_mon + 1) << 8 |
-                        wday << 13 |
-                        to_bcd(now.tm_year % 100) << 16;
+    s->t = mktime(&now);
+    f2xx_rtc_set_tdr(s);
     printf("set to 0x%x 0x%x", s->regs[R_RTC_TR], s->regs[R_RTC_DR]);
     printf(" %d %d %d\n", now.tm_mday, now.tm_mon, now.tm_year);
 }
@@ -179,6 +216,8 @@ f2xx_rtc_init(SysBusDevice *dev)
     s->regs[R_RTC_ISR] = R_RTC_ISR_RESET;
     s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
     s->regs[R_RTC_WUTR] = R_RTC_WUTR_RESET;
+    s->timer = qemu_new_timer_ns(vm_clock, f2xx_timer, s);
+    qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_period(s));
     return 0;
 }
 
