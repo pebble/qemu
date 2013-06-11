@@ -1,4 +1,4 @@
-# QEMU with STM32F2xx Microcontroller Implementation
+# Pebble Smartwatch QEMU Implementation
 
 ## Overview
 This is a copy of QEMU that has been modified to include an implementation of the STM32F2xx microcontroller.
@@ -8,8 +8,19 @@ My repo is a bit more up to date (QEMU v1.4) than beckus' repo.
 
 __DANGER DANGER: It is very much a work-in-progress! Only some of the peripherals are working at the moment. Please contribute!__
 
-## Building
+## Dependencies
+QEMU requires that development packages for glib20 and pixman are installed.
 
+### FreeBSD
+Install the `devel/glib20` and `x11/pixman` ports.
+
+### Linux
+
+### Mac OS X
+
+### Windows
+
+## Building
 Commands for a typical build:
 
         ./configure --disable-werror --enable-debug --target-list="arm-softmmu"
