@@ -36,7 +36,7 @@ like so:
 
 	truncate -s 64k tintin_boot.bin
 	cat tintin_boot.bin tintin_fw.bin > micro_flash.bin
-	truncate -s 1m micro_flash.bin
+	truncate -s 512k micro_flash.bin
 
 ## Running
 The generated executable is arm-softmmu/qemu-system-arm .

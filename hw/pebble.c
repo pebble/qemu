@@ -27,7 +27,7 @@ static void pebble1_init(QEMUMachineInitArgs *args) {
     Stm32Gpio *gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *uart[STM32_UART_COUNT];
 
-    stm32f2xx_init(1024, 128, args->kernel_filename, gpio, uart, 8000000,
+    stm32f2xx_init(512, 128, args->kernel_filename, gpio, uart, 8000000,
       32768);
 }
 

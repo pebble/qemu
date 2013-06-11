@@ -81,7 +81,7 @@ MemoryRegion *get_system_memory(void); /* XXX */
 static int f2xx_flash_init(SysBusDevice *dev)
 {
     f2xx_flash_t *flash = FROM_SYSBUS(typeof(*flash), dev);
-    uint64_t size = 1024 * 1024;
+    uint64_t size = 512 * 1024;
 
     printf("%s size=%llu\n", __func__, size);
 //    memory_region_init_rom_device(&flash->mem, &f2xx_flash_ops, flash, "name",
