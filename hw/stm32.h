@@ -276,6 +276,7 @@ void stm32f1xx_init(
             uint32_t osc_freq,
             uint32_t osc32_freq);
 
+struct stm32f2xx;
 void stm32f2xx_init(
                     ram_addr_t flash_size,
                     ram_addr_t ram_size,
@@ -283,7 +284,8 @@ void stm32f2xx_init(
                     Stm32Gpio **stm32_gpio,
                     Stm32Uart **stm32_uart,
                     uint32_t osc_freq,
-                    uint32_t osc32_freq);
+                    uint32_t osc32_freq,
+                    struct stm32f2xx *stm);
 #endif /* STM32_H */
 
 

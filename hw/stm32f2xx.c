@@ -54,7 +54,8 @@ void stm32f2xx_init(
             Stm32Gpio **stm32_gpio,
             Stm32Uart **stm32_uart,
             uint32_t osc_freq,
-            uint32_t osc32_freq)
+            uint32_t osc32_freq,
+            struct stm32f2xx *stm)
 {
     MemoryRegion *address_space_mem = get_system_memory();
     DriveInfo *dinfo;
@@ -153,26 +154,15 @@ void stm32f2xx_init(
         {0x40003800, STM32_SPI2_IRQ},
         {0x40003CD0, STM32_SPI3_IRQ},
     };
-    DeviceState *spi_dev[ARRAY_LENGTH(spi_desc)];
     for (i = 0; i < ARRAY_LENGTH(spi_desc); ++i) {
         const stm32_periph_t periph = STM32F2XX_SPI1 + i;
-        spi_dev[i] = qdev_create(NULL, "stm32f2xx_spi");
-        spi_dev[i]->id = stm32f2xx_periph_name_arr[periph];
-        qdev_prop_set_int32(spi_dev[i], "periph", periph);
-        stm32_init_periph(spi_dev[i], periph, spi_desc[i].addr,
+        stm->spi_dev[i] = qdev_create(NULL, "stm32f2xx_spi");
+        stm->spi_dev[i]->id = stm32f2xx_periph_name_arr[periph];
+        qdev_prop_set_int32(stm->spi_dev[i], "periph", periph);
+        stm32_init_periph(stm->spi_dev[i], periph, spi_desc[i].addr,
           pic[spi_desc[i].irq_idx]);
 
     }
-
-    SSIBus *spi = (SSIBus *)qdev_get_child_bus(spi_dev[0], "ssi");
-    DeviceState *flash_dev = ssi_create_slave_no_init(spi, "m25p80");
-    qdev_prop_set_string(flash_dev, "partname", "n25q032a");
-    qdev_init_nofail(flash_dev);
-
-    spi = (SSIBus *)qdev_get_child_bus(spi_dev[1], "ssi");
-    DeviceState *display_dev = ssi_create_slave_no_init(spi, "sm-lcd");
-    qdev_init_nofail(display_dev);
-
 
 //    stm32_uart[STM32_UART1_INDEX] = stm32_create_uart_dev(STM32_UART1, rcc_dev, gpio_dev, afio_dev, 0x40011000, pic[STM32_UART1_IRQ]);
 //    stm32_uart[STM32_UART2_INDEX] = stm32_create_uart_dev(STM32_UART2, rcc_dev, gpio_dev, afio_dev, 0x40004400, pic[STM32_UART2_IRQ]);

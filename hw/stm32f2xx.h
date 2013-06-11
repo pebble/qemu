@@ -55,3 +55,8 @@ enum {
 };
 
 #define STM32F2XX_GPIO_COUNT (STM32F2XX_GPIOI - STM32F2XX_GPIOA + 1)
+#define STM32F2XX_SPI_COUNT 3
+
+struct stm32f2xx {
+    DeviceState *spi_dev[STM32F2XX_SPI_COUNT];
+};

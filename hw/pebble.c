@@ -21,14 +21,29 @@
  */
 
 #include "stm32f2xx.h"
+#include "hw/ssi.h"
 #include "boards.h"
 
 static void pebble1_init(QEMUMachineInitArgs *args) {
     Stm32Gpio *gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *uart[STM32_UART_COUNT];
+    DeviceState *spi_flash;
+    SSIBus *spi;
+    struct stm32f2xx stm;
 
     stm32f2xx_init(512, 128, args->kernel_filename, gpio, uart, 8000000,
-      32768);
+      32768, &stm);
+
+    /* SPI flash */
+    spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[0], "ssi");
+    spi_flash = ssi_create_slave_no_init(spi, "m25p80");
+    qdev_prop_set_string(spi_flash, "partname", "n25q032a");
+    qdev_init_nofail(spi_flash);
+
+    /* Display */
+    spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[1], "ssi");
+    DeviceState *display_dev = ssi_create_slave_no_init(spi, "sm-lcd");
+    qdev_init_nofail(display_dev);
 }
 
 static QEMUMachine pebble1_machine = {
