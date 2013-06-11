@@ -39,7 +39,7 @@ f2xx_flash_t *f2xx_flash_register(BlockDriverState *bdrv, hwaddr base,
                                   hwaddr size)
 {
     DeviceState *dev = qdev_create(NULL, "f2xx.flash");
-    SysBusDevice *busdev = SYS_BUS_DEVICE(dev);
+    //SysBusDevice *busdev = SYS_BUS_DEVICE(dev);
     f2xx_flash_t *flash = (f2xx_flash_t *)object_dynamic_cast(OBJECT(dev),
                                                               "f2xx.flash");
     printf("%s\n", __func__);
@@ -59,9 +59,9 @@ f2xx_flash_t *f2xx_flash_register(BlockDriverState *bdrv, hwaddr base,
 static uint64_t
 f2xx_flash_read(void *arg, hwaddr offset, unsigned int size)
 {
-    f2xx_flash_t *flash = arg;
+    //f2xx_flash_t *flash = arg;
 
-    printf("read offset 0x%llx size %llu\n", offset, size);
+    printf("read offset 0x%jx size %ju\n", (uintmax_t)offset, (uintmax_t)size);
     return 0;
 }
 
@@ -83,7 +83,7 @@ static int f2xx_flash_init(SysBusDevice *dev)
     f2xx_flash_t *flash = FROM_SYSBUS(typeof(*flash), dev);
     uint64_t size = 512 * 1024;
 
-    printf("%s size=%llu\n", __func__, size);
+    printf("%s size=%ju\n", __func__, (uintmax_t)size);
 //    memory_region_init_rom_device(&flash->mem, &f2xx_flash_ops, flash, "name",
 //      size);
     memory_region_init_ram(&flash->mem, "f2xx.flash", size);
