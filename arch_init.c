@@ -35,20 +35,20 @@
 #include "qemu/bitmap.h"
 #include "sysemu/arch_init.h"
 #include "audio/audio.h"
-#include "hw/pc.h"
+#include "hw/i386/pc.h"
 #include "hw/pci/pci.h"
-#include "hw/audiodev.h"
+#include "hw/audio/audio.h"
 #include "sysemu/kvm.h"
 #include "migration/migration.h"
-#include "exec/gdbstub.h"
-#include "hw/smbios.h"
+#include "hw/i386/smbios.h"
 #include "exec/address-spaces.h"
-#include "hw/pcspk.h"
+#include "hw/audio/pcspk.h"
 #include "migration/page_cache.h"
 #include "qemu/config-file.h"
 #include "qmp-commands.h"
 #include "trace.h"
 #include "exec/cpu-all.h"
+#include "hw/acpi/acpi.h"
 
 #ifdef DEBUG_ARCH_INIT
 #define DPRINTF(fmt, ...) \
@@ -85,6 +85,8 @@ int graphic_depth = 15;
 #define QEMU_ARCH QEMU_ARCH_MICROBLAZE
 #elif defined(TARGET_MIPS)
 #define QEMU_ARCH QEMU_ARCH_MIPS
+#elif defined(TARGET_MOXIE)
+#define QEMU_ARCH QEMU_ARCH_MOXIE
 #elif defined(TARGET_OPENRISC)
 #define QEMU_ARCH QEMU_ARCH_OPENRISC
 #elif defined(TARGET_PPC)
@@ -114,26 +116,6 @@ const uint32_t arch_type = QEMU_ARCH;
 #define RAM_SAVE_FLAG_CONTINUE 0x20
 #define RAM_SAVE_FLAG_XBZRLE   0x40
 
-#ifdef __ALTIVEC__
-#include <altivec.h>
-#define VECTYPE        vector unsigned char
-#define SPLAT(p)       vec_splat(vec_ld(0, p), 0)
-#define ALL_EQ(v1, v2) vec_all_eq(v1, v2)
-/* altivec.h may redefine the bool macro as vector type.
- * Reset it to POSIX semantics. */
-#undef bool
-#define bool _Bool
-#elif defined __SSE2__
-#include <emmintrin.h>
-#define VECTYPE        __m128i
-#define SPLAT(p)       _mm_set1_epi8(*(p))
-#define ALL_EQ(v1, v2) (_mm_movemask_epi8(_mm_cmpeq_epi8(v1, v2)) == 0xFFFF)
-#else
-#define VECTYPE        unsigned long
-#define SPLAT(p)       (*(p) * (~0UL / 255))
-#define ALL_EQ(v1, v2) ((v1) == (v2))
-#endif
-
 
 static struct defconfig_file {
     const char *filename;
@@ -160,23 +142,14 @@ int qemu_read_default_config_files(bool userconfig)
             return ret;
         }
     }
-    
+
     return 0;
 }
 
-static int is_dup_page(uint8_t *page)
+static inline bool is_zero_page(uint8_t *p)
 {
-    VECTYPE *p = (VECTYPE *)page;
-    VECTYPE val = SPLAT(page);
-    int i;
-
-    for (i = 0; i < TARGET_PAGE_SIZE / sizeof(VECTYPE); i++) {
-        if (!ALL_EQ(val, p[i])) {
-            return 0;
-        }
-    }
-
-    return 1;
+    return buffer_find_nonzero_offset(p, TARGET_PAGE_SIZE) ==
+        TARGET_PAGE_SIZE;
 }
 
 /* struct contains XBZRLE cache and a static page
@@ -210,6 +183,7 @@ int64_t xbzrle_cache_resize(int64_t new_size)
 /* accounting for migration statistics */
 typedef struct AccountingInfo {
     uint64_t dup_pages;
+    uint64_t skipped_pages;
     uint64_t norm_pages;
     uint64_t iterations;
     uint64_t xbzrle_bytes;
@@ -233,6 +207,16 @@ uint64_t dup_mig_bytes_transferred(void)
 uint64_t dup_mig_pages_transferred(void)
 {
     return acct_info.dup_pages;
+}
+
+uint64_t skipped_mig_bytes_transferred(void)
+{
+    return acct_info.skipped_pages * TARGET_PAGE_SIZE;
+}
+
+uint64_t skipped_mig_pages_transferred(void)
+{
+    return acct_info.skipped_pages;
 }
 
 uint64_t norm_mig_bytes_transferred(void)
@@ -293,8 +277,7 @@ static int save_xbzrle_page(QEMUFile *f, uint8_t *current_data,
 
     if (!cache_is_cached(XBZRLE.cache, current_addr)) {
         if (!last_stage) {
-            cache_insert(XBZRLE.cache, current_addr,
-                         g_memdup(current_data, TARGET_PAGE_SIZE));
+            cache_insert(XBZRLE.cache, current_addr, current_data);
         }
         acct_info.xbzrle_cache_miss++;
         return -1;
@@ -347,6 +330,7 @@ static ram_addr_t last_offset;
 static unsigned long *migration_bitmap;
 static uint64_t migration_dirty_pages;
 static uint32_t last_version;
+static bool ram_bulk_stage;
 
 static inline
 ram_addr_t migration_bitmap_find_and_reset_dirty(MemoryRegion *mr,
@@ -356,7 +340,13 @@ ram_addr_t migration_bitmap_find_and_reset_dirty(MemoryRegion *mr,
     unsigned long nr = base + (start >> TARGET_PAGE_BITS);
     unsigned long size = base + (int128_get64(mr->size) >> TARGET_PAGE_BITS);
 
-    unsigned long next = find_next_bit(migration_bitmap, size, nr);
+    unsigned long next;
+
+    if (ram_bulk_stage && nr > base) {
+        next = nr + 1;
+    } else {
+        next = find_next_bit(migration_bitmap, size, nr);
+    }
 
     if (next < size) {
         clear_bit(next, migration_bitmap);
@@ -378,6 +368,8 @@ static inline bool migration_bitmap_set_dirty(MemoryRegion *mr,
     }
     return ret;
 }
+
+/* Needs iothread lock! */
 
 static void migration_bitmap_sync(void)
 {
@@ -414,6 +406,7 @@ static void migration_bitmap_sync(void)
     if (end_time > start_time + 1000) {
         s->dirty_pages_rate = num_dirty_pages_period * 1000
             / (end_time - start_time);
+        s->dirty_bytes_rate = s->dirty_pages_rate * TARGET_PAGE_SIZE;
         start_time = end_time;
         num_dirty_pages_period = 0;
     }
@@ -451,6 +444,7 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
             if (!block) {
                 block = QTAILQ_FIRST(&ram_list.blocks);
                 complete_round = true;
+                ram_bulk_stage = false;
             }
         } else {
             uint8_t *p;
@@ -461,13 +455,18 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
 
             /* In doubt sent page as normal */
             bytes_sent = -1;
-            if (is_dup_page(p)) {
+            if (is_zero_page(p)) {
                 acct_info.dup_pages++;
-                bytes_sent = save_block_hdr(f, block, offset, cont,
-                                            RAM_SAVE_FLAG_COMPRESS);
-                qemu_put_byte(f, *p);
-                bytes_sent += 1;
-            } else if (migrate_use_xbzrle()) {
+                if (!ram_bulk_stage) {
+                    bytes_sent = save_block_hdr(f, block, offset, cont,
+                                                RAM_SAVE_FLAG_COMPRESS);
+                    qemu_put_byte(f, 0);
+                    bytes_sent++;
+                } else {
+                    acct_info.skipped_pages++;
+                    bytes_sent = 0;
+                }
+            } else if (!ram_bulk_stage && migrate_use_xbzrle()) {
                 current_addr = block->offset + offset;
                 bytes_sent = save_xbzrle_page(f, p, current_addr, block,
                                               offset, cont, last_stage);
@@ -479,7 +478,7 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
             /* XBZRLE overflow or normal page */
             if (bytes_sent == -1) {
                 bytes_sent = save_block_hdr(f, block, offset, cont, RAM_SAVE_FLAG_PAGE);
-                qemu_put_buffer(f, p, TARGET_PAGE_SIZE);
+                qemu_put_buffer_async(f, p, TARGET_PAGE_SIZE);
                 bytes_sent += TARGET_PAGE_SIZE;
                 acct_info.norm_pages++;
             }
@@ -554,6 +553,7 @@ static void reset_ram_globals(void)
     last_sent_block = NULL;
     last_offset = 0;
     last_version = ram_list.version;
+    ram_bulk_stage = true;
 }
 
 #define MAX_WAIT 50 /* ms, half buffered_file limit */
@@ -566,10 +566,6 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
     migration_bitmap = bitmap_new(ram_pages);
     bitmap_set(migration_bitmap, 0, ram_pages);
     migration_dirty_pages = ram_pages;
-
-    qemu_mutex_lock_ramlist();
-    bytes_transferred = 0;
-    reset_ram_globals();
 
     if (migrate_use_xbzrle()) {
         XBZRLE.cache = cache_init(migrate_xbzrle_cache_size() /
@@ -584,8 +580,14 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
         acct_clear();
     }
 
+    qemu_mutex_lock_iothread();
+    qemu_mutex_lock_ramlist();
+    bytes_transferred = 0;
+    reset_ram_globals();
+
     memory_global_dirty_log_start();
     migration_bitmap_sync();
+    qemu_mutex_unlock_iothread();
 
     qemu_put_be64(f, ram_bytes_total() | RAM_SAVE_FLAG_MEM_SIZE);
 
@@ -689,7 +691,9 @@ static uint64_t ram_save_pending(QEMUFile *f, void *opaque, uint64_t max_size)
     remaining_size = ram_save_remaining() * TARGET_PAGE_SIZE;
 
     if (remaining_size < max_size) {
+        qemu_mutex_lock_iothread();
         migration_bitmap_sync();
+        qemu_mutex_unlock_iothread();
         remaining_size = ram_save_remaining() * TARGET_PAGE_SIZE;
     }
     return remaining_size;
@@ -883,7 +887,6 @@ SaveVMHandlers savevm_ram_handlers = {
     .cancel = ram_migration_cancel,
 };
 
-#ifdef HAS_AUDIO
 struct soundhw {
     const char *name;
     const char *descr;
@@ -895,96 +898,30 @@ struct soundhw {
     } init;
 };
 
-static struct soundhw soundhw[] = {
-#ifdef HAS_AUDIO_CHOICE
-#ifdef CONFIG_PCSPK
-    {
-        "pcspk",
-        "PC speaker",
-        0,
-        1,
-        { .init_isa = pcspk_audio_init }
-    },
-#endif
+static struct soundhw soundhw[9];
+static int soundhw_count;
 
-#ifdef CONFIG_SB16
-    {
-        "sb16",
-        "Creative Sound Blaster 16",
-        0,
-        1,
-        { .init_isa = SB16_init }
-    },
-#endif
+void isa_register_soundhw(const char *name, const char *descr,
+                          int (*init_isa)(ISABus *bus))
+{
+    assert(soundhw_count < ARRAY_SIZE(soundhw) - 1);
+    soundhw[soundhw_count].name = name;
+    soundhw[soundhw_count].descr = descr;
+    soundhw[soundhw_count].isa = 1;
+    soundhw[soundhw_count].init.init_isa = init_isa;
+    soundhw_count++;
+}
 
-#ifdef CONFIG_CS4231A
-    {
-        "cs4231a",
-        "CS4231A",
-        0,
-        1,
-        { .init_isa = cs4231a_init }
-    },
-#endif
-
-#ifdef CONFIG_ADLIB
-    {
-        "adlib",
-#ifdef HAS_YMF262
-        "Yamaha YMF262 (OPL3)",
-#else
-        "Yamaha YM3812 (OPL2)",
-#endif
-        0,
-        1,
-        { .init_isa = Adlib_init }
-    },
-#endif
-
-#ifdef CONFIG_GUS
-    {
-        "gus",
-        "Gravis Ultrasound GF1",
-        0,
-        1,
-        { .init_isa = GUS_init }
-    },
-#endif
-
-#ifdef CONFIG_AC97
-    {
-        "ac97",
-        "Intel 82801AA AC97 Audio",
-        0,
-        0,
-        { .init_pci = ac97_init }
-    },
-#endif
-
-#ifdef CONFIG_ES1370
-    {
-        "es1370",
-        "ENSONIQ AudioPCI ES1370",
-        0,
-        0,
-        { .init_pci = es1370_init }
-    },
-#endif
-
-#ifdef CONFIG_HDA
-    {
-        "hda",
-        "Intel HD Audio",
-        0,
-        0,
-        { .init_pci = intel_hda_and_codec_init }
-    },
-#endif
-
-#endif /* HAS_AUDIO_CHOICE */
-
-    { NULL, NULL, 0, 0, { NULL } }
-};
+void pci_register_soundhw(const char *name, const char *descr,
+                          int (*init_pci)(PCIBus *bus))
+{
+    assert(soundhw_count < ARRAY_SIZE(soundhw) - 1);
+    soundhw[soundhw_count].name = name;
+    soundhw[soundhw_count].descr = descr;
+    soundhw[soundhw_count].isa = 0;
+    soundhw[soundhw_count].init.init_pci = init_pci;
+    soundhw_count++;
+}
 
 void select_soundhw(const char *optarg)
 {
@@ -993,16 +930,16 @@ void select_soundhw(const char *optarg)
     if (is_help_option(optarg)) {
     show_valid_cards:
 
-#ifdef HAS_AUDIO_CHOICE
-        printf("Valid sound card names (comma separated):\n");
-        for (c = soundhw; c->name; ++c) {
-            printf ("%-11s %s\n", c->name, c->descr);
+        if (soundhw_count) {
+             printf("Valid sound card names (comma separated):\n");
+             for (c = soundhw; c->name; ++c) {
+                 printf ("%-11s %s\n", c->name, c->descr);
+             }
+             printf("\n-soundhw all will enable all of the above\n");
+        } else {
+             printf("Machine has no user-selectable audio hardware "
+                    "(it may or may not have always-present audio hardware).\n");
         }
-        printf("\n-soundhw all will enable all of the above\n");
-#else
-        printf("Machine has no user-selectable audio hardware "
-               "(it may or may not have always-present audio hardware).\n");
-#endif
         exit(!is_help_option(optarg));
     }
     else {
@@ -1050,32 +987,30 @@ void select_soundhw(const char *optarg)
     }
 }
 
-void audio_init(ISABus *isa_bus, PCIBus *pci_bus)
+void audio_init(void)
 {
     struct soundhw *c;
+    ISABus *isa_bus = (ISABus *) object_resolve_path_type("", TYPE_ISA_BUS, NULL);
+    PCIBus *pci_bus = (PCIBus *) object_resolve_path_type("", TYPE_PCI_BUS, NULL);
 
     for (c = soundhw; c->name; ++c) {
         if (c->enabled) {
             if (c->isa) {
-                if (isa_bus) {
-                    c->init.init_isa(isa_bus);
+                if (!isa_bus) {
+                    fprintf(stderr, "ISA bus not available for %s\n", c->name);
+                    exit(1);
                 }
+                c->init.init_isa(isa_bus);
             } else {
-                if (pci_bus) {
-                    c->init.init_pci(pci_bus);
+                if (!pci_bus) {
+                    fprintf(stderr, "PCI bus not available for %s\n", c->name);
+                    exit(1);
                 }
+                c->init.init_pci(pci_bus);
             }
         }
     }
 }
-#else
-void select_soundhw(const char *optarg)
-{
-}
-void audio_init(ISABus *isa_bus, PCIBus *pci_bus)
-{
-}
-#endif
 
 int qemu_uuid_parse(const char *str, uint8_t *uuid)
 {
@@ -1099,11 +1034,16 @@ int qemu_uuid_parse(const char *str, uint8_t *uuid)
     return 0;
 }
 
-void do_acpitable_option(const char *optarg)
+void do_acpitable_option(const QemuOpts *opts)
 {
 #ifdef TARGET_I386
-    if (acpi_table_add(optarg) < 0) {
-        fprintf(stderr, "Wrong acpi table provided\n");
+    Error *err = NULL;
+
+    acpi_table_add(opts, &err);
+    if (err) {
+        fprintf(stderr, "Wrong acpi table provided: %s\n",
+                error_get_pretty(err));
+        error_free(err);
         exit(1);
     }
 #endif
@@ -1123,15 +1063,6 @@ void cpudef_init(void)
 {
 #if defined(cpudef_setup)
     cpudef_setup(); /* parse cpu definitions in target config file */
-#endif
-}
-
-int audio_available(void)
-{
-#ifdef HAS_AUDIO
-    return 1;
-#else
-    return 0;
 #endif
 }
 

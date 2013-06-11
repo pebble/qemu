@@ -30,7 +30,7 @@
 #include "monitor/monitor.h"
 #include "sysemu/sysemu.h"
 #include "qemu/iov.h"
-#include "char/char.h"
+#include "sysemu/char.h"
 
 #include <dirent.h>
 #include <sys/ioctl.h>
@@ -104,6 +104,8 @@ struct USBRedirDevice {
     /* Data passed from chardev the fd_read cb to the usbredirparser read cb */
     const uint8_t *read_buf;
     int read_buf_size;
+    /* Active chardev-watch-tag */
+    guint watch;
     /* For async handling of close */
     QEMUBH *chardev_close_bh;
     /* To delay the usb attach in case of quick chardev close + open */
@@ -254,11 +256,23 @@ static int usbredir_read(void *priv, uint8_t *data, int count)
     return count;
 }
 
+static gboolean usbredir_write_unblocked(GIOChannel *chan, GIOCondition cond,
+                                         void *opaque)
+{
+    USBRedirDevice *dev = opaque;
+
+    dev->watch = 0;
+    usbredirparser_do_write(dev->parser);
+
+    return FALSE;
+}
+
 static int usbredir_write(void *priv, uint8_t *data, int count)
 {
     USBRedirDevice *dev = priv;
+    int r;
 
-    if (!dev->cs->opened) {
+    if (!dev->cs->be_open) {
         return 0;
     }
 
@@ -267,7 +281,17 @@ static int usbredir_write(void *priv, uint8_t *data, int count)
         return 0;
     }
 
-    return qemu_chr_fe_write(dev->cs, data, count);
+    r = qemu_chr_fe_write(dev->cs, data, count);
+    if (r < count) {
+        if (!dev->watch) {
+            dev->watch = qemu_chr_fe_add_watch(dev->cs, G_IO_OUT,
+                                               usbredir_write_unblocked, dev);
+        }
+        if (r < 0) {
+            r = 0;
+        }
+    }
+    return r;
 }
 
 /*
@@ -737,7 +761,7 @@ static void usbredir_handle_bulk_data(USBRedirDevice *dev, USBPacket *p,
                                       uint8_t ep)
 {
     struct usb_redir_bulk_packet_header bulk_packet;
-    size_t size = (p->combined) ? p->combined->iov.size : p->iov.size;
+    size_t size = usb_packet_size(p);
     const int maxp = dev->endpoint[EP2I(ep)].max_packet_size;
 
     if (usbredir_already_in_flight(dev, p->id)) {
@@ -771,12 +795,7 @@ static void usbredir_handle_bulk_data(USBRedirDevice *dev, USBPacket *p,
                                         &bulk_packet, NULL, 0);
     } else {
         uint8_t buf[size];
-        if (p->combined) {
-            iov_to_buf(p->combined->iov.iov, p->combined->iov.niov,
-                       0, buf, size);
-        } else {
-            usb_packet_copy(p, buf, size);
-        }
+        usb_packet_copy(p, buf, size);
         usbredir_log_data(dev, "bulk data out:", buf, size);
         usbredirparser_send_bulk_packet(dev->parser, p->id,
                                         &bulk_packet, buf, size);
@@ -1090,6 +1109,10 @@ static void usbredir_chardev_close_bh(void *opaque)
         usbredirparser_destroy(dev->parser);
         dev->parser = NULL;
     }
+    if (dev->watch) {
+        g_source_remove(dev->watch);
+        dev->watch = 0;
+    }
 }
 
 static void usbredir_create_parser(USBRedirDevice *dev)
@@ -1287,7 +1310,6 @@ static int usbredir_initfn(USBDevice *udev)
     dev->compatible_speedmask = USB_SPEED_MASK_FULL | USB_SPEED_MASK_HIGH;
 
     /* Let the backend know we are ready */
-    qemu_chr_fe_open(dev->cs);
     qemu_chr_add_handlers(dev->cs, usbredir_chardev_can_read,
                           usbredir_chardev_read, usbredir_chardev_event, dev);
 
@@ -1311,7 +1333,6 @@ static void usbredir_handle_destroy(USBDevice *udev)
 {
     USBRedirDevice *dev = DO_UPCAST(USBRedirDevice, dev, udev);
 
-    qemu_chr_fe_close(dev->cs);
     qemu_chr_delete(dev->cs);
     /* Note must be done after qemu_chr_close, as that causes a close event */
     qemu_bh_delete(dev->chardev_close_bh);
@@ -1323,6 +1344,9 @@ static void usbredir_handle_destroy(USBDevice *udev)
 
     if (dev->parser) {
         usbredirparser_destroy(dev->parser);
+    }
+    if (dev->watch) {
+        g_source_remove(dev->watch);
     }
 
     free(dev->filter_rules);
@@ -1830,7 +1854,7 @@ static void usbredir_bulk_packet(void *priv, uint64_t id,
 
     p = usbredir_find_packet_by_id(dev, ep, id);
     if (p) {
-        size_t size = (p->combined) ? p->combined->iov.size : p->iov.size;
+        size_t size = usb_packet_size(p);
         usbredir_handle_status(dev, p, bulk_packet->status);
         if (data_len > 0) {
             usbredir_log_data(dev, "bulk data in:", data, data_len);
@@ -1840,12 +1864,7 @@ static void usbredir_bulk_packet(void *priv, uint64_t id,
                 p->status = USB_RET_BABBLE;
                 data_len = len = size;
             }
-            if (p->combined) {
-                iov_from_buf(p->combined->iov.iov, p->combined->iov.niov,
-                             0, data, data_len);
-            } else {
-                usb_packet_copy(p, data, data_len);
-            }
+            usb_packet_copy(p, data, data_len);
         }
         p->actual_length = len;
         if (p->pid == USB_TOKEN_IN && p->ep->pipeline) {
@@ -1907,7 +1926,7 @@ static void usbredir_interrupt_packet(void *priv, uint64_t id,
         }
 
         if (QTAILQ_EMPTY(&dev->endpoint[EP2I(ep)].bufpq)) {
-            usb_wakeup(usb_ep_get(&dev->dev, USB_TOKEN_IN, ep & 0x0f));
+            usb_wakeup(usb_ep_get(&dev->dev, USB_TOKEN_IN, ep & 0x0f), 0);
         }
 
         /* bufp_alloc also adds the packet to the ep queue */
@@ -1984,6 +2003,10 @@ static void usbredir_pre_save(void *priv)
 static int usbredir_post_load(void *priv, int version_id)
 {
     USBRedirDevice *dev = priv;
+
+    if (dev->parser == NULL) {
+        return 0;
+    }
 
     switch (dev->device_info.speed) {
     case usb_redir_speed_low:

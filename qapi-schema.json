@@ -174,11 +174,14 @@
 # @suspended: guest is suspended (ACPI S3)
 #
 # @watchdog: the watchdog action is configured to pause and has been triggered
+#
+# @guest-panicked: guest has been panicked as a result of guest OS panic
 ##
 { 'enum': 'RunState',
   'data': [ 'debug', 'inmigrate', 'internal-error', 'io-error', 'paused',
             'postmigrate', 'prelaunch', 'finish-migrate', 'restore-vm',
-            'running', 'save-vm', 'shutdown', 'suspended', 'watchdog' ] }
+            'running', 'save-vm', 'shutdown', 'suspended', 'watchdog',
+            'guest-panicked' ] }
 
 ##
 # @SnapshotInfo
@@ -243,6 +246,56 @@
            '*cluster-size': 'int', '*encrypted': 'bool',
            '*backing-filename': 'str', '*full-backing-filename': 'str',
            '*backing-filename-format': 'str', '*snapshots': ['SnapshotInfo'] } }
+
+##
+# @ImageCheck:
+#
+# Information about a QEMU image file check
+#
+# @filename: name of the image file checked
+#
+# @format: format of the image file checked
+#
+# @check-errors: number of unexpected errors occurred during check
+#
+# @image-end-offset: #optional offset (in bytes) where the image ends, this
+#                    field is present if the driver for the image format
+#                    supports it
+#
+# @corruptions: #optional number of corruptions found during the check if any
+#
+# @leaks: #optional number of leaks found during the check if any
+#
+# @corruptions-fixed: #optional number of corruptions fixed during the check
+#                     if any
+#
+# @leaks-fixed: #optional number of leaks fixed during the check if any
+#
+# @total-clusters: #optional total number of clusters, this field is present
+#                  if the driver for the image format supports it
+#
+# @allocated-clusters: #optional total number of allocated clusters, this
+#                      field is present if the driver for the image format
+#                      supports it
+#
+# @fragmented-clusters: #optional total number of fragmented clusters, this
+#                       field is present if the driver for the image format
+#                       supports it
+#
+# @compressed-clusters: #optional total number of compressed clusters, this
+#                       field is present if the driver for the image format
+#                       supports it
+#
+# Since: 1.4
+#
+##
+
+{ 'type': 'ImageCheck',
+  'data': {'filename': 'str', 'format': 'str', 'check-errors': 'int',
+           '*image-end-offset': 'int', '*corruptions': 'int', '*leaks': 'int',
+           '*corruptions-fixed': 'int', '*leaks-fixed': 'int',
+           '*total-clusters': 'int', '*allocated-clusters': 'int',
+           '*fragmented-clusters': 'int', '*compressed-clusters': 'int' } }
 
 ##
 # @StatusInfo:
@@ -446,7 +499,9 @@
 #
 # @total: total amount of bytes involved in the migration process
 #
-# @duplicate: number of duplicate pages (since 1.2)
+# @duplicate: number of duplicate (zero) pages (since 1.2)
+#
+# @skipped: number of skipped zero pages (since 1.5)
 #
 # @normal : number of normal pages (since 1.2)
 #
@@ -459,8 +514,8 @@
 ##
 { 'type': 'MigrationStats',
   'data': {'transferred': 'int', 'remaining': 'int', 'total': 'int' ,
-           'duplicate': 'int', 'normal': 'int', 'normal-bytes': 'int',
-           'dirty-pages-rate' : 'int' } }
+           'duplicate': 'int', 'skipped': 'int', 'normal': 'int',
+           'normal-bytes': 'int', 'dirty-pages-rate' : 'int' } }
 
 ##
 # @XBZRLECacheStats
@@ -1335,6 +1390,19 @@
 { 'command': 'cpu', 'data': {'index': 'int'} }
 
 ##
+# @cpu-add
+#
+# Adds CPU with specified ID
+#
+# @id: ID of CPU to be created, valid values [0..max_cpus)
+#
+# Returns: Nothing on success
+#
+# Since 1.5
+##
+{ 'command': 'cpu-add', 'data': {'id': 'int'} }
+
+##
 # @memsave:
 #
 # Save a portion of guest memory to a file.
@@ -1548,7 +1616,7 @@
 ##
 { 'union': 'BlockdevAction',
   'data': {
-       'blockdev-snapshot-sync': 'BlockdevSnapshot',
+       'blockdev-snapshot-sync': 'BlockdevSnapshot'
    } }
 
 ##
@@ -2304,7 +2372,9 @@
 # Notes: When this command completes, the device may not be removed from the
 #        guest.  Hot removal is an operation that requires guest cooperation.
 #        This command merely requests that the guest begin the hot removal
-#        process.
+#        process.  Completion of the device removal process is signaled with a
+#        DEVICE_DELETED event. Guest reset will automatically complete removal
+#        for all devices.
 #
 # Since: 0.14.0
 ##
@@ -2796,11 +2866,14 @@
 #
 # @default: #optional whether the machine is default
 #
+# @cpu-max: maximum number of CPUs supported by the machine type
+#           (since 1.5.0)
+#
 # Since: 1.2.0
 ##
 { 'type': 'MachineInfo',
   'data': { 'name': 'str', '*alias': 'str',
-            '*is-default': 'bool' } }
+            '*is-default': 'bool', 'cpu-max': 'int' } }
 
 ##
 # @query-machines:
@@ -2946,9 +3019,9 @@
 ##
 { 'enum': 'TargetType',
   'data': [ 'alpha', 'arm', 'cris', 'i386', 'lm32', 'm68k', 'microblazeel',
-            'microblaze', 'mips64el', 'mips64', 'mipsel', 'mips', 'or32',
-            'ppc64', 'ppcemb', 'ppc', 's390x', 'sh4eb', 'sh4', 'sparc64',
-            'sparc', 'unicore32', 'x86_64', 'xtensaeb', 'xtensa' ] }
+            'microblaze', 'mips64el', 'mips64', 'mipsel', 'mips', 'moxie',
+            'or32', 'ppc64', 'ppcemb', 'ppc', 's390x', 'sh4eb', 'sh4',
+            'sparc64', 'sparc', 'unicore32', 'x86_64', 'xtensaeb', 'xtensa' ] }
 
 ##
 # @TargetInfo:
@@ -3105,7 +3178,7 @@
 ##
 # @ChardevHostdev:
 #
-# Configuration info for device chardevs.
+# Configuration info for device and pipe chardevs.
 #
 # @device: The name of the special file for the device,
 #          i.e. /dev/ttyS0 on Unix or COM1: on Windows
@@ -3118,7 +3191,7 @@
 ##
 # @ChardevSocket:
 #
-# Configuration info for socket chardevs.
+# Configuration info for (stream) socket chardevs.
 #
 # @addr: socket address to listen on (server=true)
 #        or connect to (server=false)
@@ -3137,6 +3210,93 @@
                                      '*telnet'  : 'bool' } }
 
 ##
+# @ChardevUdp:
+#
+# Configuration info for datagram socket chardevs.
+#
+# @remote: remote address
+# @local: #optional local address
+#
+# Since: 1.5
+##
+{ 'type': 'ChardevUdp', 'data': { 'remote' : 'SocketAddress',
+                                  '*local' : 'SocketAddress' } }
+
+##
+# @ChardevMux:
+#
+# Configuration info for mux chardevs.
+#
+# @chardev: name of the base chardev.
+#
+# Since: 1.5
+##
+{ 'type': 'ChardevMux', 'data': { 'chardev' : 'str' } }
+
+##
+# @ChardevStdio:
+#
+# Configuration info for stdio chardevs.
+#
+# @signal: #optional Allow signals (such as SIGINT triggered by ^C)
+#          be delivered to qemu.  Default: true in -nographic mode,
+#          false otherwise.
+#
+# Since: 1.5
+##
+{ 'type': 'ChardevStdio', 'data': { '*signal' : 'bool' } }
+
+##
+# @ChardevSpiceChannel:
+#
+# Configuration info for spice vm channel chardevs.
+#
+# @type: kind of channel (for example vdagent).
+#
+# Since: 1.5
+##
+{ 'type': 'ChardevSpiceChannel', 'data': { 'type'  : 'str' } }
+
+##
+# @ChardevSpicePort:
+#
+# Configuration info for spice port chardevs.
+#
+# @fqdn: name of the channel (see docs/spice-port-fqdn.txt)
+#
+# Since: 1.5
+##
+{ 'type': 'ChardevSpicePort', 'data': { 'fqdn'  : 'str' } }
+
+##
+# @ChardevVC:
+#
+# Configuration info for virtual console chardevs.
+#
+# @width:  console width,  in pixels
+# @height: console height, in pixels
+# @cols:   console width,  in chars
+# @rows:   console height, in chars
+#
+# Since: 1.5
+##
+{ 'type': 'ChardevVC', 'data': { '*width'  : 'int',
+                                 '*height' : 'int',
+                                 '*cols'   : 'int',
+                                 '*rows'   : 'int' } }
+
+##
+# @ChardevRingbuf:
+#
+# Configuration info for memory chardevs
+#
+# @size: #optional Ringbuffer size, must be power of two, default is 65536
+#
+# Since: 1.5
+##
+{ 'type': 'ChardevRingbuf', 'data': { '*size'  : 'int' } }
+
+##
 # @ChardevBackend:
 #
 # Configuration info for the new chardev backend.
@@ -3148,9 +3308,20 @@
 { 'union': 'ChardevBackend', 'data': { 'file'   : 'ChardevFile',
                                        'serial' : 'ChardevHostdev',
                                        'parallel': 'ChardevHostdev',
+                                       'pipe'   : 'ChardevHostdev',
                                        'socket' : 'ChardevSocket',
+                                       'udp'    : 'ChardevUdp',
                                        'pty'    : 'ChardevDummy',
-                                       'null'   : 'ChardevDummy' } }
+                                       'null'   : 'ChardevDummy',
+                                       'mux'    : 'ChardevMux',
+                                       'msmouse': 'ChardevDummy',
+                                       'braille': 'ChardevDummy',
+                                       'stdio'  : 'ChardevStdio',
+                                       'console': 'ChardevDummy',
+                                       'spicevmc' : 'ChardevSpiceChannel',
+                                       'spiceport' : 'ChardevSpicePort',
+                                       'vc'     : 'ChardevVC',
+                                       'memory' : 'ChardevRingbuf' } }
 
 ##
 # @ChardevReturn:
@@ -3192,3 +3363,259 @@
 # Since: 1.4
 ##
 { 'command': 'chardev-remove', 'data': {'id': 'str'} }
+
+##
+# @TpmModel:
+#
+# An enumeration of TPM models
+#
+# @tpm-tis: TPM TIS model
+#
+# Since: 1.5
+##
+{ 'enum': 'TpmModel', 'data': [ 'tpm-tis' ] }
+
+##
+# @query-tpm-models:
+#
+# Return a list of supported TPM models
+#
+# Returns: a list of TpmModel
+#
+# Since: 1.5
+##
+{ 'command': 'query-tpm-models', 'returns': ['TpmModel'] }
+
+##
+# @TpmType:
+#
+# An enumeration of TPM types
+#
+# @passthrough: TPM passthrough type
+#
+# Since: 1.5
+##
+{ 'enum': 'TpmType', 'data': [ 'passthrough' ] }
+
+##
+# @query-tpm-types:
+#
+# Return a list of supported TPM types
+#
+# Returns: a list of TpmType
+#
+# Since: 1.5
+##
+{ 'command': 'query-tpm-types', 'returns': ['TpmType'] }
+
+##
+# @TPMPassthroughOptions:
+#
+# Information about the TPM passthrough type
+#
+# @path: #optional string describing the path used for accessing the TPM device
+#
+# @cancel-path: #optional string showing the TPM's sysfs cancel file
+#               for cancellation of TPM commands while they are executing
+#
+# Since: 1.5
+##
+{ 'type': 'TPMPassthroughOptions', 'data': { '*path' : 'str',
+                                             '*cancel-path' : 'str'} }
+
+##
+# @TpmTypeOptions:
+#
+# A union referencing different TPM backend types' configuration options
+#
+# @passthrough: The configuration options for the TPM passthrough type
+#
+# Since: 1.5
+##
+{ 'union': 'TpmTypeOptions',
+   'data': { 'passthrough' : 'TPMPassthroughOptions' } }
+
+##
+# @TpmInfo:
+#
+# Information about the TPM
+#
+# @id: The Id of the TPM
+#
+# @model: The TPM frontend model
+#
+# @options: The TPM (backend) type configuration options
+#
+# Since: 1.5
+##
+{ 'type': 'TPMInfo',
+  'data': {'id': 'str',
+           'model': 'TpmModel',
+           'options': 'TpmTypeOptions' } }
+
+##
+# @query-tpm:
+#
+# Return information about the TPM device
+#
+# Returns: @TPMInfo on success
+#
+# Since: 1.5
+##
+{ 'command': 'query-tpm', 'returns': ['TPMInfo'] }
+
+##
+# @AcpiTableOptions
+#
+# Specify an ACPI table on the command line to load.
+#
+# At most one of @file and @data can be specified. The list of files specified
+# by any one of them is loaded and concatenated in order. If both are omitted,
+# @data is implied.
+#
+# Other fields / optargs can be used to override fields of the generic ACPI
+# table header; refer to the ACPI specification 5.0, section 5.2.6 System
+# Description Table Header. If a header field is not overridden, then the
+# corresponding value from the concatenated blob is used (in case of @file), or
+# it is filled in with a hard-coded value (in case of @data).
+#
+# String fields are copied into the matching ACPI member from lowest address
+# upwards, and silently truncated / NUL-padded to length.
+#
+# @sig: #optional table signature / identifier (4 bytes)
+#
+# @rev: #optional table revision number (dependent on signature, 1 byte)
+#
+# @oem_id: #optional OEM identifier (6 bytes)
+#
+# @oem_table_id: #optional OEM table identifier (8 bytes)
+#
+# @oem_rev: #optional OEM-supplied revision number (4 bytes)
+#
+# @asl_compiler_id: #optional identifier of the utility that created the table
+#                   (4 bytes)
+#
+# @asl_compiler_rev: #optional revision number of the utility that created the
+#                    table (4 bytes)
+#
+# @file: #optional colon (:) separated list of pathnames to load and
+#        concatenate as table data. The resultant binary blob is expected to
+#        have an ACPI table header. At least one file is required. This field
+#        excludes @data.
+#
+# @data: #optional colon (:) separated list of pathnames to load and
+#        concatenate as table data. The resultant binary blob must not have an
+#        ACPI table header. At least one file is required. This field excludes
+#        @file.
+#
+# Since 1.5
+##
+{ 'type': 'AcpiTableOptions',
+  'data': {
+    '*sig':               'str',
+    '*rev':               'uint8',
+    '*oem_id':            'str',
+    '*oem_table_id':      'str',
+    '*oem_rev':           'uint32',
+    '*asl_compiler_id':   'str',
+    '*asl_compiler_rev':  'uint32',
+    '*file':              'str',
+    '*data':              'str' }}
+
+##
+# @CommandLineParameterType:
+#
+# Possible types for an option parameter.
+#
+# @string: accepts a character string
+#
+# @boolean: accepts "on" or "off"
+#
+# @number: accepts a number
+#
+# @size: accepts a number followed by an optional suffix (K)ilo,
+#        (M)ega, (G)iga, (T)era
+#
+# Since 1.5
+##
+{ 'enum': 'CommandLineParameterType',
+  'data': ['string', 'boolean', 'number', 'size'] }
+
+##
+# @CommandLineParameterInfo:
+#
+# Details about a single parameter of a command line option.
+#
+# @name: parameter name
+#
+# @type: parameter @CommandLineParameterType
+#
+# @help: #optional human readable text string, not suitable for parsing.
+#
+# Since 1.5
+##
+{ 'type': 'CommandLineParameterInfo',
+  'data': { 'name': 'str',
+            'type': 'CommandLineParameterType',
+            '*help': 'str' } }
+
+##
+# @CommandLineOptionInfo:
+#
+# Details about a command line option, including its list of parameter details
+#
+# @option: option name
+#
+# @parameters: an array of @CommandLineParameterInfo
+#
+# Since 1.5
+##
+{ 'type': 'CommandLineOptionInfo',
+  'data': { 'option': 'str', 'parameters': ['CommandLineParameterInfo'] } }
+
+##
+# @query-command-line-options:
+#
+# Query command line option schema.
+#
+# @option: #optional option name
+#
+# Returns: list of @CommandLineOptionInfo for all options (or for the given
+#          @option).  Returns an error if the given @option doesn't exist.
+#
+# Since 1.5
+##
+{'command': 'query-command-line-options', 'data': { '*option': 'str' },
+ 'returns': ['CommandLineOptionInfo'] }
+
+##
+# @X86CPURegister32
+#
+# A X86 32-bit register
+#
+# Since: 1.5
+##
+{ 'enum': 'X86CPURegister32',
+  'data': [ 'EAX', 'EBX', 'ECX', 'EDX', 'ESP', 'EBP', 'ESI', 'EDI' ] }
+
+##
+# @X86CPUFeatureWordInfo
+#
+# Information about a X86 CPU feature word
+#
+# @cpuid-input-eax: Input EAX value for CPUID instruction for that feature word
+#
+# @cpuid-input-ecx: #optional Input ECX value for CPUID instruction for that
+#                   feature word
+#
+# @cpuid-register: Output register containing the feature bits
+#
+# @features: value of output register, containing the feature bits
+#
+# Since: 1.5
+##
+{ 'type': 'X86CPUFeatureWordInfo',
+  'data': { 'cpuid-input-eax': 'int',
+            '*cpuid-input-ecx': 'int',
+            'cpuid-register': 'X86CPURegister32',
+            'features': 'int' } }

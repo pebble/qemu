@@ -157,8 +157,7 @@ void qemu_macaddr_default_if_unset(MACAddr *macaddr)
 /**
  * Generate a name for net client
  *
- * Only net clients created with the legacy -net option need this.  Naming is
- * mandatory for net clients created with -netdev.
+ * Only net clients created with the legacy -net option and NICs need this.
  */
 static char *assign_name(NetClientState *nc1, const char *model)
 {
@@ -170,9 +169,7 @@ static char *assign_name(NetClientState *nc1, const char *model)
         if (nc == nc1) {
             continue;
         }
-        /* For compatibility only bump id for net clients on a vlan */
-        if (strcmp(nc->model, model) == 0 &&
-            net_hub_id_for_client(nc, NULL) == 0) {
+        if (strcmp(nc->model, model) == 0) {
             id++;
         }
     }
@@ -440,6 +437,12 @@ void qemu_flush_queued_packets(NetClientState *nc)
 {
     nc->receive_disabled = 0;
 
+    if (nc->peer && nc->peer->info->type == NET_CLIENT_OPTIONS_KIND_HUBPORT) {
+        if (net_hub_flush(nc->peer)) {
+            qemu_notify_event();
+        }
+        return;
+    }
     if (qemu_net_queue_flush(nc->send_queue)) {
         /* We emptied the queue successfully, signal to the IO thread to repoll
          * the file descriptor (for tap, for example).
@@ -491,7 +494,7 @@ ssize_t qemu_send_packet_raw(NetClientState *nc, const uint8_t *buf, int size)
 static ssize_t nc_sendv_compat(NetClientState *nc, const struct iovec *iov,
                                int iovcnt)
 {
-    uint8_t buffer[4096];
+    uint8_t buffer[NET_BUFSIZE];
     size_t offset;
 
     offset = iov_to_buf(iov, iovcnt, 0, buffer, sizeof(buffer));

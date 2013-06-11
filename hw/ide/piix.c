@@ -24,9 +24,9 @@
  */
 
 #include <hw/hw.h>
-#include <hw/pc.h>
+#include <hw/i386/pc.h>
 #include <hw/pci/pci.h>
-#include <hw/isa.h>
+#include <hw/isa/isa.h>
 #include "sysemu/blockdev.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/dma.h"
@@ -135,7 +135,7 @@ static void pci_piix_init_ports(PCIIDEState *d) {
     int i;
 
     for (i = 0; i < 2; i++) {
-        ide_bus_new(&d->bus[i], &d->dev.qdev, i);
+        ide_bus_new(&d->bus[i], &d->dev.qdev, i, 2);
         ide_init_ioport(&d->bus[i], NULL, port_info[i].iobase,
                         port_info[i].iobase2);
         ide_init2(&d->bus[i], isa_get_irq(NULL, port_info[i].isairq));

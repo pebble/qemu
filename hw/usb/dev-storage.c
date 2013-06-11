@@ -12,7 +12,7 @@
 #include "qemu/config-file.h"
 #include "hw/usb.h"
 #include "hw/usb/desc.h"
-#include "hw/scsi.h"
+#include "hw/scsi/scsi.h"
 #include "ui/console.h"
 #include "monitor/monitor.h"
 #include "sysemu/sysemu.h"
@@ -400,6 +400,7 @@ static void usb_msd_handle_data(USBDevice *dev, USBPacket *p)
     struct usb_msd_cbw cbw;
     uint8_t devep = p->ep->nr;
     SCSIDevice *scsi_dev;
+    uint32_t len;
 
     switch (p->pid) {
     case USB_TOKEN_OUT:
@@ -441,8 +442,8 @@ static void usb_msd_handle_data(USBDevice *dev, USBPacket *p)
 #ifdef DEBUG_MSD
             scsi_req_print(s->req);
 #endif
-            scsi_req_enqueue(s->req);
-            if (s->req && s->req->cmd.xfer != SCSI_XFER_NONE) {
+            len = scsi_req_enqueue(s->req);
+            if (len) {
                 scsi_req_continue(s->req);
             }
             break;
@@ -622,9 +623,9 @@ static int usb_msd_initfn_storage(USBDevice *dev)
     }
 
     usb_desc_init(dev);
-    scsi_bus_new(&s->bus, &s->dev.qdev, &usb_msd_scsi_info_storage);
+    scsi_bus_new(&s->bus, &s->dev.qdev, &usb_msd_scsi_info_storage, NULL);
     scsi_dev = scsi_bus_legacy_add_drive(&s->bus, bs, 0, !!s->removable,
-                                            s->conf.bootindex);
+                                            s->conf.bootindex, s->serial);
     if (!scsi_dev) {
         return -1;
     }
@@ -649,7 +650,7 @@ static int usb_msd_initfn_bot(USBDevice *dev)
 
     usb_desc_create_serial(dev);
     usb_desc_init(dev);
-    scsi_bus_new(&s->bus, &s->dev.qdev, &usb_msd_scsi_info_bot);
+    scsi_bus_new(&s->bus, &s->dev.qdev, &usb_msd_scsi_info_bot, NULL);
     s->bus.qbus.allow_hotplug = 0;
     usb_msd_handle_reset(dev);
 

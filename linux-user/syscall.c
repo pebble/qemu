@@ -78,6 +78,9 @@ int __clone2(int (*fn)(void *), void *child_stack_base,
 #ifdef CONFIG_ATTR
 #include "qemu/xattr.h"
 #endif
+#ifdef CONFIG_SENDFILE
+#include <sys/sendfile.h>
+#endif
 
 #define termios host_termios
 #define winsize host_winsize
@@ -911,7 +914,7 @@ static inline abi_long copy_to_user_fdset(abi_ulong target_fds_addr,
     for (i = 0; i < nw; i++) {
         v = 0;
         for (j = 0; j < TARGET_ABI_BITS; j++) {
-            v |= ((FD_ISSET(k, fds) != 0) << j);
+            v |= ((abi_ulong)(FD_ISSET(k, fds) != 0) << j);
             k++;
         }
         __put_user(v, &target_fds[i]);
@@ -2001,16 +2004,30 @@ out2:
     return ret;
 }
 
-/* do_accept() Must return target values and target errnos. */
-static abi_long do_accept(int fd, abi_ulong target_addr,
-                          abi_ulong target_addrlen_addr)
+/* If we don't have a system accept4() then just call accept.
+ * The callsites to do_accept4() will ensure that they don't
+ * pass a non-zero flags argument in this config.
+ */
+#ifndef CONFIG_ACCEPT4
+static inline int accept4(int sockfd, struct sockaddr *addr,
+                          socklen_t *addrlen, int flags)
+{
+    assert(flags == 0);
+    return accept(sockfd, addr, addrlen);
+}
+#endif
+
+/* do_accept4() Must return target values and target errnos. */
+static abi_long do_accept4(int fd, abi_ulong target_addr,
+                           abi_ulong target_addrlen_addr, int flags)
 {
     socklen_t addrlen;
     void *addr;
     abi_long ret;
 
-    if (target_addr == 0)
-       return get_errno(accept(fd, NULL, NULL));
+    if (target_addr == 0) {
+        return get_errno(accept4(fd, NULL, NULL, flags));
+    }
 
     /* linux returns EINVAL if addrlen pointer is invalid */
     if (get_user_u32(addrlen, target_addrlen_addr))
@@ -2025,7 +2042,7 @@ static abi_long do_accept(int fd, abi_ulong target_addr,
 
     addr = alloca(addrlen);
 
-    ret = get_errno(accept(fd, addr, &addrlen));
+    ret = get_errno(accept4(fd, addr, &addrlen, flags));
     if (!is_error(ret)) {
         host_to_target_sockaddr(target_addr, addr, addrlen);
         if (put_user_u32(addrlen, target_addrlen_addr))
@@ -2251,7 +2268,7 @@ static abi_long do_socketcall(int num, abi_ulong vptr)
                 || get_user_ual(target_addrlen, vptr + 2 * n))
                 return -TARGET_EFAULT;
 
-            ret = do_accept(sockfd, target_addr, target_addrlen);
+            ret = do_accept4(sockfd, target_addr, target_addrlen, 0);
         }
         break;
     case SOCKOP_getsockname:
@@ -2747,7 +2764,7 @@ static inline abi_long do_semop(int semid, abi_long ptr, unsigned nsops)
     if (target_to_host_sembuf(sops, ptr, nsops))
         return -TARGET_EFAULT;
 
-    return semop(semid, sops, nsops);
+    return get_errno(semop(semid, sops, nsops));
 }
 
 struct target_msqid_ds
@@ -4312,13 +4329,15 @@ static void *clone_func(void *arg)
 {
     new_thread_info *info = arg;
     CPUArchState *env;
+    CPUState *cpu;
     TaskState *ts;
 
     env = info->env;
+    cpu = ENV_GET_CPU(env);
     thread_env = env;
     ts = (TaskState *)thread_env->opaque;
     info->tid = gettid();
-    env->host_tid = info->tid;
+    cpu->host_tid = info->tid;
     task_settid(ts);
     if (info->child_tidptr)
         put_user_u32(info->tid, info->child_tidptr);
@@ -6672,7 +6691,16 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
 #endif
 #ifdef TARGET_NR_accept
     case TARGET_NR_accept:
-        ret = do_accept(arg1, arg2, arg3);
+        ret = do_accept4(arg1, arg2, arg3, 0);
+        break;
+#endif
+#ifdef TARGET_NR_accept4
+    case TARGET_NR_accept4:
+#ifdef CONFIG_ACCEPT4
+        ret = do_accept4(arg1, arg2, arg3, arg4);
+#else
+        goto unimplemented;
+#endif
         break;
 #endif
 #ifdef TARGET_NR_bind
@@ -6929,7 +6957,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
 #endif
 #ifdef TARGET_NR_semop
     case TARGET_NR_semop:
-        ret = get_errno(do_semop(arg1, arg2, arg3));
+        ret = do_semop(arg1, arg2, arg3);
         break;
 #endif
 #ifdef TARGET_NR_semctl
@@ -7529,8 +7557,58 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
 #else
         goto unimplemented;
 #endif
+
+#ifdef CONFIG_SENDFILE
     case TARGET_NR_sendfile:
+    {
+        off_t *offp = NULL;
+        off_t off;
+        if (arg3) {
+            ret = get_user_sal(off, arg3);
+            if (is_error(ret)) {
+                break;
+            }
+            offp = &off;
+        }
+        ret = get_errno(sendfile(arg1, arg2, offp, arg4));
+        if (!is_error(ret) && arg3) {
+            abi_long ret2 = put_user_sal(off, arg3);
+            if (is_error(ret2)) {
+                ret = ret2;
+            }
+        }
+        break;
+    }
+#ifdef TARGET_NR_sendfile64
+    case TARGET_NR_sendfile64:
+    {
+        off_t *offp = NULL;
+        off_t off;
+        if (arg3) {
+            ret = get_user_s64(off, arg3);
+            if (is_error(ret)) {
+                break;
+            }
+            offp = &off;
+        }
+        ret = get_errno(sendfile(arg1, arg2, offp, arg4));
+        if (!is_error(ret) && arg3) {
+            abi_long ret2 = put_user_s64(off, arg3);
+            if (is_error(ret2)) {
+                ret = ret2;
+            }
+        }
+        break;
+    }
+#endif
+#else
+    case TARGET_NR_sendfile:
+#ifdef TARGET_NR_sendfile64
+    case TARGET_NR_sendfile64:
+#endif
         goto unimplemented;
+#endif
+
 #ifdef TARGET_NR_getpmsg
     case TARGET_NR_getpmsg:
         goto unimplemented;
@@ -7665,12 +7743,12 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
             if (gidsetsize == 0)
                 break;
             if (!is_error(ret)) {
-                target_grouplist = lock_user(VERIFY_WRITE, arg2, gidsetsize * 2, 0);
+                target_grouplist = lock_user(VERIFY_WRITE, arg2, gidsetsize * sizeof(target_id), 0);
                 if (!target_grouplist)
                     goto efault;
                 for(i = 0;i < ret; i++)
                     target_grouplist[i] = tswapid(high2lowgid(grouplist[i]));
-                unlock_user(target_grouplist, arg2, gidsetsize * 2);
+                unlock_user(target_grouplist, arg2, gidsetsize * sizeof(target_id));
             }
         }
         break;
@@ -7678,18 +7756,20 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
         {
             int gidsetsize = arg1;
             target_id *target_grouplist;
-            gid_t *grouplist;
+            gid_t *grouplist = NULL;
             int i;
-
-            grouplist = alloca(gidsetsize * sizeof(gid_t));
-            target_grouplist = lock_user(VERIFY_READ, arg2, gidsetsize * 2, 1);
-            if (!target_grouplist) {
-                ret = -TARGET_EFAULT;
-                goto fail;
+            if (gidsetsize) {
+                grouplist = alloca(gidsetsize * sizeof(gid_t));
+                target_grouplist = lock_user(VERIFY_READ, arg2, gidsetsize * sizeof(target_id), 1);
+                if (!target_grouplist) {
+                    ret = -TARGET_EFAULT;
+                    goto fail;
+                }
+                for (i = 0; i < gidsetsize; i++) {
+                    grouplist[i] = low2highgid(tswapid(target_grouplist[i]));
+                }
+                unlock_user(target_grouplist, arg2, 0);
             }
-            for(i = 0;i < gidsetsize; i++)
-                grouplist[i] = low2highgid(tswapid(target_grouplist[i]));
-            unlock_user(target_grouplist, arg2, 0);
             ret = get_errno(setgroups(gidsetsize, grouplist));
         }
         break;
@@ -8743,8 +8823,17 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
 #endif
 #if defined(TARGET_NR_eventfd2)
     case TARGET_NR_eventfd2:
-        ret = get_errno(eventfd(arg1, arg2));
+    {
+        int host_flags = arg2 & (~(TARGET_O_NONBLOCK | TARGET_O_CLOEXEC));
+        if (arg2 & TARGET_O_NONBLOCK) {
+            host_flags |= O_NONBLOCK;
+        }
+        if (arg2 & TARGET_O_CLOEXEC) {
+            host_flags |= O_CLOEXEC;
+        }
+        ret = get_errno(eventfd(arg1, host_flags));
         break;
+    }
 #endif
 #endif /* CONFIG_EVENTFD  */
 #if defined(CONFIG_FALLOCATE) && defined(TARGET_NR_fallocate)

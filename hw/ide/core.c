@@ -23,14 +23,14 @@
  * THE SOFTWARE.
  */
 #include <hw/hw.h>
-#include <hw/pc.h>
+#include <hw/i386/pc.h>
 #include <hw/pci/pci.h>
-#include <hw/isa.h>
+#include <hw/isa/isa.h>
 #include "qemu/error-report.h"
 #include "qemu/timer.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/dma.h"
-#include "hw/block-common.h"
+#include "hw/block/block.h"
 #include "sysemu/blockdev.h"
 
 #include <hw/ide/internal.h>
@@ -1262,6 +1262,10 @@ void ide_exec_cmd(IDEBus *bus, uint32_t val)
         lba48 = 1;
         /* fall through */
     case WIN_READ_NATIVE_MAX:
+        /* Refuse if no sectors are addressable (e.g. medium not inserted) */
+        if (s->nb_sectors == 0) {
+            goto abort_cmd;
+        }
 	ide_cmd_lba48_transform(s, lba48);
         ide_set_sector(s, s->nb_sectors - 1);
         s->status = READY_STAT | SEEK_STAT;

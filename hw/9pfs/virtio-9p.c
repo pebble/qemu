@@ -11,10 +11,9 @@
  *
  */
 
-#include "hw/virtio.h"
-#include "hw/pc.h"
+#include "hw/virtio/virtio.h"
+#include "hw/i386/pc.h"
 #include "qemu/sockets.h"
-#include "hw/virtio-pci.h"
 #include "virtio-9p.h"
 #include "fsdev/qemu-fsdev.h"
 #include "virtio-9p-xattr.h"
@@ -632,7 +631,7 @@ static void complete_pdu(V9fsState *s, V9fsPDU *pdu, ssize_t len)
     virtqueue_push(s->vq, &pdu->elem, len);
 
     /* FIXME: we should batch these completions */
-    virtio_notify(&s->vdev, s->vq);
+    virtio_notify(VIRTIO_DEVICE(s), s->vq);
 
     /* Now wakeup anybody waiting in flush for this request */
     qemu_co_queue_next(&pdu->complete);
@@ -3269,7 +3268,7 @@ void handle_9p_output(VirtIODevice *vdev, VirtQueue *vq)
     free_pdu(s, pdu);
 }
 
-void virtio_9p_set_fd_limit(void)
+static void __attribute__((__constructor__)) virtio_9p_set_fd_limit(void)
 {
     struct rlimit rlim;
     if (getrlimit(RLIMIT_NOFILE, &rlim) < 0) {

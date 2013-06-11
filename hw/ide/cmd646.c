@@ -23,9 +23,9 @@
  * THE SOFTWARE.
  */
 #include <hw/hw.h>
-#include <hw/pc.h>
+#include <hw/i386/pc.h>
 #include <hw/pci/pci.h>
-#include <hw/isa.h>
+#include <hw/isa/isa.h>
 #include "block/block.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/dma.h"
@@ -281,7 +281,7 @@ static int pci_cmd646_ide_initfn(PCIDevice *dev)
 
     irq = qemu_allocate_irqs(cmd646_set_irq, d, 2);
     for (i = 0; i < 2; i++) {
-        ide_bus_new(&d->bus[i], &d->dev.qdev, i);
+        ide_bus_new(&d->bus[i], &d->dev.qdev, i, 2);
         ide_init2(&d->bus[i], irq[i]);
 
         bmdma_init(&d->bus[i], &d->bmdma[i], d);

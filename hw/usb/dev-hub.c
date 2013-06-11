@@ -25,6 +25,7 @@
 #include "trace.h"
 #include "hw/usb.h"
 #include "hw/usb/desc.h"
+#include "qemu/error-report.h"
 
 #define NUM_PORTS 8
 
@@ -32,6 +33,7 @@ typedef struct USBHubPort {
     USBPort port;
     uint16_t wPortStatus;
     uint16_t wPortChange;
+    uint16_t wPortChange_reported;
 } USBHubPort;
 
 typedef struct USBHubState {
@@ -164,7 +166,7 @@ static void usb_hub_attach(USBPort *port1)
     } else {
         port->wPortStatus &= ~PORT_STAT_LOW_SPEED;
     }
-    usb_wakeup(s->intr);
+    usb_wakeup(s->intr, 0);
 }
 
 static void usb_hub_detach(USBPort *port1)
@@ -173,7 +175,7 @@ static void usb_hub_detach(USBPort *port1)
     USBHubPort *port = &s->ports[port1->index];
 
     trace_usb_hub_detach(s->dev.addr, port1->index + 1);
-    usb_wakeup(s->intr);
+    usb_wakeup(s->intr, 0);
 
     /* Let upstream know the device on this port is gone */
     s->dev.port->ops->child_detach(s->dev.port, port1->dev);
@@ -184,7 +186,7 @@ static void usb_hub_detach(USBPort *port1)
         port->wPortStatus &= ~PORT_STAT_ENABLE;
         port->wPortChange |= PORT_STAT_C_ENABLE;
     }
-    usb_wakeup(s->intr);
+    usb_wakeup(s->intr, 0);
 }
 
 static void usb_hub_child_detach(USBPort *port1, USBDevice *child)
@@ -202,7 +204,7 @@ static void usb_hub_wakeup(USBPort *port1)
 
     if (port->wPortStatus & PORT_STAT_SUSPEND) {
         port->wPortChange |= PORT_STAT_C_SUSPEND;
-        usb_wakeup(s->intr);
+        usb_wakeup(s->intr, 0);
     }
 }
 
@@ -364,7 +366,7 @@ static void usb_hub_handle_control(USBDevice *dev, USBPacket *p,
                     port->wPortChange |= PORT_STAT_C_RESET;
                     /* set enable bit */
                     port->wPortStatus |= PORT_STAT_ENABLE;
-                    usb_wakeup(s->intr);
+                    usb_wakeup(s->intr, 0);
                 }
                 break;
             case PORT_POWER:
@@ -466,8 +468,11 @@ static void usb_hub_handle_data(USBDevice *dev, USBPacket *p)
             status = 0;
             for(i = 0; i < NUM_PORTS; i++) {
                 port = &s->ports[i];
-                if (port->wPortChange)
+                if (port->wPortChange &&
+                    port->wPortChange_reported != port->wPortChange) {
                     status |= (1 << (i + 1));
+                }
+                port->wPortChange_reported = port->wPortChange;
             }
             if (status != 0) {
                 for(i = 0; i < n; i++) {
@@ -513,6 +518,11 @@ static int usb_hub_initfn(USBDevice *dev)
     USBHubState *s = DO_UPCAST(USBHubState, dev, dev);
     USBHubPort *port;
     int i;
+
+    if (dev->port->hubcount == 5) {
+        error_report("usb hub chain too deep");
+        return -1;
+    }
 
     usb_desc_create_serial(dev);
     usb_desc_init(dev);

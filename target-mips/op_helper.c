@@ -267,20 +267,8 @@ target_ulong helper_mulshiu(CPUMIPSState *env, target_ulong arg1,
                        (uint64_t)(uint32_t)arg2);
 }
 
-#ifdef TARGET_MIPS64
-void helper_dmult(CPUMIPSState *env, int acc, target_ulong arg1,
                   target_ulong arg2)
-{
-    muls64(&(env->active_tc.LO[acc]), &(env->active_tc.HI[acc]), arg1, arg2);
-}
-
-void helper_dmultu(CPUMIPSState *env, int acc, target_ulong arg1,
                    target_ulong arg2)
-{
-    mulu64(&(env->active_tc.LO[acc]), &(env->active_tc.HI[acc]), arg1, arg2);
-}
-#endif
-
 #ifndef CONFIG_USER_ONLY
 
 static inline hwaddr do_translate_address(CPUMIPSState *env,
@@ -529,29 +517,30 @@ void helper_sdm(CPUMIPSState *env, target_ulong addr, target_ulong reglist,
 /* SMP helpers.  */
 static bool mips_vpe_is_wfi(MIPSCPU *c)
 {
+    CPUState *cpu = CPU(c);
     CPUMIPSState *env = &c->env;
 
     /* If the VPE is halted but otherwise active, it means it's waiting for
        an interrupt.  */
-    return env->halted && mips_vpe_active(env);
+    return cpu->halted && mips_vpe_active(env);
 }
 
-static inline void mips_vpe_wake(CPUMIPSState *c)
+static inline void mips_vpe_wake(MIPSCPU *c)
 {
     /* Dont set ->halted = 0 directly, let it be done via cpu_has_work
        because there might be other conditions that state that c should
        be sleeping.  */
-    cpu_interrupt(c, CPU_INTERRUPT_WAKE);
+    cpu_interrupt(CPU(c), CPU_INTERRUPT_WAKE);
 }
 
 static inline void mips_vpe_sleep(MIPSCPU *cpu)
 {
-    CPUMIPSState *c = &cpu->env;
+    CPUState *cs = CPU(cpu);
 
     /* The VPE was shut off, really go to bed.
        Reset any old _WAKE requests.  */
-    c->halted = 1;
-    cpu_reset_interrupt(c, CPU_INTERRUPT_WAKE);
+    cs->halted = 1;
+    cpu_reset_interrupt(cs, CPU_INTERRUPT_WAKE);
 }
 
 static inline void mips_tc_wake(MIPSCPU *cpu, int tc)
@@ -560,7 +549,7 @@ static inline void mips_tc_wake(MIPSCPU *cpu, int tc)
 
     /* FIXME: TC reschedule.  */
     if (mips_vpe_active(c) && !mips_vpe_is_wfi(cpu)) {
-        mips_vpe_wake(c);
+        mips_vpe_wake(cpu);
     }
 }
 
@@ -1738,7 +1727,7 @@ target_ulong helper_evpe(CPUMIPSState *env)
             && !mips_vpe_is_wfi(other_cpu)) {
             /* Enable the VPE.  */
             other_cpu_env->mvp->CP0_MVPControl |= (1 << CP0MVPCo_EVP);
-            mips_vpe_wake(other_cpu_env); /* And wake it up.  */
+            mips_vpe_wake(other_cpu); /* And wake it up.  */
         }
         other_cpu_env = other_cpu_env->next_cpu;
     } while (other_cpu_env);
@@ -2113,8 +2102,10 @@ void helper_pmon(CPUMIPSState *env, int function)
 
 void helper_wait(CPUMIPSState *env)
 {
-    env->halted = 1;
-    cpu_reset_interrupt(env, CPU_INTERRUPT_WAKE);
+    CPUState *cs = CPU(mips_env_get_cpu(env));
+
+    cs->halted = 1;
+    cpu_reset_interrupt(cs, CPU_INTERRUPT_WAKE);
     helper_raise_exception(env, EXCP_HLT);
 }
 

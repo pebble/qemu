@@ -42,21 +42,44 @@ static void mips_cpu_reset(CPUState *s)
     cpu_state_reset(env);
 }
 
+static void mips_cpu_realizefn(DeviceState *dev, Error **errp)
+{
+    MIPSCPU *cpu = MIPS_CPU(dev);
+    MIPSCPUClass *mcc = MIPS_CPU_GET_CLASS(dev);
+
+    cpu_reset(CPU(cpu));
+    qemu_init_vcpu(&cpu->env);
+
+    mcc->parent_realize(dev, errp);
+}
+
 static void mips_cpu_initfn(Object *obj)
 {
+    CPUState *cs = CPU(obj);
     MIPSCPU *cpu = MIPS_CPU(obj);
     CPUMIPSState *env = &cpu->env;
 
+    cs->env_ptr = env;
     cpu_exec_init(env);
+
+    if (tcg_enabled()) {
+        mips_tcg_init();
+    }
 }
 
 static void mips_cpu_class_init(ObjectClass *c, void *data)
 {
     MIPSCPUClass *mcc = MIPS_CPU_CLASS(c);
     CPUClass *cc = CPU_CLASS(c);
+    DeviceClass *dc = DEVICE_CLASS(c);
+
+    mcc->parent_realize = dc->realize;
+    dc->realize = mips_cpu_realizefn;
 
     mcc->parent_reset = cc->reset;
     cc->reset = mips_cpu_reset;
+
+    cc->do_interrupt = mips_cpu_do_interrupt;
 }
 
 static const TypeInfo mips_cpu_type_info = {

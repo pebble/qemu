@@ -23,7 +23,6 @@
 #include "sysemu/memory_mapping.h"
 #include "qapi/error.h"
 #include "qmp-commands.h"
-#include "exec/gdbstub.h"
 
 static uint16_t cpu_convert_to_target16(uint16_t val, int endian)
 {
@@ -268,15 +267,22 @@ static int write_elf64_note(DumpState *s)
     return 0;
 }
 
+static inline int cpu_index(CPUState *cpu)
+{
+    return cpu->cpu_index + 1;
+}
+
 static int write_elf64_notes(DumpState *s)
 {
     CPUArchState *env;
+    CPUState *cpu;
     int ret;
     int id;
 
     for (env = first_cpu; env != NULL; env = env->next_cpu) {
-        id = cpu_index(env);
-        ret = cpu_write_elf64_note(fd_write_vmcore, env, id, s);
+        cpu = ENV_GET_CPU(env);
+        id = cpu_index(cpu);
+        ret = cpu_write_elf64_note(fd_write_vmcore, cpu, id, s);
         if (ret < 0) {
             dump_error(s, "dump: failed to write elf notes.\n");
             return -1;
@@ -284,7 +290,7 @@ static int write_elf64_notes(DumpState *s)
     }
 
     for (env = first_cpu; env != NULL; env = env->next_cpu) {
-        ret = cpu_write_elf64_qemunote(fd_write_vmcore, env, s);
+        ret = cpu_write_elf64_qemunote(fd_write_vmcore, cpu, s);
         if (ret < 0) {
             dump_error(s, "dump: failed to write CPU status.\n");
             return -1;
@@ -321,12 +327,14 @@ static int write_elf32_note(DumpState *s)
 static int write_elf32_notes(DumpState *s)
 {
     CPUArchState *env;
+    CPUState *cpu;
     int ret;
     int id;
 
     for (env = first_cpu; env != NULL; env = env->next_cpu) {
-        id = cpu_index(env);
-        ret = cpu_write_elf32_note(fd_write_vmcore, env, id, s);
+        cpu = ENV_GET_CPU(env);
+        id = cpu_index(cpu);
+        ret = cpu_write_elf32_note(fd_write_vmcore, cpu, id, s);
         if (ret < 0) {
             dump_error(s, "dump: failed to write elf notes.\n");
             return -1;
@@ -334,7 +342,7 @@ static int write_elf32_notes(DumpState *s)
     }
 
     for (env = first_cpu; env != NULL; env = env->next_cpu) {
-        ret = cpu_write_elf32_qemunote(fd_write_vmcore, env, s);
+        ret = cpu_write_elf32_qemunote(fd_write_vmcore, cpu, s);
         if (ret < 0) {
             dump_error(s, "dump: failed to write CPU status.\n");
             return -1;

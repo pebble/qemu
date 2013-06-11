@@ -214,10 +214,6 @@ PCI UHCI USB controller and a virtual USB hub.
 
 SMP is supported with up to 255 CPUs.
 
-Note that adlib, gus and cs4231a are only available when QEMU was
-configured with --audio-card-list option containing the name(s) of
-required card(s).
-
 QEMU uses the PC BIOS from the Bochs project and the Plex86/Bochs LGPL
 VGA BIOS.
 
@@ -423,6 +419,7 @@ snapshots.
 * disk_images_sheepdog::      Sheepdog disk images
 * disk_images_iscsi::         iSCSI LUNs
 * disk_images_gluster::       GlusterFS disk images
+* disk_images_ssh::           Secure Shell (ssh) disk images
 @end menu
 
 @node disk_images_quickstart
@@ -830,7 +827,7 @@ QEMU-based virtual machines.
 
 You can create a Sheepdog disk image with the command:
 @example
-qemu-img create sheepdog:@var{image} @var{size}
+qemu-img create sheepdog:///@var{image} @var{size}
 @end example
 where @var{image} is the Sheepdog image name and @var{size} is its
 size.
@@ -838,38 +835,44 @@ size.
 To import the existing @var{filename} to Sheepdog, you can use a
 convert command.
 @example
-qemu-img convert @var{filename} sheepdog:@var{image}
+qemu-img convert @var{filename} sheepdog:///@var{image}
 @end example
 
 You can boot from the Sheepdog disk image with the command:
 @example
-qemu-system-i386 sheepdog:@var{image}
+qemu-system-i386 sheepdog:///@var{image}
 @end example
 
 You can also create a snapshot of the Sheepdog image like qcow2.
 @example
-qemu-img snapshot -c @var{tag} sheepdog:@var{image}
+qemu-img snapshot -c @var{tag} sheepdog:///@var{image}
 @end example
 where @var{tag} is a tag name of the newly created snapshot.
 
 To boot from the Sheepdog snapshot, specify the tag name of the
 snapshot.
 @example
-qemu-system-i386 sheepdog:@var{image}:@var{tag}
+qemu-system-i386 sheepdog:///@var{image}#@var{tag}
 @end example
 
 You can create a cloned image from the existing snapshot.
 @example
-qemu-img create -b sheepdog:@var{base}:@var{tag} sheepdog:@var{image}
+qemu-img create -b sheepdog:///@var{base}#@var{tag} sheepdog:///@var{image}
 @end example
 where @var{base} is a image name of the source snapshot and @var{tag}
 is its tag name.
 
+You can use an unix socket instead of an inet socket:
+
+@example
+qemu-system-i386 sheepdog+unix:///@var{image}?socket=@var{path}
+@end example
+
 If the Sheepdog daemon doesn't run on the local host, you need to
 specify one of the Sheepdog servers to connect to.
 @example
-qemu-img create sheepdog:@var{hostname}:@var{port}:@var{image} @var{size}
-qemu-system-i386 sheepdog:@var{hostname}:@var{port}:@var{image}
+qemu-img create sheepdog://@var{hostname}:@var{port}/@var{image} @var{size}
+qemu-system-i386 sheepdog://@var{hostname}:@var{port}/@var{image}
 @end example
 
 @node disk_images_iscsi
@@ -1031,6 +1034,59 @@ qemu-system-x86_64 -drive file=gluster+tcp://server.domain.com:24007/testvol/dir
 qemu-system-x86_64 -drive file=gluster+unix:///testvol/dir/a.img?socket=/tmp/glusterd.socket
 qemu-system-x86_64 -drive file=gluster+rdma://1.2.3.4:24007/testvol/a.img
 @end example
+
+@node disk_images_ssh
+@subsection Secure Shell (ssh) disk images
+
+You can access disk images located on a remote ssh server
+by using the ssh protocol:
+
+@example
+qemu-system-x86_64 -drive file=ssh://[@var{user}@@]@var{server}[:@var{port}]/@var{path}[?host_key_check=@var{host_key_check}]
+@end example
+
+Alternative syntax using properties:
+
+@example
+qemu-system-x86_64 -drive file.driver=ssh[,file.user=@var{user}],file.host=@var{server}[,file.port=@var{port}],file.path=@var{path}[,file.host_key_check=@var{host_key_check}]
+@end example
+
+@var{ssh} is the protocol.
+
+@var{user} is the remote user.  If not specified, then the local
+username is tried.
+
+@var{server} specifies the remote ssh server.  Any ssh server can be
+used, but it must implement the sftp-server protocol.  Most Unix/Linux
+systems should work without requiring any extra configuration.
+
+@var{port} is the port number on which sshd is listening.  By default
+the standard ssh port (22) is used.
+
+@var{path} is the path to the disk image.
+
+The optional @var{host_key_check} parameter controls how the remote
+host's key is checked.  The default is @code{yes} which means to use
+the local @file{.ssh/known_hosts} file.  Setting this to @code{no}
+turns off known-hosts checking.  Or you can check that the host key
+matches a specific fingerprint:
+@code{host_key_check=md5:78:45:8e:14:57:4f:d5:45:83:0a:0e:f3:49:82:c9:c8}
+(@code{sha1:} can also be used as a prefix, but note that OpenSSH
+tools only use MD5 to print fingerprints).
+
+Currently authentication must be done using ssh-agent.  Other
+authentication methods may be supported in future.
+
+Note: Many ssh servers do not support an @code{fsync}-style operation.
+The ssh driver cannot guarantee that disk flush requests are
+obeyed, and this causes a risk of disk corruption if the remote
+server or network goes down during writes.  The driver will
+print a warning when @code{fsync} is not supported:
+
+warning: ssh server @code{ssh.example.com:22} does not support fsync
+
+With sufficiently new versions of libssh2 and OpenSSH, @code{fsync} is
+supported.
 
 @node pcsys_network
 @section Network emulation
@@ -2623,9 +2679,6 @@ Set the x86 elf interpreter prefix (default=/usr/local/qemu-i386)
 Set the x86 stack size in bytes (default=524288)
 @item -cpu model
 Select CPU model (-cpu help for list and additional feature selection)
-@item -ignore-environment
-Start with an empty environment. Without this option,
-the initial environment is a copy of the caller's environment.
 @item -E @var{var}=@var{value}
 Set environment @var{var} to @var{value}.
 @item -U @var{var}
@@ -2642,8 +2695,8 @@ Pre-allocate a guest virtual address space of the given size (in bytes).
 Debug options:
 
 @table @option
-@item -d
-Activate log (logfile=/tmp/qemu.log)
+@item -d item1,...
+Activate logging of the specified items (use '-d help' for a list of log items)
 @item -p pagesize
 Act as if the host page size was 'pagesize' bytes
 @item -g port
@@ -2781,8 +2834,8 @@ FreeBSD, NetBSD and OpenBSD (default).
 Debug options:
 
 @table @option
-@item -d
-Activate log (logfile=/tmp/qemu.log)
+@item -d item1,...
+Activate logging of the specified items (use '-d help' for a list of log items)
 @item -p pagesize
 Act as if the host page size was 'pagesize' bytes
 @item -singlestep

@@ -764,7 +764,7 @@ static int omap_wfi_write(CPUARMState *env, const ARMCPRegInfo *ri,
                           uint64_t value)
 {
     /* Wait-for-interrupt (deprecated) */
-    cpu_interrupt(env, CPU_INTERRUPT_HALT);
+    cpu_interrupt(CPU(arm_env_get_cpu(env)), CPU_INTERRUPT_HALT);
     return 0;
 }
 
@@ -1263,7 +1263,6 @@ ARMCPU *cpu_arm_init(const char *cpu_model)
     ARMCPU *cpu;
     CPUARMState *env;
     ObjectClass *oc;
-    static int inited = 0;
 
     oc = cpu_class_by_name(TYPE_ARM_CPU, cpu_model);
     if (!oc) {
@@ -1272,14 +1271,17 @@ ARMCPU *cpu_arm_init(const char *cpu_model)
     cpu = ARM_CPU(object_new(object_class_get_name(oc)));
     env = &cpu->env;
     env->cpu_model_str = cpu_model;
-    arm_cpu_realize(cpu);
 
-    if (tcg_enabled() && !inited) {
-        inited = 1;
-        arm_translate_init();
-    }
+    /* TODO this should be set centrally, once possible */
+    object_property_set_bool(OBJECT(cpu), true, "realized", NULL);
 
-    cpu_reset(CPU(cpu));
+    return cpu;
+}
+
+void arm_cpu_register_gdb_regs_for_features(ARMCPU *cpu)
+{
+    CPUARMState *env = &cpu->env;
+
     if (arm_feature(env, ARM_FEATURE_NEON)) {
         gdb_register_coprocessor(env, vfp_gdb_get_reg, vfp_gdb_set_reg,
                                  51, "arm-neon.xml", 0);
@@ -1290,8 +1292,6 @@ ARMCPU *cpu_arm_init(const char *cpu_model)
         gdb_register_coprocessor(env, vfp_gdb_get_reg, vfp_gdb_set_reg,
                                  19, "arm-vfp.xml", 0);
     }
-    qemu_init_vcpu(env);
-    return cpu;
 }
 
 /* Sort alphabetically by type name, except for "any". */
@@ -1567,8 +1567,11 @@ uint32_t HELPER(rbit)(uint32_t x)
 
 #if defined(CONFIG_USER_ONLY)
 
-void do_interrupt (CPUARMState *env)
+void arm_cpu_do_interrupt(CPUState *cs)
 {
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
+
     env->exception_index = -1;
 }
 
@@ -1617,7 +1620,7 @@ uint32_t HELPER(get_r13_banked)(CPUARMState *env, uint32_t mode)
 #else
 
 /* Map CPU modes onto saved register banks.  */
-static inline int bank_number(CPUARMState *env, int mode)
+int bank_number(int mode)
 {
     switch (mode) {
     case ARM_CPU_MODE_USR:
@@ -1634,8 +1637,7 @@ static inline int bank_number(CPUARMState *env, int mode)
     case ARM_CPU_MODE_FIQ:
         return 5;
     }
-    cpu_abort(env, "Bad mode %x\n", mode);
-    return -1;
+    hw_error("bank number requested for bad CPSR mode value 0x%x\n", mode);
 }
 
 void switch_mode(CPUARMState *env, int mode)
@@ -1655,12 +1657,12 @@ void switch_mode(CPUARMState *env, int mode)
         memcpy (env->regs + 8, env->fiq_regs, 5 * sizeof(uint32_t));
     }
 
-    i = bank_number(env, old_mode);
+    i = bank_number(old_mode);
     env->banked_r13[i] = env->regs[13];
     env->banked_r14[i] = env->regs[14];
     env->banked_spsr[i] = env->spsr;
 
-    i = bank_number(env, mode);
+    i = bank_number(mode);
     env->regs[13] = env->banked_r13[i];
     env->regs[14] = env->banked_r14[i];
     env->spsr = env->banked_spsr[i];
@@ -1726,8 +1728,10 @@ static void do_v7m_exception_exit(CPUARMState *env)
        pointer.  */
 }
 
-static void do_interrupt_v7m(CPUARMState *env)
+void arm_v7m_cpu_do_interrupt(CPUState *cs)
 {
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
     uint32_t xpsr = xpsr_read(env);
     uint32_t lr;
     uint32_t addr;
@@ -1803,17 +1807,17 @@ static void do_interrupt_v7m(CPUARMState *env)
 }
 
 /* Handle a CPU exception.  */
-void do_interrupt(CPUARMState *env)
+void arm_cpu_do_interrupt(CPUState *cs)
 {
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
     uint32_t addr;
     uint32_t mask;
     int new_mode;
     uint32_t offset;
 
-    if (IS_M(env)) {
-        do_interrupt_v7m(env);
-        return;
-    }
+    assert(!IS_M(env));
+
     /* TODO: Vectored interrupt controller.  */
     switch (env->exception_index) {
     case EXCP_UDEF:
@@ -1911,7 +1915,7 @@ void do_interrupt(CPUARMState *env)
     }
     env->regs[14] = env->regs[15] + offset;
     env->regs[15] = addr;
-    env->interrupt_request |= CPU_INTERRUPT_EXITTB;
+    cs->interrupt_request |= CPU_INTERRUPT_EXITTB;
 }
 
 /* Check section/page access permissions.
@@ -2533,7 +2537,7 @@ void HELPER(set_r13_banked)(CPUARMState *env, uint32_t mode, uint32_t val)
     if ((env->uncached_cpsr & CPSR_M) == mode) {
         env->regs[13] = val;
     } else {
-        env->banked_r13[bank_number(env, mode)] = val;
+        env->banked_r13[bank_number(mode)] = val;
     }
 }
 
@@ -2542,7 +2546,7 @@ uint32_t HELPER(get_r13_banked)(CPUARMState *env, uint32_t mode)
     if ((env->uncached_cpsr & CPSR_M) == mode) {
         return env->regs[13];
     } else {
-        return env->banked_r13[bank_number(env, mode)];
+        return env->banked_r13[bank_number(mode)];
     }
 }
 
@@ -2894,11 +2898,6 @@ uint32_t HELPER(sel_flags)(uint32_t flags, uint32_t a, uint32_t b)
     if (flags & 8)
         mask |= 0xff000000;
     return (a & mask) | (b & ~mask);
-}
-
-uint32_t HELPER(logicq_cc)(uint64_t val)
-{
-    return (val >> 32) | (val != 0);
 }
 
 /* VFP support.  We follow the convention used for VFP instructions:

@@ -554,11 +554,12 @@ static TCGArg *tcg_constant_folding(TCGContext *s, uint16_t *tcg_opc_ptr,
                 args[5] = tcg_invert_cond(args[5]);
             }
             break;
-        case INDEX_op_add2_i32:
+        CASE_OP_32_64(add2):
             swap_commutative(args[0], &args[2], &args[4]);
             swap_commutative(args[1], &args[3], &args[5]);
             break;
-        case INDEX_op_mulu2_i32:
+        CASE_OP_32_64(mulu2):
+        CASE_OP_32_64(muls2):
             swap_commutative(args[0], &args[2], &args[3]);
             break;
         case INDEX_op_brcond2_i32:
@@ -575,7 +576,8 @@ static TCGArg *tcg_constant_folding(TCGContext *s, uint16_t *tcg_opc_ptr,
             break;
         }
 
-        /* Simplify expressions for "shift/rot r, 0, a => movi r, 0" */
+        /* Simplify expressions for "shift/rot r, 0, a => movi r, 0",
+           and "sub r, 0, a => neg r, a" case.  */
         switch (op) {
         CASE_OP_32_64(shl):
         CASE_OP_32_64(shr):
@@ -589,6 +591,37 @@ static TCGArg *tcg_constant_folding(TCGContext *s, uint16_t *tcg_opc_ptr,
                 args += 3;
                 gen_args += 2;
                 continue;
+            }
+            break;
+        CASE_OP_32_64(sub):
+            {
+                TCGOpcode neg_op;
+                bool have_neg;
+
+                if (temps[args[2]].state == TCG_TEMP_CONST) {
+                    /* Proceed with possible constant folding. */
+                    break;
+                }
+                if (op == INDEX_op_sub_i32) {
+                    neg_op = INDEX_op_neg_i32;
+                    have_neg = TCG_TARGET_HAS_neg_i32;
+                } else {
+                    neg_op = INDEX_op_neg_i64;
+                    have_neg = TCG_TARGET_HAS_neg_i64;
+                }
+                if (!have_neg) {
+                    break;
+                }
+                if (temps[args[1]].state == TCG_TEMP_CONST
+                    && temps[args[1]].val == 0) {
+                    s->gen_opc_buf[op_index] = neg_op;
+                    reset_temp(args[0]);
+                    gen_args[0] = args[0];
+                    gen_args[1] = args[2];
+                    args += 3;
+                    gen_args += 2;
+                    continue;
+                }
             }
             break;
         default:
@@ -1024,6 +1057,7 @@ static TCGArg *tcg_constant_folding(TCGContext *s, uint16_t *tcg_opc_ptr,
                 /* Simplify LT/GE comparisons vs zero to a single compare
                    vs the high word of the input.  */
                 s->gen_opc_buf[op_index] = INDEX_op_setcond_i32;
+                reset_temp(args[0]);
                 gen_args[0] = args[0];
                 gen_args[1] = args[2];
                 gen_args[2] = args[4];

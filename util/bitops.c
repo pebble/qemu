@@ -42,7 +42,23 @@ unsigned long find_next_bit(const unsigned long *addr, unsigned long size,
         size -= BITS_PER_LONG;
         result += BITS_PER_LONG;
     }
-    while (size & ~(BITS_PER_LONG-1)) {
+    while (size >= 4*BITS_PER_LONG) {
+        unsigned long d1, d2, d3;
+        tmp = *p;
+        d1 = *(p+1);
+        d2 = *(p+2);
+        d3 = *(p+3);
+        if (tmp) {
+            goto found_middle;
+        }
+        if (d1 | d2 | d3) {
+            break;
+        }
+        p += 4;
+        result += 4*BITS_PER_LONG;
+        size -= 4*BITS_PER_LONG;
+    }
+    while (size >= BITS_PER_LONG) {
         if ((tmp = *(p++))) {
             goto found_middle;
         }
@@ -60,7 +76,7 @@ found_first:
         return result + size;	/* Nope. */
     }
 found_middle:
-    return result + bitops_ctzl(tmp);
+    return result + ctzl(tmp);
 }
 
 /*
@@ -109,7 +125,7 @@ found_first:
         return result + size;	/* Nope. */
     }
 found_middle:
-    return result + bitops_ctol(tmp);
+    return result + ctzl(~tmp);
 }
 
 unsigned long find_last_bit(const unsigned long *addr, unsigned long size)
@@ -133,7 +149,7 @@ unsigned long find_last_bit(const unsigned long *addr, unsigned long size)
         tmp = addr[--words];
         if (tmp) {
         found:
-            return words * BITS_PER_LONG + bitops_flsl(tmp);
+            return words * BITS_PER_LONG + BITS_PER_LONG - 1 - clzl(tmp);
         }
     }
 

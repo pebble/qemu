@@ -34,6 +34,7 @@
 
 /**
  * AlphaCPUClass:
+ * @parent_realize: The parent class' realize handler.
  * @parent_reset: The parent class' reset handler.
  *
  * An Alpha CPU model.
@@ -43,6 +44,7 @@ typedef struct AlphaCPUClass {
     CPUClass parent_class;
     /*< public >*/
 
+    DeviceRealize parent_realize;
     void (*parent_reset)(CPUState *cpu);
 } AlphaCPUClass;
 
@@ -70,5 +72,8 @@ static inline AlphaCPU *alpha_env_get_cpu(CPUAlphaState *env)
 
 #define ENV_GET_CPU(e) CPU(alpha_env_get_cpu(e))
 
+#define ENV_OFFSET offsetof(AlphaCPU, env)
+
+void alpha_cpu_do_interrupt(CPUState *cpu);
 
 #endif

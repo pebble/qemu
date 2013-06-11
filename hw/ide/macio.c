@@ -24,7 +24,7 @@
  */
 #include "hw/hw.h"
 #include "hw/ppc/mac.h"
-#include "hw/mac_dbdma.h"
+#include "hw/ppc/mac_dbdma.h"
 #include "block/block.h"
 #include "sysemu/dma.h"
 
@@ -144,7 +144,7 @@ static void pmac_ide_transfer_cb(void *opaque, int ret)
         break;
     case IDE_DMA_TRIM:
         m->aiocb = dma_bdrv_io(s->bs, &s->sg, sector_num,
-                               ide_issue_trim, pmac_ide_transfer_cb, s,
+                               ide_issue_trim, pmac_ide_transfer_cb, io,
                                DMA_DIRECTION_TO_DEVICE);
         break;
     }
@@ -334,7 +334,7 @@ static void macio_ide_initfn(Object *obj)
     SysBusDevice *d = SYS_BUS_DEVICE(obj);
     MACIOIDEState *s = MACIO_IDE(obj);
 
-    ide_bus_new(&s->bus, DEVICE(obj), 0);
+    ide_bus_new(&s->bus, DEVICE(obj), 0, 2);
     memory_region_init_io(&s->mem, &pmac_ide_ops, s, "pmac-ide", 0x1000);
     sysbus_init_mmio(d, &s->mem);
     sysbus_init_irq(d, &s->irq);

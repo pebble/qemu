@@ -43,6 +43,13 @@
 #include <linux/version.h>
 #include "hw/usb.h"
 #include "hw/usb/desc.h"
+#include "hw/usb/host.h"
+
+#ifdef CONFIG_USB_LIBUSB
+# define DEVNAME "usb-host-linux"
+#else
+# define DEVNAME "usb-host"
+#endif
 
 /* We redefine it to avoid version problems */
 struct usb_ctrltransfer {
@@ -87,14 +94,6 @@ struct endp_data {
     int inflight;
 };
 
-struct USBAutoFilter {
-    uint32_t bus_num;
-    uint32_t addr;
-    char     *port;
-    uint32_t vendor_id;
-    uint32_t product_id;
-};
-
 enum USBHostDeviceOptions {
     USB_HOST_OPT_PIPELINE,
 };
@@ -131,7 +130,6 @@ typedef struct USBHostDevice {
 static QTAILQ_HEAD(, USBHostDevice) hostdevs = QTAILQ_HEAD_INITIALIZER(hostdevs);
 
 static int usb_host_close(USBHostDevice *dev);
-static int parse_filter(const char *spec, struct USBAutoFilter *f);
 static void usb_host_auto_check(void *unused);
 static int usb_host_read_file(char *line, size_t line_size,
                             const char *device_file, const char *device_name);
@@ -653,7 +651,7 @@ static void usb_host_handle_reset(USBDevice *dev)
 
     trace_usb_host_reset(s->bus_num, s->addr);
 
-    usb_host_do_reset(s);;
+    usb_host_do_reset(s);
 
     usb_host_claim_interfaces(s, 0);
     usb_linux_update_endp_table(s);
@@ -1431,7 +1429,7 @@ static void usb_host_exit_notifier(struct Notifier *n, void *data)
 
     usb_host_release_port(s);
     if (s->fd != -1) {
-        usb_host_do_reset(s);;
+        usb_host_do_reset(s);
     }
 }
 
@@ -1495,7 +1493,7 @@ static int usb_host_initfn(USBDevice *dev)
 }
 
 static const VMStateDescription vmstate_usb_host = {
-    .name = "usb-host",
+    .name = DEVNAME,
     .version_id = 1,
     .minimum_version_id = 1,
     .post_load = usb_host_post_load,
@@ -1535,7 +1533,7 @@ static void usb_host_class_initfn(ObjectClass *klass, void *data)
 }
 
 static const TypeInfo usb_host_dev_info = {
-    .name          = "usb-host",
+    .name          = DEVNAME,
     .parent        = TYPE_USB_DEVICE,
     .instance_size = sizeof(USBHostDevice),
     .class_init    = usb_host_class_initfn,
@@ -1544,74 +1542,9 @@ static const TypeInfo usb_host_dev_info = {
 static void usb_host_register_types(void)
 {
     type_register_static(&usb_host_dev_info);
-    usb_legacy_register("usb-host", "host", usb_host_device_open);
 }
 
 type_init(usb_host_register_types)
-
-USBDevice *usb_host_device_open(USBBus *bus, const char *devname)
-{
-    struct USBAutoFilter filter;
-    USBDevice *dev;
-    char *p;
-
-    dev = usb_create(bus, "usb-host");
-
-    if (strstr(devname, "auto:")) {
-        if (parse_filter(devname, &filter) < 0) {
-            goto fail;
-        }
-    } else {
-        if ((p = strchr(devname, '.'))) {
-            filter.bus_num    = strtoul(devname, NULL, 0);
-            filter.addr       = strtoul(p + 1, NULL, 0);
-            filter.vendor_id  = 0;
-            filter.product_id = 0;
-        } else if ((p = strchr(devname, ':'))) {
-            filter.bus_num    = 0;
-            filter.addr       = 0;
-            filter.vendor_id  = strtoul(devname, NULL, 16);
-            filter.product_id = strtoul(p + 1, NULL, 16);
-        } else {
-            goto fail;
-        }
-    }
-
-    qdev_prop_set_uint32(&dev->qdev, "hostbus",   filter.bus_num);
-    qdev_prop_set_uint32(&dev->qdev, "hostaddr",  filter.addr);
-    qdev_prop_set_uint32(&dev->qdev, "vendorid",  filter.vendor_id);
-    qdev_prop_set_uint32(&dev->qdev, "productid", filter.product_id);
-    qdev_init_nofail(&dev->qdev);
-    return dev;
-
-fail:
-    qdev_free(&dev->qdev);
-    return NULL;
-}
-
-int usb_host_device_close(const char *devname)
-{
-#if 0
-    char product_name[PRODUCT_NAME_SZ];
-    int bus_num, addr;
-    USBHostDevice *s;
-
-    if (strstr(devname, "auto:")) {
-        return usb_host_auto_del(devname);
-    }
-    if (usb_host_find_device(&bus_num, &addr, product_name,
-                                    sizeof(product_name), devname) < 0) {
-        return -1;
-    }
-    s = hostdev_find(bus_num, addr);
-    if (s) {
-        usb_device_delete_addr(s->bus_num, s->dev.addr);
-        return 0;
-    }
-#endif
-
-    return -1;
-}
 
 /*
  * Read sys file-system device file
@@ -1840,55 +1773,7 @@ static void usb_host_auto_check(void *unused)
     qemu_mod_timer(usb_auto_timer, qemu_get_clock_ms(rt_clock) + 2000);
 }
 
-/*
- * Autoconnect filter
- * Format:
- *    auto:bus:dev[:vid:pid]
- *    auto:bus.dev[:vid:pid]
- *
- *    bus  - bus number    (dec, * means any)
- *    dev  - device number (dec, * means any)
- *    vid  - vendor id     (hex, * means any)
- *    pid  - product id    (hex, * means any)
- *
- *    See 'lsusb' output.
- */
-static int parse_filter(const char *spec, struct USBAutoFilter *f)
-{
-    enum { BUS, DEV, VID, PID, DONE };
-    const char *p = spec;
-    int i;
-
-    f->bus_num    = 0;
-    f->addr       = 0;
-    f->vendor_id  = 0;
-    f->product_id = 0;
-
-    for (i = BUS; i < DONE; i++) {
-        p = strpbrk(p, ":.");
-        if (!p) {
-            break;
-        }
-        p++;
-
-        if (*p == '*') {
-            continue;
-        }
-        switch(i) {
-        case BUS: f->bus_num = strtol(p, NULL, 10);    break;
-        case DEV: f->addr    = strtol(p, NULL, 10);    break;
-        case VID: f->vendor_id  = strtol(p, NULL, 16); break;
-        case PID: f->product_id = strtol(p, NULL, 16); break;
-        }
-    }
-
-    if (i < DEV) {
-        fprintf(stderr, "husb: invalid auto filter spec %s\n", spec);
-        return -1;
-    }
-
-    return 0;
-}
+#ifndef CONFIG_USB_LIBUSB
 
 /**********************/
 /* USB host device info */
@@ -2021,3 +1906,5 @@ void usb_host_info(Monitor *mon, const QDict *qdict)
                        bus, addr, f->port ? f->port : "*", vid, pid);
     }
 }
+
+#endif

@@ -12,7 +12,7 @@
 #include "hw/boards.h"
 #include "exec/address-spaces.h"
 #include "s390-virtio.h"
-#include "sclp.h"
+#include "hw/s390x/sclp.h"
 #include "ioinst.h"
 #include "css.h"
 #include "virtio-ccw.h"
@@ -76,14 +76,14 @@ static void ccw_init(QEMUMachineInitArgs *args)
     }
     my_ram_size = my_ram_size >> (20 + shift) << (20 + shift);
 
-    /* lets propagate the changed ram size into the global variable. */
+    /* let's propagate the changed ram size into the global variable. */
     ram_size = my_ram_size;
 
     /* get a BUS */
     css_bus = virtual_css_bus_init();
     s390_sclp_init();
     s390_init_ipl_dev(args->kernel_filename, args->kernel_cmdline,
-                      args->initrd_filename);
+                      args->initrd_filename, "s390-ccw.img");
 
     /* register hypercalls */
     virtio_ccw_register_hcalls();

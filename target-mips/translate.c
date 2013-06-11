@@ -2711,37 +2711,29 @@ static void gen_muldiv(DisasContext *ctx, uint32_t opc,
         break;
     case OPC_MULT:
         {
-            TCGv_i64 t2 = tcg_temp_new_i64();
-            TCGv_i64 t3 = tcg_temp_new_i64();
-            tcg_gen_ext_tl_i64(t2, t0);
-            tcg_gen_ext_tl_i64(t3, t1);
-            tcg_gen_mul_i64(t2, t2, t3);
-            tcg_temp_free_i64(t3);
-            tcg_gen_trunc_i64_tl(t0, t2);
-            tcg_gen_shri_i64(t2, t2, 32);
-            tcg_gen_trunc_i64_tl(t1, t2);
-            tcg_temp_free_i64(t2);
-            tcg_gen_ext32s_tl(cpu_LO[acc], t0);
-            tcg_gen_ext32s_tl(cpu_HI[acc], t1);
+            TCGv_i32 t2 = tcg_temp_new_i32();
+            TCGv_i32 t3 = tcg_temp_new_i32();
+            tcg_gen_trunc_tl_i32(t2, t0);
+            tcg_gen_trunc_tl_i32(t3, t1);
+            tcg_gen_muls2_i32(t2, t3, t2, t3);
+            tcg_gen_ext_i32_tl(cpu_LO[acc], t2);
+            tcg_gen_ext_i32_tl(cpu_HI[acc], t3);
+            tcg_temp_free_i32(t2);
+            tcg_temp_free_i32(t3);
         }
         opn = "mult";
         break;
     case OPC_MULTU:
         {
-            TCGv_i64 t2 = tcg_temp_new_i64();
-            TCGv_i64 t3 = tcg_temp_new_i64();
-            tcg_gen_ext32u_tl(t0, t0);
-            tcg_gen_ext32u_tl(t1, t1);
-            tcg_gen_extu_tl_i64(t2, t0);
-            tcg_gen_extu_tl_i64(t3, t1);
-            tcg_gen_mul_i64(t2, t2, t3);
-            tcg_temp_free_i64(t3);
-            tcg_gen_trunc_i64_tl(t0, t2);
-            tcg_gen_shri_i64(t2, t2, 32);
-            tcg_gen_trunc_i64_tl(t1, t2);
-            tcg_temp_free_i64(t2);
-            tcg_gen_ext32s_tl(cpu_LO[acc], t0);
-            tcg_gen_ext32s_tl(cpu_HI[acc], t1);
+            TCGv_i32 t2 = tcg_temp_new_i32();
+            TCGv_i32 t3 = tcg_temp_new_i32();
+            tcg_gen_trunc_tl_i32(t2, t0);
+            tcg_gen_trunc_tl_i32(t3, t1);
+            tcg_gen_mulu2_i32(t2, t3, t2, t3);
+            tcg_gen_ext_i32_tl(cpu_LO[acc], t2);
+            tcg_gen_ext_i32_tl(cpu_HI[acc], t3);
+            tcg_temp_free_i32(t2);
+            tcg_temp_free_i32(t3);
         }
         opn = "multu";
         break;
@@ -2777,11 +2769,11 @@ static void gen_muldiv(DisasContext *ctx, uint32_t opc,
         opn = "ddivu";
         break;
     case OPC_DMULT:
-        gen_helper_dmult(cpu_env, acc, t0, t1);
+        tcg_gen_muls2_i64(cpu_LO[acc], cpu_HI[acc], t0, t1);
         opn = "dmult";
         break;
     case OPC_DMULTU:
-        gen_helper_dmultu(cpu_env, acc, t0, t1);
+        tcg_gen_mulu2_i64(cpu_LO[acc], cpu_HI[acc], t0, t1);
         opn = "dmultu";
         break;
 #endif
@@ -13408,6 +13400,7 @@ static void gen_mipsdsp_multiply(DisasContext *ctx, uint32_t op1, uint32_t op2,
     /* OPC_MULT_G_2E, OPC_ADDUH_QB_DSP, OPC_MUL_PH_DSP have
      * the same mask and op1. */
     case OPC_MULT_G_2E:
+        check_dspr2(ctx);
         switch (op2) {
         case  OPC_MUL_PH:
             gen_helper_mul_ph(cpu_gpr[ret], v1_t, v2_t, cpu_env);
@@ -15584,7 +15577,7 @@ gen_intermediate_code_internal (CPUMIPSState *env, TranslationBlock *tb,
     if (max_insns == 0)
         max_insns = CF_COUNT_MASK;
     LOG_DISAS("\ntb %p idx %d hflags %04x\n", tb, ctx.mem_idx, ctx.hflags);
-    gen_icount_start();
+    gen_tb_start();
     while (ctx.bstate == BS_NONE) {
         if (unlikely(!QTAILQ_EMPTY(&env->breakpoints))) {
             QTAILQ_FOREACH(bp, &env->breakpoints, entry) {
@@ -15682,7 +15675,7 @@ gen_intermediate_code_internal (CPUMIPSState *env, TranslationBlock *tb,
         }
     }
 done_generating:
-    gen_icount_end(tb, num_insns);
+    gen_tb_end(tb, num_insns);
     *tcg_ctx.gen_opc_ptr = INDEX_op_end;
     if (search_pc) {
         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
@@ -15816,7 +15809,7 @@ void cpu_dump_state (CPUMIPSState *env, FILE *f, fprintf_function cpu_fprintf,
 #endif
 }
 
-static void mips_tcg_init(void)
+void mips_tcg_init(void)
 {
     int i;
     static int inited;
@@ -15895,9 +15888,9 @@ MIPSCPU *cpu_mips_init(const char *cpu_model)
 #endif
     fpu_init(env, def);
     mvp_init(env, def);
-    mips_tcg_init();
-    cpu_reset(CPU(cpu));
-    qemu_init_vcpu(env);
+
+    object_property_set_bool(OBJECT(cpu), true, "realized", NULL);
+
     return cpu;
 }
 
@@ -15952,6 +15945,14 @@ void cpu_state_reset(CPUMIPSState *env)
 
 #if defined(CONFIG_USER_ONLY)
     env->CP0_Status = (MIPS_HFLAG_UM << CP0St_KSU);
+# ifdef TARGET_MIPS64
+    /* Enable 64-bit register mode.  */
+    env->CP0_Status |= (1 << CP0St_PX);
+# endif
+# ifdef TARGET_ABI_MIPSN64
+    /* Enable 64-bit address mode.  */
+    env->CP0_Status |= (1 << CP0St_UX);
+# endif
     /* Enable access to the CPUNum, SYNCI_Step, CC, and CCRes RDHWR
        hardware registers.  */
     env->CP0_HWREna |= 0x0000000F;
@@ -15960,6 +15961,10 @@ void cpu_state_reset(CPUMIPSState *env)
     }
     if (env->CP0_Config3 & (1 << CP0C3_DSPP)) {
         env->CP0_Status |= (1 << CP0St_MX);
+    }
+    /* Enable 64-bit FPU if the target cpu supports it.  */
+    if (env->active_fpu.fcr0 & (1 << FCR0_F64)) {
+        env->CP0_Status |= (1 << CP0St_FR);
     }
 #else
     if (env->hflags & MIPS_HFLAG_BMASK) {
@@ -16000,7 +16005,7 @@ void cpu_state_reset(CPUMIPSState *env)
             env->tcs[i].CP0_TCHalt = 1;
         }
         env->active_tc.CP0_TCHalt = 1;
-        env->halted = 1;
+        cs->halted = 1;
 
         if (cs->cpu_index == 0) {
             /* VPE0 starts up enabled.  */
@@ -16008,7 +16013,7 @@ void cpu_state_reset(CPUMIPSState *env)
             env->CP0_VPEConf0 |= (1 << CP0VPEC0_MVP) | (1 << CP0VPEC0_VPA);
 
             /* TC0 starts up unhalted.  */
-            env->halted = 0;
+            cs->halted = 0;
             env->active_tc.CP0_TCHalt = 0;
             env->tcs[0].CP0_TCHalt = 0;
             /* With thread 0 active.  */

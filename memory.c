@@ -855,7 +855,7 @@ static uint64_t memory_region_dispatch_read1(MemoryRegion *mr,
     }
 
     if (!mr->ops->read) {
-        return mr->ops->old_mmio.read[bitops_ctzl(size)](mr->opaque, addr);
+        return mr->ops->old_mmio.read[ctz32(size)](mr->opaque, addr);
     }
 
     /* FIXME: support unaligned access */
@@ -908,7 +908,7 @@ static void memory_region_dispatch_write(MemoryRegion *mr,
     adjust_endianness(mr, &data, size);
 
     if (!mr->ops->write) {
-        mr->ops->old_mmio.write[bitops_ctzl(size)](mr->opaque, addr, data);
+        mr->ops->old_mmio.write[ctz32(size)](mr->opaque, addr, data);
         return;
     }
 
@@ -1321,7 +1321,7 @@ static void memory_region_add_subregion_common(MemoryRegion *mr,
         if (subregion->may_overlap || other->may_overlap) {
             continue;
         }
-        if (int128_gt(int128_make64(offset),
+        if (int128_ge(int128_make64(offset),
                       int128_add(int128_make64(other->addr), other->size))
             || int128_le(int128_add(int128_make64(offset), subregion->size),
                          int128_make64(other->addr))) {

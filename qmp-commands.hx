@@ -385,6 +385,29 @@ Note: CPUs' indexes are obtained with the 'query-cpus' command.
 EQMP
 
     {
+        .name       = "cpu-add",
+        .args_type  = "id:i",
+        .mhandler.cmd_new = qmp_marshal_input_cpu_add,
+    },
+
+SQMP
+cpu-add
+-------
+
+Adds virtual cpu
+
+Arguments:
+
+- "id": cpu id (json-int)
+
+Example:
+
+-> { "execute": "cpu-add", "arguments": { "id": 2 } }
+<- { "return": {} }
+
+EQMP
+
+    {
         .name       = "memsave",
         .args_type  = "val:l,size:i,filename:s,cpu:i?",
         .mhandler.cmd_new = qmp_marshal_input_memsave,
@@ -644,7 +667,7 @@ EQMP
 
 SQMP
 migrate-set-cache-size
----------------------
+----------------------
 
 Set cache size to be used by XBZRLE migration, the cache size will be rounded
 down to the nearest power of 2
@@ -667,7 +690,7 @@ EQMP
 
 SQMP
 query-migrate-cache-size
----------------------
+------------------------
 
 Show cache size to be used by XBZRLE migration
 
@@ -2416,6 +2439,53 @@ EQMP
     },
 
 SQMP
+query-command-line-options
+--------------------------
+
+Show command line option schema.
+
+Return a json-array of command line option schema for all options (or for
+the given option), returning an error if the given option doesn't exist.
+
+Each array entry contains the following:
+
+- "option": option name (json-string)
+- "parameters": a json-array describes all parameters of the option:
+    - "name": parameter name (json-string)
+    - "type": parameter type (one of 'string', 'boolean', 'number',
+              or 'size')
+    - "help": human readable description of the parameter
+              (json-string, optional)
+
+Example:
+
+-> { "execute": "query-command-line-options", "arguments": { "option": "option-rom" } }
+<- { "return": [
+        {
+            "parameters": [
+                {
+                    "name": "romfile",
+                    "type": "string"
+                },
+                {
+                    "name": "bootindex",
+                    "type": "number"
+                }
+            ],
+            "option": "option-rom"
+        }
+     ]
+   }
+
+EQMP
+
+    {
+        .name       = "query-command-line-options",
+        .args_type  = "option:s?",
+        .mhandler.cmd_new = qmp_marshal_input_query_command_line_options,
+    },
+
+SQMP
 query-migrate
 -------------
 
@@ -2431,32 +2501,43 @@ The main json-object contains the following:
      - Possible values: "active", "completed", "failed", "cancelled"
 - "total-time": total amount of ms since migration started.  If
                 migration has ended, it returns the total migration
-		 time (json-int)
+                time (json-int)
 - "downtime": only present when migration has finished correctly
               total amount in ms for downtime that happened (json-int)
 - "expected-downtime": only present while migration is active
                 total amount in ms for downtime that was calculated on
-		the last bitmap round (json-int)
+                the last bitmap round (json-int)
 - "ram": only present if "status" is "active", it is a json-object with the
-  following RAM information (in bytes):
-         - "transferred": amount transferred (json-int)
-         - "remaining": amount remaining (json-int)
-         - "total": total (json-int)
-         - "duplicate": number of duplicated pages (json-int)
-         - "normal" : number of normal pages transferred (json-int)
-         - "normal-bytes" : number of normal bytes transferred (json-int)
+  following RAM information:
+         - "transferred": amount transferred in bytes (json-int)
+         - "remaining": amount remaining to transfer in bytes (json-int)
+         - "total": total amount of memory in bytes (json-int)
+         - "duplicate": number of pages filled entirely with the same
+            byte (json-int)
+            These are sent over the wire much more efficiently.
+         - "skipped": number of skipped zero pages (json-int)
+         - "normal" : number of whole pages transferred.  I.e. they
+            were not sent as duplicate or xbzrle pages (json-int)
+         - "normal-bytes" : number of bytes transferred in whole
+            pages. This is just normal pages times size of one page,
+            but this way upper levels don't need to care about page
+            size (json-int)
 - "disk": only present if "status" is "active" and it is a block migration,
-  it is a json-object with the following disk information (in bytes):
-         - "transferred": amount transferred (json-int)
-         - "remaining": amount remaining (json-int)
-         - "total": total (json-int)
+  it is a json-object with the following disk information:
+         - "transferred": amount transferred in bytes (json-int)
+         - "remaining": amount remaining to transfer in bytes json-int)
+         - "total": total disk size in bytes (json-int)
 - "xbzrle-cache": only present if XBZRLE is active.
   It is a json-object with the following XBZRLE information:
-         - "cache-size": XBZRLE cache size
-         - "bytes": total XBZRLE bytes transferred
+         - "cache-size": XBZRLE cache size in bytes
+         - "bytes": number of bytes transferred for XBZRLE compressed pages
          - "pages": number of XBZRLE compressed pages
-         - "cache-miss": number of cache misses
-         - "overflow": number of XBZRLE overflows
+         - "cache-miss": number of XBRZRLE page cache misses
+         - "overflow": number of times XBZRLE overflows.  This means
+           that the XBZRLE encoding was bigger than just sent the
+           whole page, and then we sent the whole page instead (as as
+           normal page).
+
 Examples:
 
 1. Before the first migration
@@ -2567,11 +2648,11 @@ EQMP
 
 SQMP
 migrate-set-capabilities
--------
+------------------------
 
 Enable/Disable migration capabilities
 
-- "xbzrle": xbzrle support
+- "xbzrle": XBZRLE support
 
 Arguments:
 
@@ -2590,7 +2671,7 @@ EQMP
     },
 SQMP
 query-migrate-capabilities
--------
+--------------------------
 
 Query current migration capabilities
 
@@ -2714,6 +2795,82 @@ EQMP
         .args_type  = "",
         .mhandler.cmd_new = qmp_marshal_input_query_target,
     },
+
+    {
+        .name       = "query-tpm",
+        .args_type  = "",
+        .mhandler.cmd_new = qmp_marshal_input_query_tpm,
+    },
+
+SQMP
+query-tpm
+---------
+
+Return information about the TPM device.
+
+Arguments: None
+
+Example:
+
+-> { "execute": "query-tpm" }
+<- { "return":
+     [
+       { "model": "tpm-tis",
+         "options":
+           { "type": "passthrough",
+             "data":
+               { "cancel-path": "/sys/class/misc/tpm0/device/cancel",
+                 "path": "/dev/tpm0"
+               }
+           },
+         "id": "tpm0"
+       }
+     ]
+   }
+
+EQMP
+
+    {
+        .name       = "query-tpm-models",
+        .args_type  = "",
+        .mhandler.cmd_new = qmp_marshal_input_query_tpm_models,
+    },
+
+SQMP
+query-tpm-models
+----------------
+
+Return a list of supported TPM models.
+
+Arguments: None
+
+Example:
+
+-> { "execute": "query-tpm-models" }
+<- { "return": [ "tpm-tis" ] }
+
+EQMP
+
+    {
+        .name       = "query-tpm-types",
+        .args_type  = "",
+        .mhandler.cmd_new = qmp_marshal_input_query_tpm_types,
+    },
+
+SQMP
+query-tpm-types
+---------------
+
+Return a list of supported TPM types.
+
+Arguments: None
+
+Example:
+
+-> { "execute": "query-tpm-types" }
+<- { "return": [ "passthrough" ] }
+
+EQMP
 
     {
         .name       = "chardev-add",

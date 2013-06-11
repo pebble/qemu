@@ -144,6 +144,7 @@ static BlockDriverAIOCB *paio_submit(BlockDriverState *bs, HANDLE hfile,
         BlockDriverCompletionFunc *cb, void *opaque, int type)
 {
     RawWin32AIOData *acb = g_slice_new(RawWin32AIOData);
+    ThreadPool *pool;
 
     acb->bs = bs;
     acb->hfile = hfile;
@@ -157,7 +158,8 @@ static BlockDriverAIOCB *paio_submit(BlockDriverState *bs, HANDLE hfile,
     acb->aio_offset = sector_num * 512;
 
     trace_paio_submit(acb, opaque, sector_num, nb_sectors, type);
-    return thread_pool_submit_aio(aio_worker, acb, cb, opaque);
+    pool = aio_get_thread_pool(bdrv_get_aio_context(bs));
+    return thread_pool_submit_aio(pool, aio_worker, acb, cb, opaque);
 }
 
 int qemu_ftruncate64(int fd, int64_t length)
@@ -219,20 +221,49 @@ static void raw_parse_flags(int flags, int *access_flags, DWORD *overlapped)
     }
 }
 
-static int raw_open(BlockDriverState *bs, const char *filename, int flags)
+static QemuOptsList raw_runtime_opts = {
+    .name = "raw",
+    .head = QTAILQ_HEAD_INITIALIZER(raw_runtime_opts.head),
+    .desc = {
+        {
+            .name = "filename",
+            .type = QEMU_OPT_STRING,
+            .help = "File name of the image",
+        },
+        { /* end of list */ }
+    },
+};
+
+static int raw_open(BlockDriverState *bs, QDict *options, int flags)
 {
     BDRVRawState *s = bs->opaque;
     int access_flags;
     DWORD overlapped;
+    QemuOpts *opts;
+    Error *local_err = NULL;
+    const char *filename;
+    int ret;
 
     s->type = FTYPE_FILE;
 
+    opts = qemu_opts_create_nofail(&raw_runtime_opts);
+    qemu_opts_absorb_qdict(opts, options, &local_err);
+    if (error_is_set(&local_err)) {
+        qerror_report_err(local_err);
+        error_free(local_err);
+        ret = -EINVAL;
+        goto fail;
+    }
+
+    filename = qemu_opt_get(opts, "filename");
+
     raw_parse_flags(flags, &access_flags, &overlapped);
-    
+
     if ((flags & BDRV_O_NATIVE_AIO) && aio == NULL) {
         aio = win32_aio_init();
         if (aio == NULL) {
-            return -EINVAL;
+            ret = -EINVAL;
+            goto fail;
         }
     }
 
@@ -242,20 +273,27 @@ static int raw_open(BlockDriverState *bs, const char *filename, int flags)
     if (s->hfile == INVALID_HANDLE_VALUE) {
         int err = GetLastError();
 
-        if (err == ERROR_ACCESS_DENIED)
-            return -EACCES;
-        return -EINVAL;
+        if (err == ERROR_ACCESS_DENIED) {
+            ret = -EACCES;
+        } else {
+            ret = -EINVAL;
+        }
+        goto fail;
     }
 
     if (flags & BDRV_O_NATIVE_AIO) {
-        int ret = win32_aio_attach(aio, s->hfile);
+        ret = win32_aio_attach(aio, s->hfile);
         if (ret < 0) {
             CloseHandle(s->hfile);
-            return ret;
+            goto fail;
         }
         s->aio = aio;
     }
-    return 0;
+
+    ret = 0;
+fail:
+    qemu_opts_del(opts);
+    return ret;
 }
 
 static BlockDriverAIOCB *raw_aio_readv(BlockDriverState *bs,
@@ -492,12 +530,13 @@ static int hdev_probe_device(const char *filename)
     return 0;
 }
 
-static int hdev_open(BlockDriverState *bs, const char *filename, int flags)
+static int hdev_open(BlockDriverState *bs, QDict *options, int flags)
 {
     BDRVRawState *s = bs->opaque;
     int access_flags, create_flags;
     DWORD overlapped;
     char device_name[64];
+    const char *filename = qdict_get_str(options, "filename");
 
     if (strstart(filename, "/dev/cdrom", NULL)) {
         if (find_cdrom(device_name, sizeof(device_name)) < 0)

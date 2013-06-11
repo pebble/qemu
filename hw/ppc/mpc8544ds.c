@@ -12,9 +12,9 @@
 #include "config.h"
 #include "qemu-common.h"
 #include "e500.h"
-#include "../boards.h"
+#include "hw/boards.h"
 #include "sysemu/device_tree.h"
-#include "hw/openpic.h"
+#include "hw/ppc/openpic.h"
 
 static void mpc8544ds_fixup_devtree(PPCE500Params *params, void *fdt)
 {

@@ -7,6 +7,7 @@ void cpu_save(QEMUFile *f, void *opaque)
     CPUPPCState *env = (CPUPPCState *)opaque;
     unsigned int i, j;
     uint32_t fpscr;
+    target_ulong xer;
 
     for (i = 0; i < 32; i++)
         qemu_put_betls(f, &env->gpr[i]);
@@ -18,7 +19,8 @@ void cpu_save(QEMUFile *f, void *opaque)
     qemu_put_betls(f, &env->ctr);
     for (i = 0; i < 8; i++)
         qemu_put_be32s(f, &env->crf[i]);
-    qemu_put_betls(f, &env->xer);
+    xer = cpu_read_xer(env);
+    qemu_put_betls(f, &xer);
     qemu_put_betls(f, &env->reserve_addr);
     qemu_put_betls(f, &env->msr);
     for (i = 0; i < 4; i++)
@@ -35,7 +37,7 @@ void cpu_save(QEMUFile *f, void *opaque)
     qemu_put_be32s(f, &fpscr);
     qemu_put_sbe32s(f, &env->access_type);
 #if defined(TARGET_PPC64)
-    qemu_put_betls(f, &env->asr);
+    qemu_put_betls(f, &env->spr[SPR_ASR]);
     qemu_put_sbe32s(f, &env->slb_nr);
 #endif
     qemu_put_betls(f, &env->spr[SPR_SDR1]);
@@ -76,7 +78,6 @@ void cpu_save(QEMUFile *f, void *opaque)
     for (i = 0; i < POWERPC_EXCP_NB; i++)
         qemu_put_betls(f, &env->excp_vectors[i]);
     qemu_put_betls(f, &env->excp_prefix);
-    qemu_put_betls(f, &env->hreset_excp_prefix);
     qemu_put_betls(f, &env->ivor_mask);
     qemu_put_betls(f, &env->ivpr_mask);
     qemu_put_betls(f, &env->hreset_vector);
@@ -93,6 +94,7 @@ int cpu_load(QEMUFile *f, void *opaque, int version_id)
     unsigned int i, j;
     target_ulong sdr1;
     uint32_t fpscr;
+    target_ulong xer;
 
     for (i = 0; i < 32; i++)
         qemu_get_betls(f, &env->gpr[i]);
@@ -104,7 +106,8 @@ int cpu_load(QEMUFile *f, void *opaque, int version_id)
     qemu_get_betls(f, &env->ctr);
     for (i = 0; i < 8; i++)
         qemu_get_be32s(f, &env->crf[i]);
-    qemu_get_betls(f, &env->xer);
+    qemu_get_betls(f, &xer);
+    cpu_write_xer(env, xer);
     qemu_get_betls(f, &env->reserve_addr);
     qemu_get_betls(f, &env->msr);
     for (i = 0; i < 4; i++)
@@ -121,7 +124,7 @@ int cpu_load(QEMUFile *f, void *opaque, int version_id)
     env->fpscr = fpscr;
     qemu_get_sbe32s(f, &env->access_type);
 #if defined(TARGET_PPC64)
-    qemu_get_betls(f, &env->asr);
+    qemu_get_betls(f, &env->spr[SPR_ASR]);
     qemu_get_sbe32s(f, &env->slb_nr);
 #endif
     qemu_get_betls(f, &sdr1);
@@ -163,7 +166,6 @@ int cpu_load(QEMUFile *f, void *opaque, int version_id)
     for (i = 0; i < POWERPC_EXCP_NB; i++)
         qemu_get_betls(f, &env->excp_vectors[i]);
     qemu_get_betls(f, &env->excp_prefix);
-    qemu_get_betls(f, &env->hreset_excp_prefix);
     qemu_get_betls(f, &env->ivor_mask);
     qemu_get_betls(f, &env->ivpr_mask);
     qemu_get_betls(f, &env->hreset_vector);

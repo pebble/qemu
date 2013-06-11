@@ -40,7 +40,19 @@
 #include <sys/time.h>
 #include <assert.h>
 #include <signal.h>
-#include <glib.h>
+#include "glib-compat.h"
+
+#if defined(__GLIBC__)
+# include <pty.h>
+#elif defined CONFIG_BSD
+# if defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__DragonFly__)
+#  include <libutil.h>
+# else
+#  include <util.h>
+# endif
+#elif defined CONFIG_SOLARIS
+# include <stropts.h>
+#endif
 
 #ifdef _WIN32
 #include "sysemu/os-win32.h"
@@ -84,20 +96,6 @@
 # error Unknown pointer size
 #endif
 
-#ifndef CONFIG_IOVEC
-#define CONFIG_IOVEC
-struct iovec {
-    void *iov_base;
-    size_t iov_len;
-};
-/*
- * Use the same value as Linux for now.
- */
-#define IOV_MAX		1024
-#else
-#include <sys/uio.h>
-#endif
-
 typedef int (*fprintf_function)(FILE *f, const char *fmt, ...)
     GCC_FMT_ATTR(2, 3);
 
@@ -122,16 +120,12 @@ static inline char *realpath(const char *path, char *resolved_path)
 void configure_icount(const char *option);
 extern int use_icount;
 
-/* FIXME: Remove NEED_CPU_H.  */
-#ifndef NEED_CPU_H
-
 #include "qemu/osdep.h"
 #include "qemu/bswap.h"
 
-#else
-
+/* FIXME: Remove NEED_CPU_H.  */
+#ifdef NEED_CPU_H
 #include "cpu.h"
-
 #endif /* !defined(NEED_CPU_H) */
 
 /* main function, renamed */
@@ -141,6 +135,18 @@ int qemu_main(int argc, char **argv, char **envp);
 
 void qemu_get_timedate(struct tm *tm, int offset);
 int qemu_timedate_diff(struct tm *tm);
+
+#if !GLIB_CHECK_VERSION(2, 20, 0)
+/*
+ * Glib before 2.20.0 doesn't implement g_poll, so wrap it to compile properly
+ * on older systems.
+ */
+static inline gint g_poll(GPollFD *fds, guint nfds, gint timeout)
+{
+    GMainContext *ctx = g_main_context_default();
+    return g_main_context_get_poll_func(ctx)(fds, nfds, timeout);
+}
+#endif
 
 /**
  * is_help_option:
@@ -429,5 +435,56 @@ int64_t pow2floor(int64_t value);
 
 int uleb128_encode_small(uint8_t *out, uint32_t n);
 int uleb128_decode_small(const uint8_t *in, uint32_t *n);
+
+/* unicode.c */
+int mod_utf8_codepoint(const char *s, size_t n, char **end);
+
+/*
+ * Hexdump a buffer to a file. An optional string prefix is added to every line
+ */
+
+void qemu_hexdump(const char *buf, FILE *fp, const char *prefix, size_t size);
+
+/* vector definitions */
+#ifdef __ALTIVEC__
+#include <altivec.h>
+/* The altivec.h header says we're allowed to undef these for
+ * C++ compatibility.  Here we don't care about C++, but we
+ * undef them anyway to avoid namespace pollution.
+ */
+#undef vector
+#undef pixel
+#undef bool
+#define VECTYPE        __vector unsigned char
+#define SPLAT(p)       vec_splat(vec_ld(0, p), 0)
+#define ALL_EQ(v1, v2) vec_all_eq(v1, v2)
+/* altivec.h may redefine the bool macro as vector type.
+ * Reset it to POSIX semantics. */
+#define bool _Bool
+#elif defined __SSE2__
+#include <emmintrin.h>
+#define VECTYPE        __m128i
+#define SPLAT(p)       _mm_set1_epi8(*(p))
+#define ALL_EQ(v1, v2) (_mm_movemask_epi8(_mm_cmpeq_epi8(v1, v2)) == 0xFFFF)
+#else
+#define VECTYPE        unsigned long
+#define SPLAT(p)       (*(p) * (~0UL / 255))
+#define ALL_EQ(v1, v2) ((v1) == (v2))
+#endif
+
+#define BUFFER_FIND_NONZERO_OFFSET_UNROLL_FACTOR 8
+static inline bool
+can_use_buffer_find_nonzero_offset(const void *buf, size_t len)
+{
+    return (len % (BUFFER_FIND_NONZERO_OFFSET_UNROLL_FACTOR
+                   * sizeof(VECTYPE)) == 0
+            && ((uintptr_t) buf) % sizeof(VECTYPE) == 0);
+}
+size_t buffer_find_nonzero_offset(const void *buf, size_t len);
+
+/*
+ * helper to parse debug environment variables
+ */
+int parse_debug_env(const char *name, int max, int initial);
 
 #endif

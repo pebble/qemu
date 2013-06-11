@@ -291,22 +291,22 @@ void helper_wrmsr(CPUX86State *env)
             uint64_t update_mask;
 
             update_mask = 0;
-            if (env->cpuid_ext2_features & CPUID_EXT2_SYSCALL) {
+            if (env->features[FEAT_8000_0001_EDX] & CPUID_EXT2_SYSCALL) {
                 update_mask |= MSR_EFER_SCE;
             }
-            if (env->cpuid_ext2_features & CPUID_EXT2_LM) {
+            if (env->features[FEAT_8000_0001_EDX] & CPUID_EXT2_LM) {
                 update_mask |= MSR_EFER_LME;
             }
-            if (env->cpuid_ext2_features & CPUID_EXT2_FFXSR) {
+            if (env->features[FEAT_8000_0001_EDX] & CPUID_EXT2_FFXSR) {
                 update_mask |= MSR_EFER_FFXSR;
             }
-            if (env->cpuid_ext2_features & CPUID_EXT2_NX) {
+            if (env->features[FEAT_8000_0001_EDX] & CPUID_EXT2_NX) {
                 update_mask |= MSR_EFER_NXE;
             }
-            if (env->cpuid_ext3_features & CPUID_EXT3_SVM) {
+            if (env->features[FEAT_8000_0001_ECX] & CPUID_EXT3_SVM) {
                 update_mask |= MSR_EFER_SVME;
             }
-            if (env->cpuid_ext2_features & CPUID_EXT2_FFXSR) {
+            if (env->features[FEAT_8000_0001_EDX] & CPUID_EXT2_FFXSR) {
                 update_mask |= MSR_EFER_FFXSR;
             }
             cpu_load_efer(env, (env->efer & ~update_mask) |
@@ -513,7 +513,7 @@ void helper_rdmsr(CPUX86State *env)
         val = env->mtrr_deftype;
         break;
     case MSR_MTRRcap:
-        if (env->cpuid_features & CPUID_MTRR) {
+        if (env->features[FEAT_1_EDX] & CPUID_MTRR) {
             val = MSR_MTRRcap_VCNT | MSR_MTRRcap_FIXRANGE_SUPPORT |
                 MSR_MTRRcap_WC_SUPPORTED;
         } else {
@@ -553,20 +553,25 @@ void helper_rdmsr(CPUX86State *env)
 }
 #endif
 
-static void do_hlt(CPUX86State *env)
+static void do_hlt(X86CPU *cpu)
 {
+    CPUState *cs = CPU(cpu);
+    CPUX86State *env = &cpu->env;
+
     env->hflags &= ~HF_INHIBIT_IRQ_MASK; /* needed if sti is just before */
-    env->halted = 1;
+    cs->halted = 1;
     env->exception_index = EXCP_HLT;
     cpu_loop_exit(env);
 }
 
 void helper_hlt(CPUX86State *env, int next_eip_addend)
 {
+    X86CPU *cpu = x86_env_get_cpu(env);
+
     cpu_svm_check_intercept_param(env, SVM_EXIT_HLT, 0);
     EIP += next_eip_addend;
 
-    do_hlt(env);
+    do_hlt(cpu);
 }
 
 void helper_monitor(CPUX86State *env, target_ulong ptr)
@@ -580,7 +585,8 @@ void helper_monitor(CPUX86State *env, target_ulong ptr)
 
 void helper_mwait(CPUX86State *env, int next_eip_addend)
 {
-    CPUState *cpu;
+    CPUState *cs;
+    X86CPU *cpu;
 
     if ((uint32_t)ECX != 0) {
         raise_exception(env, EXCP0D_GPF);
@@ -588,13 +594,14 @@ void helper_mwait(CPUX86State *env, int next_eip_addend)
     cpu_svm_check_intercept_param(env, SVM_EXIT_MWAIT, 0);
     EIP += next_eip_addend;
 
-    cpu = CPU(x86_env_get_cpu(env));
+    cpu = x86_env_get_cpu(env);
+    cs = CPU(cpu);
     /* XXX: not complete but not completely erroneous */
-    if (cpu->cpu_index != 0 || env->next_cpu != NULL) {
+    if (cs->cpu_index != 0 || env->next_cpu != NULL) {
         /* more than one CPU: do not sleep because another CPU may
            wake this one */
     } else {
-        do_hlt(env);
+        do_hlt(cpu);
     }
 }
 

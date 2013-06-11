@@ -1317,6 +1317,23 @@ static void dec_br(DisasContext *dc)
     /* Memory barrier.  */
     mbar = (dc->ir >> 16) & 31;
     if (mbar == 2 && dc->imm == 4) {
+        /* mbar IMM & 16 decodes to sleep.  */
+        if (dc->rd & 16) {
+            TCGv_i32 tmp_hlt = tcg_const_i32(EXCP_HLT);
+            TCGv_i32 tmp_1 = tcg_const_i32(1);
+
+            LOG_DIS("sleep\n");
+
+            t_sync_flags(dc);
+            tcg_gen_st_i32(tmp_1, cpu_env,
+                           -offsetof(MicroBlazeCPU, env)
+                           +offsetof(CPUState, halted));
+            tcg_gen_movi_tl(cpu_SR[SR_PC], dc->pc + 4);
+            gen_helper_raise_exception(cpu_env, tmp_hlt);
+            tcg_temp_free_i32(tmp_hlt);
+            tcg_temp_free_i32(tmp_1);
+            return;
+        }
         LOG_DIS("mbar %d\n", dc->rd);
         /* Break the TB.  */
         dc->cpustate_changed = 1;
@@ -1734,8 +1751,6 @@ gen_intermediate_code_internal(CPUMBState *env, TranslationBlock *tb,
     int num_insns;
     int max_insns;
 
-    qemu_log_try_set_file(stderr);
-
     pc_start = tb->pc;
     dc->env = env;
     dc->tb = tb;
@@ -1772,7 +1787,7 @@ gen_intermediate_code_internal(CPUMBState *env, TranslationBlock *tb,
     if (max_insns == 0)
         max_insns = CF_COUNT_MASK;
 
-    gen_icount_start();
+    gen_tb_start();
     do
     {
 #if SIM_COMPAT
@@ -1896,7 +1911,7 @@ gen_intermediate_code_internal(CPUMBState *env, TranslationBlock *tb,
                 break;
         }
     }
-    gen_icount_end(tb, num_insns);
+    gen_tb_end(tb, num_insns);
     *tcg_ctx.gen_opc_ptr = INDEX_op_end;
     if (search_pc) {
         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
@@ -1965,19 +1980,17 @@ void cpu_dump_state (CPUMBState *env, FILE *f, fprintf_function cpu_fprintf,
 MicroBlazeCPU *cpu_mb_init(const char *cpu_model)
 {
     MicroBlazeCPU *cpu;
-    static int tcg_initialized = 0;
-    int i;
 
     cpu = MICROBLAZE_CPU(object_new(TYPE_MICROBLAZE_CPU));
 
-    cpu_reset(CPU(cpu));
-    qemu_init_vcpu(&cpu->env);
+    object_property_set_bool(OBJECT(cpu), true, "realized", NULL);
 
-    if (tcg_initialized) {
-        return cpu;
-    }
+    return cpu;
+}
 
-    tcg_initialized = 1;
+void mb_tcg_init(void)
+{
+    int i;
 
     cpu_env = tcg_global_reg_new_ptr(TCG_AREG0, "env");
 
@@ -2008,8 +2021,6 @@ MicroBlazeCPU *cpu_mb_init(const char *cpu_model)
     }
 #define GEN_HELPER 2
 #include "helper.h"
-
-    return cpu;
 }
 
 void restore_state_to_opc(CPUMBState *env, TranslationBlock *tb, int pc_pos)

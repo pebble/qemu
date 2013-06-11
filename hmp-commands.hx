@@ -295,14 +295,14 @@ ETEXI
         .name       = "log",
         .args_type  = "items:s",
         .params     = "item1[,...]",
-        .help       = "activate logging of the specified items to '/tmp/qemu.log'",
+        .help       = "activate logging of the specified items",
         .mhandler.cmd = do_log,
     },
 
 STEXI
 @item log @var{item1}[,...]
 @findex log
-Activate logging of the specified items to @file{/tmp/qemu.log}.
+Activate logging of the specified items.
 ETEXI
 
     {
@@ -736,7 +736,6 @@ info mice
 @end example
 ETEXI
 
-#ifdef HAS_AUDIO
     {
         .name       = "wavcapture",
         .args_type  = "path:F,freq:i?,bits:i?,nchannels:i?",
@@ -744,7 +743,6 @@ ETEXI
         .help       = "capture audio to a wave file (default frequency=44100 bits=16 channels=2)",
         .mhandler.cmd = do_wav_capture,
     },
-#endif
 STEXI
 @item wavcapture @var{filename} [@var{frequency} [@var{bits} [@var{channels}]]]
 @findex wavcapture
@@ -759,7 +757,6 @@ Defaults:
 @end itemize
 ETEXI
 
-#ifdef HAS_AUDIO
     {
         .name       = "stopcapture",
         .args_type  = "n:i",
@@ -767,7 +764,6 @@ ETEXI
         .help       = "stop capture",
         .mhandler.cmd = do_stop_capture,
     },
-#endif
 STEXI
 @item stopcapture @var{index}
 @findex stopcapture
@@ -1169,7 +1165,7 @@ ETEXI
     {
         .name       = "netdev_add",
         .args_type  = "netdev:O",
-        .params     = "[user|tap|socket],id=str[,prop=value][,...]",
+        .params     = "[user|tap|socket|hubport],id=str[,prop=value][,...]",
         .help       = "add host network device",
         .mhandler.cmd = hmp_netdev_add,
     },
@@ -1522,38 +1518,37 @@ passed since 1970, i.e. unix epoch.
 @end table
 ETEXI
 
-HXCOMM Disabled for now, because it isn't built on top of QMP's chardev-add
-HXCOMM     {
-HXCOMM         .name       = "chardev-add",
-HXCOMM         .args_type  = "args:s",
-HXCOMM         .params     = "args",
-HXCOMM         .help       = "add chardev",
-HXCOMM         .mhandler.cmd = hmp_chardev_add,
-HXCOMM     },
-HXCOMM
-HXCOMM STEXI
-HXCOMM @item chardev_add args
-HXCOMM @findex chardev_add
-HXCOMM
-HXCOMM chardev_add accepts the same parameters as the -chardev command line switch.
-HXCOMM
-HXCOMM ETEXI
-HXCOMM
-HXCOMM     {
-HXCOMM         .name       = "chardev-remove",
-HXCOMM         .args_type  = "id:s",
-HXCOMM         .params     = "id",
-HXCOMM         .help       = "remove chardev",
-HXCOMM         .mhandler.cmd = hmp_chardev_remove,
-HXCOMM     },
-HXCOMM
-HXCOMM STEXI
-HXCOMM @item chardev_remove id
-HXCOMM @findex chardev_remove
-HXCOMM
-HXCOMM Removes the chardev @var{id}.
-HXCOMM
-HXCOMM ETEXI
+    {
+        .name       = "chardev-add",
+        .args_type  = "args:s",
+        .params     = "args",
+        .help       = "add chardev",
+        .mhandler.cmd = hmp_chardev_add,
+    },
+
+STEXI
+@item chardev_add args
+@findex chardev_add
+
+chardev_add accepts the same parameters as the -chardev command line switch.
+
+ETEXI
+
+    {
+        .name       = "chardev-remove",
+        .args_type  = "id:s",
+        .params     = "id",
+        .help       = "remove chardev",
+        .mhandler.cmd = hmp_chardev_remove,
+    },
+
+STEXI
+@item chardev_remove id
+@findex chardev_remove
+
+Removes the chardev @var{id}.
+
+ETEXI
 
     {
         .name       = "info",
@@ -1642,6 +1637,8 @@ show device tree
 show qdev device model list
 @item info roms
 show roms
+@item info tpm
+show the TPM device
 @end table
 ETEXI
 

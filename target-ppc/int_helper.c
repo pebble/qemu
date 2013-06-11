@@ -25,24 +25,6 @@
 /* Fixed point operations helpers */
 #if defined(TARGET_PPC64)
 
-/* multiply high word */
-uint64_t helper_mulhd(uint64_t arg1, uint64_t arg2)
-{
-    uint64_t tl, th;
-
-    muls64(&tl, &th, arg1, arg2);
-    return th;
-}
-
-/* multiply high word unsigned */
-uint64_t helper_mulhdu(uint64_t arg1, uint64_t arg2)
-{
-    uint64_t tl, th;
-
-    mulu64(&tl, &th, arg1, arg2);
-    return th;
-}
-
 uint64_t helper_mulldo(CPUPPCState *env, uint64_t arg1, uint64_t arg2)
 {
     int64_t th;
@@ -51,9 +33,9 @@ uint64_t helper_mulldo(CPUPPCState *env, uint64_t arg1, uint64_t arg2)
     muls64(&tl, (uint64_t *)&th, arg1, arg2);
     /* If th != 0 && th != -1, then we had an overflow */
     if (likely((uint64_t)(th + 1) <= 1)) {
-        env->xer &= ~(1 << XER_OV);
+        env->ov = 0;
     } else {
-        env->xer |= (1 << XER_OV) | (1 << XER_SO);
+        env->so = env->ov = 1;
     }
     return (int64_t)tl;
 }
@@ -71,6 +53,21 @@ target_ulong helper_cntlzd(target_ulong t)
 }
 #endif
 
+target_ulong helper_cmpb(target_ulong rs, target_ulong rb)
+{
+    target_ulong mask = 0xff;
+    target_ulong ra = 0;
+    int i;
+
+    for (i = 0; i < sizeof(target_ulong); i++) {
+        if ((rs & mask) == (rb & mask)) {
+            ra |= mask;
+        }
+        mask <<= 8;
+    }
+    return ra;
+}
+
 /* shift right arithmetic helper */
 target_ulong helper_sraw(CPUPPCState *env, target_ulong value,
                          target_ulong shift)
@@ -82,21 +79,17 @@ target_ulong helper_sraw(CPUPPCState *env, target_ulong value,
             shift &= 0x1f;
             ret = (int32_t)value >> shift;
             if (likely(ret >= 0 || (value & ((1 << shift) - 1)) == 0)) {
-                env->xer &= ~(1 << XER_CA);
+                env->ca = 0;
             } else {
-                env->xer |= (1 << XER_CA);
+                env->ca = 1;
             }
         } else {
             ret = (int32_t)value;
-            env->xer &= ~(1 << XER_CA);
+            env->ca = 0;
         }
     } else {
         ret = (int32_t)value >> 31;
-        if (ret) {
-            env->xer |= (1 << XER_CA);
-        } else {
-            env->xer &= ~(1 << XER_CA);
-        }
+        env->ca = (ret != 0);
     }
     return (target_long)ret;
 }
@@ -112,21 +105,17 @@ target_ulong helper_srad(CPUPPCState *env, target_ulong value,
             shift &= 0x3f;
             ret = (int64_t)value >> shift;
             if (likely(ret >= 0 || (value & ((1 << shift) - 1)) == 0)) {
-                env->xer &= ~(1 << XER_CA);
+                env->ca = 0;
             } else {
-                env->xer |= (1 << XER_CA);
+                env->ca = 1;
             }
         } else {
             ret = (int64_t)value;
-            env->xer &= ~(1 << XER_CA);
+            env->ca = 0;
         }
     } else {
         ret = (int64_t)value >> 63;
-        if (ret) {
-            env->xer |= (1 << XER_CA);
-        } else {
-            env->xer &= ~(1 << XER_CA);
-        }
+        env->ca = (ret != 0);
     }
     return ret;
 }
@@ -206,16 +195,16 @@ target_ulong helper_divo(CPUPPCState *env, target_ulong arg1,
 
     if (((int32_t)tmp == INT32_MIN && (int32_t)arg2 == (int32_t)-1) ||
         (int32_t)arg2 == 0) {
-        env->xer |= (1 << XER_OV) | (1 << XER_SO);
+        env->so = env->ov = 1;
         env->spr[SPR_MQ] = 0;
         return INT32_MIN;
     } else {
         env->spr[SPR_MQ] = tmp % arg2;
         tmp /= (int32_t)arg2;
         if ((int32_t)tmp != tmp) {
-            env->xer |= (1 << XER_OV) | (1 << XER_SO);
+            env->so = env->ov = 1;
         } else {
-            env->xer &= ~(1 << XER_OV);
+            env->ov = 0;
         }
         return tmp;
     }
@@ -239,11 +228,11 @@ target_ulong helper_divso(CPUPPCState *env, target_ulong arg1,
 {
     if (((int32_t)arg1 == INT32_MIN && (int32_t)arg2 == (int32_t)-1) ||
         (int32_t)arg2 == 0) {
-        env->xer |= (1 << XER_OV) | (1 << XER_SO);
+        env->so = env->ov = 1;
         env->spr[SPR_MQ] = 0;
         return INT32_MIN;
     } else {
-        env->xer &= ~(1 << XER_OV);
+        env->ov = 0;
         env->spr[SPR_MQ] = (int32_t)arg1 % (int32_t)arg2;
         return (int32_t)arg1 / (int32_t)arg2;
     }

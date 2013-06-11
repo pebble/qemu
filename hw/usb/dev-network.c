@@ -27,6 +27,7 @@
 #include "hw/usb.h"
 #include "hw/usb/desc.h"
 #include "net/net.h"
+#include "qapi/qmp/qerror.h"
 #include "qemu/queue.h"
 #include "qemu/config-file.h"
 #include "sysemu/sysemu.h"
@@ -855,7 +856,7 @@ static void *rndis_queue_response(USBNetState *s, unsigned int length)
             g_malloc0(sizeof(struct rndis_response) + length);
 
     if (QTAILQ_EMPTY(&s->rndis_resp)) {
-        usb_wakeup(s->intr);
+        usb_wakeup(s->intr, 0);
     }
 
     QTAILQ_INSERT_TAIL(&s->rndis_resp, r, entries);

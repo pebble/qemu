@@ -33,6 +33,7 @@
 
 /**
  * MicroBlazeCPUClass:
+ * @parent_realize: The parent class' realize handler.
  * @parent_reset: The parent class' reset handler.
  *
  * A MicroBlaze CPU model.
@@ -42,6 +43,7 @@ typedef struct MicroBlazeCPUClass {
     CPUClass parent_class;
     /*< public >*/
 
+    DeviceRealize parent_realize;
     void (*parent_reset)(CPUState *cpu);
 } MicroBlazeCPUClass;
 
@@ -54,6 +56,7 @@ typedef struct MicroBlazeCPUClass {
 typedef struct MicroBlazeCPU {
     /*< private >*/
     CPUState parent_obj;
+    uint32_t base_vectors;
     /*< public >*/
 
     CPUMBState env;
@@ -66,5 +69,8 @@ static inline MicroBlazeCPU *mb_env_get_cpu(CPUMBState *env)
 
 #define ENV_GET_CPU(e) CPU(mb_env_get_cpu(e))
 
+#define ENV_OFFSET offsetof(MicroBlazeCPU, env)
+
+void mb_cpu_do_interrupt(CPUState *cs);
 
 #endif

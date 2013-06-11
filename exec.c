@@ -31,7 +31,7 @@
 #include "hw/qdev.h"
 #include "qemu/osdep.h"
 #include "sysemu/kvm.h"
-#include "hw/xen.h"
+#include "hw/xen/xen.h"
 #include "qemu/timer.h"
 #include "qemu/config-file.h"
 #include "exec/memory.h"
@@ -219,16 +219,16 @@ void cpu_exec_init_all(void)
 #endif
 }
 
-#if defined(CPU_SAVE_VERSION) && !defined(CONFIG_USER_ONLY)
+#if !defined(CONFIG_USER_ONLY)
 
 static int cpu_common_post_load(void *opaque, int version_id)
 {
-    CPUArchState *env = opaque;
+    CPUState *cpu = opaque;
 
     /* 0x01 was CPU_INTERRUPT_EXIT. This line can be removed when the
        version_id is increased. */
-    env->interrupt_request &= ~0x01;
-    tlb_flush(env, 1);
+    cpu->interrupt_request &= ~0x01;
+    tlb_flush(cpu->env_ptr, 1);
 
     return 0;
 }
@@ -240,11 +240,13 @@ static const VMStateDescription vmstate_cpu_common = {
     .minimum_version_id_old = 1,
     .post_load = cpu_common_post_load,
     .fields      = (VMStateField []) {
-        VMSTATE_UINT32(halted, CPUArchState),
-        VMSTATE_UINT32(interrupt_request, CPUArchState),
+        VMSTATE_UINT32(halted, CPUState),
+        VMSTATE_UINT32(interrupt_request, CPUState),
         VMSTATE_END_OF_LIST()
     }
 };
+#else
+#define vmstate_cpu_common vmstate_dummy
 #endif
 
 CPUState *qemu_get_cpu(int index)
@@ -260,12 +262,23 @@ CPUState *qemu_get_cpu(int index)
         env = env->next_cpu;
     }
 
-    return cpu;
+    return env ? cpu : NULL;
+}
+
+void qemu_for_each_cpu(void (*func)(CPUState *cpu, void *data), void *data)
+{
+    CPUArchState *env = first_cpu;
+
+    while (env) {
+        func(ENV_GET_CPU(env), data);
+        env = env->next_cpu;
+    }
 }
 
 void cpu_exec_init(CPUArchState *env)
 {
     CPUState *cpu = ENV_GET_CPU(env);
+    CPUClass *cc = CPU_GET_CLASS(cpu);
     CPUArchState **penv;
     int cpu_index;
 
@@ -290,11 +303,15 @@ void cpu_exec_init(CPUArchState *env)
 #if defined(CONFIG_USER_ONLY)
     cpu_list_unlock();
 #endif
+    vmstate_register(NULL, cpu_index, &vmstate_cpu_common, cpu);
 #if defined(CPU_SAVE_VERSION) && !defined(CONFIG_USER_ONLY)
-    vmstate_register(NULL, cpu_index, &vmstate_cpu_common, env);
     register_savevm(NULL, "cpu", cpu_index, CPU_SAVE_VERSION,
                     cpu_save, cpu_load, env);
+    assert(cc->vmsd == NULL);
 #endif
+    if (cc->vmsd != NULL) {
+        vmstate_register(NULL, cpu_index, cc->vmsd, cpu);
+    }
 }
 
 #if defined(TARGET_HAS_ICE)
@@ -485,15 +502,12 @@ void cpu_single_step(CPUArchState *env, int enabled)
 #endif
 }
 
-void cpu_reset_interrupt(CPUArchState *env, int mask)
-{
-    env->interrupt_request &= ~mask;
-}
-
 void cpu_exit(CPUArchState *env)
 {
-    env->exit_request = 1;
-    cpu_unlink_tb(env);
+    CPUState *cpu = ENV_GET_CPU(env);
+
+    cpu->exit_request = 1;
+    cpu->tcg_exit_req = 1;
 }
 
 void cpu_abort(CPUArchState *env, const char *fmt, ...)
@@ -842,6 +856,8 @@ static void *file_ram_alloc(RAMBlock *block,
                             const char *path)
 {
     char *filename;
+    char *sanitized_name;
+    char *c;
     void *area;
     int fd;
 #ifdef MAP_POPULATE
@@ -863,7 +879,16 @@ static void *file_ram_alloc(RAMBlock *block,
         return NULL;
     }
 
-    filename = g_strdup_printf("%s/qemu_back_mem.XXXXXX", path);
+    /* Make name safe to use with mkstemp by replacing '/' with '_'. */
+    sanitized_name = g_strdup(block->mr->name);
+    for (c = sanitized_name; *c != '\0'; c++) {
+        if (*c == '/')
+            *c = '_';
+    }
+
+    filename = g_strdup_printf("%s/qemu_back_mem.%s.XXXXXX", path,
+                               sanitized_name);
+    g_free(sanitized_name);
 
     fd = mkstemp(filename);
     if (fd < 0) {
@@ -909,6 +934,8 @@ static ram_addr_t find_ram_offset(ram_addr_t size)
 {
     RAMBlock *block, *next_block;
     ram_addr_t offset = RAM_ADDR_MAX, mingap = RAM_ADDR_MAX;
+
+    assert(size != 0); /* it would hand out same offset multiple times */
 
     if (QTAILQ_EMPTY(&ram_list.blocks))
         return 0;
@@ -1035,7 +1062,7 @@ ram_addr_t qemu_ram_alloc_from_ptr(ram_addr_t size, void *host,
 #if defined (__linux__) && !defined(TARGET_S390X)
             new_block->host = file_ram_alloc(new_block, size, mem_path);
             if (!new_block->host) {
-                new_block->host = qemu_vmalloc(size);
+                new_block->host = qemu_anon_ram_alloc(size);
                 memory_try_enable_merging(new_block->host, size);
             }
 #else
@@ -1047,9 +1074,9 @@ ram_addr_t qemu_ram_alloc_from_ptr(ram_addr_t size, void *host,
                 xen_ram_alloc(new_block->offset, size, mr);
             } else if (kvm_enabled()) {
                 /* some s390/kvm configurations have special constraints */
-                new_block->host = kvm_vmalloc(size);
+                new_block->host = kvm_ram_alloc(size);
             } else {
-                new_block->host = qemu_vmalloc(size);
+                new_block->host = qemu_anon_ram_alloc(size);
             }
             memory_try_enable_merging(new_block->host, size);
         }
@@ -1129,21 +1156,17 @@ void qemu_ram_free(ram_addr_t addr)
                     munmap(block->host, block->length);
                     close(block->fd);
                 } else {
-                    qemu_vfree(block->host);
+                    qemu_anon_ram_free(block->host, block->length);
                 }
 #else
                 abort();
 #endif
             } else {
-#if defined(TARGET_S390X) && defined(CONFIG_KVM)
-                munmap(block->host, block->length);
-#else
                 if (xen_enabled()) {
                     xen_invalidate_map_cache_entry(block->host);
                 } else {
-                    qemu_vfree(block->host);
+                    qemu_anon_ram_free(block->host, block->length);
                 }
-#endif
             }
             g_free(block);
             break;
@@ -1463,7 +1486,7 @@ static void check_watchpoint(int offset, int len_mask, int flags)
         /* We re-entered the check after replacing the TB. Now raise
          * the debug interrupt so that is will trigger after the
          * current instruction. */
-        cpu_interrupt(env, CPU_INTERRUPT_DEBUG);
+        cpu_interrupt(ENV_GET_CPU(env), CPU_INTERRUPT_DEBUG);
         return;
     }
     vaddr = (env->mem_io_vaddr & TARGET_PAGE_MASK) + offset;

@@ -1142,7 +1142,7 @@ struct DisasInsn {
 };
 
 /* ====================================================================== */
-/* Miscelaneous helpers, used by several operations.  */
+/* Miscellaneous helpers, used by several operations.  */
 
 static void help_l2_shift(DisasContext *s, DisasFields *f,
                           DisasOps *o, int mask)
@@ -2566,8 +2566,7 @@ static ExitStatus op_mul(DisasContext *s, DisasOps *o)
 
 static ExitStatus op_mul128(DisasContext *s, DisasOps *o)
 {
-    gen_helper_mul128(o->out, cpu_env, o->in1, o->in2);
-    return_low128(o->out2);
+    tcg_gen_mulu2_i64(o->out2, o->out, o->in1, o->in2);
     return NO_EXIT;
 }
 
@@ -3089,6 +3088,7 @@ static ExitStatus op_srnm(DisasContext *s, DisasOps *o)
         break;
     case 0xb9: /* SRNMT */
         pos = 4, len = 3;
+        break;
     default:
         tcg_abort();
     }
@@ -3806,7 +3806,7 @@ static void cout_tm64(DisasContext *s, DisasOps *o)
 }
 
 /* ====================================================================== */
-/* The "PREPeration" generators.  These initialize the DisasOps.OUT fields
+/* The "PREParation" generators.  These initialize the DisasOps.OUT fields
    with the TCG register to which we will write.  Used in combination with
    the "wout" generators, in some cases we need a new temporary, and in
    some cases we can write to a TCG global.  */
@@ -4770,7 +4770,7 @@ static inline void gen_intermediate_code_internal(CPUS390XState *env,
         max_insns = CF_COUNT_MASK;
     }
 
-    gen_icount_start();
+    gen_tb_start();
 
     do {
         if (search_pc) {
@@ -4846,7 +4846,7 @@ static inline void gen_intermediate_code_internal(CPUS390XState *env,
         abort();
     }
 
-    gen_icount_end(tb, num_insns);
+    gen_tb_end(tb, num_insns);
     *tcg_ctx.gen_opc_ptr = INDEX_op_end;
     if (search_pc) {
         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;

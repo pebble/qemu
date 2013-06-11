@@ -78,6 +78,11 @@ typedef struct MchkQueue {
     uint16_t type;
 } MchkQueue;
 
+/* Defined values for CPUS390XState.runtime_reg_dirty_mask */
+#define KVM_S390_RUNTIME_DIRTY_NONE     0
+#define KVM_S390_RUNTIME_DIRTY_PARTIAL  1
+#define KVM_S390_RUNTIME_DIRTY_FULL     2
+
 typedef struct CPUS390XState {
     uint64_t regs[16];     /* GP registers */
     CPU_DoubleU fregs[16]; /* FP registers */
@@ -120,6 +125,13 @@ typedef struct CPUS390XState {
     uint64_t ckc;
     uint64_t cputm;
     uint32_t todpr;
+
+    /* on S390 the runtime register set has two dirty states:
+     * a partial dirty state in which only the registers that
+     * are needed all the time are fetched. And a fully dirty
+     * state in which all runtime registers are fetched.
+     */
+    uint32_t runtime_reg_dirty_mask;
 
     CPU_COMMON
 
@@ -315,8 +327,6 @@ static inline int get_ilen(uint8_t opc)
 S390CPU *cpu_s390x_init(const char *cpu_model);
 void s390x_translate_init(void);
 int cpu_s390x_exec(CPUS390XState *s);
-void cpu_s390x_close(CPUS390XState *s);
-void do_interrupt (CPUS390XState *env);
 
 /* you can call this signal handler from your SIGBUS and SIGSEGV
    signal handlers to inform the virtual CPU of exceptions. non zero
@@ -405,7 +415,7 @@ SubchDev *css_find_subch(uint8_t m, uint8_t cssid, uint8_t ssid,
 bool css_subch_visible(SubchDev *sch);
 void css_conditional_io_interrupt(SubchDev *sch);
 int css_do_stsch(SubchDev *sch, SCHIB *schib);
-bool css_schid_final(uint8_t cssid, uint8_t ssid, uint16_t schid);
+bool css_schid_final(int m, uint8_t cssid, uint8_t ssid, uint16_t schid);
 int css_do_msch(SubchDev *sch, SCHIB *schib);
 int css_do_xsch(SubchDev *sch);
 int css_do_csch(SubchDev *sch);
@@ -993,7 +1003,7 @@ static inline void cpu_inject_ext(S390CPU *cpu, uint32_t code, uint32_t param,
     env->ext_queue[env->ext_index].param64 = param64;
 
     env->pending_int |= INTERRUPT_EXT;
-    cpu_interrupt(env, CPU_INTERRUPT_HARD);
+    cpu_interrupt(CPU(cpu), CPU_INTERRUPT_HARD);
 }
 
 static inline void cpu_inject_io(S390CPU *cpu, uint16_t subchannel_id,
@@ -1017,7 +1027,7 @@ static inline void cpu_inject_io(S390CPU *cpu, uint16_t subchannel_id,
     env->io_queue[env->io_index[isc]][isc].word = io_int_word;
 
     env->pending_int |= INTERRUPT_IO;
-    cpu_interrupt(env, CPU_INTERRUPT_HARD);
+    cpu_interrupt(CPU(cpu), CPU_INTERRUPT_HARD);
 }
 
 static inline void cpu_inject_crw_mchk(S390CPU *cpu)
@@ -1035,14 +1045,15 @@ static inline void cpu_inject_crw_mchk(S390CPU *cpu)
     env->mchk_queue[env->mchk_index].type = 1;
 
     env->pending_int |= INTERRUPT_MCHK;
-    cpu_interrupt(env, CPU_INTERRUPT_HARD);
+    cpu_interrupt(CPU(cpu), CPU_INTERRUPT_HARD);
 }
 
 static inline bool cpu_has_work(CPUState *cpu)
 {
-    CPUS390XState *env = &S390_CPU(cpu)->env;
+    S390CPU *s390_cpu = S390_CPU(cpu);
+    CPUS390XState *env = &s390_cpu->env;
 
-    return (env->interrupt_request & CPU_INTERRUPT_HARD) &&
+    return (cpu->interrupt_request & CPU_INTERRUPT_HARD) &&
         (env->psw.mask & PSW_MASK_EXT);
 }
 
@@ -1069,6 +1080,7 @@ void kvm_s390_io_interrupt(S390CPU *cpu, uint16_t subchannel_id,
                            uint32_t io_int_word);
 void kvm_s390_crw_mchk(S390CPU *cpu);
 void kvm_s390_enable_css_support(S390CPU *cpu);
+int kvm_s390_get_registers_partial(CPUState *cpu);
 #else
 static inline void kvm_s390_io_interrupt(S390CPU *cpu,
                                         uint16_t subchannel_id,
@@ -1082,6 +1094,10 @@ static inline void kvm_s390_crw_mchk(S390CPU *cpu)
 }
 static inline void kvm_s390_enable_css_support(S390CPU *cpu)
 {
+}
+static inline int kvm_s390_get_registers_partial(CPUState *cpu)
+{
+    return -ENOSYS;
 }
 #endif
 
