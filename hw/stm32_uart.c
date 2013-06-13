@@ -546,7 +546,6 @@ static void stm32_uart_USART_DR_write(Stm32Uart *s, uint32_t new_value)
         s->check_tx_pin_callback(s);
     }
 
-printf("%c", new_value); /* XXX hack to see output */
     if(s->USART_SR_TC) {
         /* If the Transmission Complete bit is set, it means the USART is not
          * currently transmitting.  This means, a transmission can immediately
