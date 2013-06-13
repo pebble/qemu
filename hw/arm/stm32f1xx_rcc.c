@@ -21,6 +21,7 @@
  */
 
 #include "stm32f1xx_rcc.h"
+#include "qemu/timer.h"
 #include <stdio.h>
 
 
