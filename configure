@@ -2160,7 +2160,7 @@ fi
 if test "$mingw32" = "yes" ; then
     curses_list="-lpdcurses"
 else
-    curses_list="-lncurses:-lcurses:$($pkg_config --libs ncurses 2>/dev/null)"
+    curses_list="$($pkg_config --libs ncurses 2>/dev/null):-lncurses:-lcurses"
 fi
 
 if test "$curses" != "no" ; then
@@ -4107,16 +4107,7 @@ if test "$gcov" = "yes" ; then
 fi
 
 # generate list of library paths for linker script
-
 $ld --verbose -v 2> /dev/null | grep SEARCH_DIR > ${config_host_ld}
-
-if test -f ${config_host_ld}~ ; then
-  if cmp -s $config_host_ld ${config_host_ld}~ ; then
-    mv ${config_host_ld}~ $config_host_ld
-  else
-    rm ${config_host_ld}~
-  fi
-fi
 
 # use included Linux headers
 if test "$linux" = "yes" ; then
