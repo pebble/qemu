@@ -25,7 +25,6 @@
 # include <scsi/sg.h>
 #endif
 #include "hw/virtio/virtio-bus.h"
-    VMChangeStateEntry *change;
 
 typedef struct VirtIOBlockReq
 {
