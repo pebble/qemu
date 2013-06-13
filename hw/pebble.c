@@ -22,6 +22,7 @@
 
 #include "stm32f2xx.h"
 #include "hw/ssi.h"
+#include "sysemu/sysemu.h"
 #include "boards.h"
 
 static void pebble1_init(QEMUMachineInitArgs *args) {
@@ -44,6 +45,11 @@ static void pebble1_init(QEMUMachineInitArgs *args) {
     spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[1], "ssi");
     DeviceState *display_dev = ssi_create_slave_no_init(spi, "sm-lcd");
     qdev_init_nofail(display_dev);
+
+    /* UARTs */
+    stm32_uart_connect(uart[0], serial_hds[0], 0);
+    stm32_uart_connect(uart[1], serial_hds[1], 0);
+    stm32_uart_connect(uart[2], serial_hds[2], 0); /* Debug */
 }
 
 static QEMUMachine pebble1_machine = {

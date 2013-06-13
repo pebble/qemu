@@ -139,6 +139,7 @@ void stm32f2xx_init(
 //        qdev_prop_set_ptr(uart_dev, "stm32_check_tx_pin_callback", (void *)stm32_afio_uart_check_tx_pin_callback);
         stm32_init_periph(uart_dev, periph, uart_desc[i].addr,
           pic[uart_desc[i].irq_idx]);
+        stm32_uart[i] = (Stm32Uart *)uart_dev;
     }
 
 
