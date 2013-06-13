@@ -61,6 +61,12 @@ the _c_ontinue command is necessary to start the virtual CPU.
 ## QEMU Docs
 Read original the documentation in qemu-doc.html or on http://wiki.qemu.org
 
+## QEMU Modifications
+This emulator consists largely of new hardware device models; it includes
+only minor changes to existing QEMU functionality.
+
+The changes can be reviewed by running `git diff --diff-filter=M v1.5.0-backports`.
+
 ## License
 
 The following points clarify the QEMU license:
