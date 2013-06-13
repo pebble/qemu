@@ -37,8 +37,7 @@ static void pebble1_init(QEMUMachineInitArgs *args) {
 
     /* SPI flash */
     spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[0], "ssi");
-    spi_flash = ssi_create_slave_no_init(spi, "m25p80");
-    qdev_prop_set_string(spi_flash, "partname", "n25q032a");
+    spi_flash = ssi_create_slave_no_init(spi, "n25q032a");
     qdev_init_nofail(spi_flash);
 
     /* Display */
