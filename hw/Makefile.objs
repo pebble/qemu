@@ -32,4 +32,3 @@ common-obj-y += $(devices-dirs-y)
 obj-y += $(devices-dirs-y)
 hw-obj-y += clktree.o
 
-common-obj-$(CONFIG_LS013B7DH01) += ls013b7dh01.o
