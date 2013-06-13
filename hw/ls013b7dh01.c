@@ -50,7 +50,7 @@ typedef enum {
 
 typedef struct {
     SSISlave ssidev;
-    DisplayState *ds;
+    QemuConsole *con;
     bool redraw;
     uint8_t framebuffer[NUM_ROWS * NUM_COL_BYTES];
     int fbindex;
@@ -108,6 +108,7 @@ sm_lcd_transfer(SSISlave *dev, uint32_t data)
 static void sm_lcd_update_display(void *arg)
 {
     lcd_state *s = arg;
+    DisplaySurface *surface = qemu_console_surface(s->con);
 
     uint8_t *d;
     uint32_t colour_on, colour_off, colour;
@@ -117,7 +118,7 @@ static void sm_lcd_update_display(void *arg)
         return;
     }
 
-    bpp = ds_get_bits_per_pixel(s->ds);
+    bpp = surface_bits_per_pixel(surface);
     /* set colours according to bpp */
     switch (bpp) {
     case 8:
@@ -143,7 +144,7 @@ static void sm_lcd_update_display(void *arg)
         return;
     }
 
-    d = ds_get_data(s->ds);
+    d = surface_data(surface);
     for (y = 0; y < NUM_ROWS; y++) {
         for (x = 0; x < NUM_COLS; x++) {
             /* Rotate display - installed 'upside-down' in pebble. */
@@ -171,7 +172,7 @@ static void sm_lcd_update_display(void *arg)
         }
     }
 
-    dpy_gfx_update(s->ds, 0, 0, NUM_COLS, NUM_ROWS);
+    dpy_gfx_update(s->con, 0, 0, NUM_COLS, NUM_ROWS);
     s->redraw = false;
 }
 
@@ -182,16 +183,16 @@ static void sm_lcd_invalidate_display(void *arg)
 }
 
 static const GraphicHwOps sm_lcd_ops = {
-    .invalidate = sm_lcd_update_display,
-    .gfx_update = sm_lcd_invalidate_display,
+    .gfx_update = sm_lcd_update_display,
+    .invalidate = sm_lcd_invalidate_display,
 };
 
 static int sm_lcd_init(SSISlave *dev)
 {
     lcd_state *s = FROM_SSI_SLAVE(lcd_state, dev);
 
-    s->ds = graphic_console_init(DEVICE(dev), &sm_lcd_ops, s);
-    qemu_console_resize(s->ds, NUM_COLS, NUM_ROWS);
+    s->con = graphic_console_init(DEVICE(dev), &sm_lcd_ops, s);
+    qemu_console_resize(s->con, NUM_COLS, NUM_ROWS);
     return 0;
 }
 
