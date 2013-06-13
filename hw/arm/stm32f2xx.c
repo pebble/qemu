@@ -23,8 +23,8 @@
 #include "stm32f2xx.h"
 #include "exec/address-spaces.h"
 #include "exec/memory.h"
-#include "ssi.h"
-#include "flash.h"
+#include "hw/ssi.h"
+#include "hw/block/flash.h"
 #include "sysemu/blockdev.h" // drive_get
 
 static const char *stm32f2xx_periph_name_arr[] = {

@@ -23,7 +23,7 @@
  * QEMU model of the stm32f2xx ADC.
  */
 
-#include "sysbus.h"
+#include "hw/sysbus.h"
 
 /* Per-ADC registers */
 #define R_ADC_SR             (0x00 / 4)

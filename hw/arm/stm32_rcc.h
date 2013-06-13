@@ -1,5 +1,5 @@
-#include "sysbus.h"
-#include "clktree.h"
+#include "hw/sysbus.h"
+#include "../clktree.h"
 #include "stm32.h"
 
 /** RCC Base data structure */

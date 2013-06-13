@@ -21,7 +21,7 @@
  */
 /* use PL061 for inspiration. */
 
-#include "sysbus.h"
+#include "hw/sysbus.h"
 #include "stm32.h"
 
 

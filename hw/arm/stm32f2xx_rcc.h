@@ -1,5 +1,5 @@
-#include "sysbus.h"
-#include "clktree.h"
+#include "hw/sysbus.h"
+#include "../clktree.h"
 #include "stm32f2xx.h"
 #include "stm32_rcc.h"
 

@@ -23,7 +23,7 @@
 #include "stm32f2xx.h"
 #include "hw/ssi.h"
 #include "sysemu/sysemu.h"
-#include "boards.h"
+#include "hw/boards.h"
 
 static void pebble1_init(QEMUMachineInitArgs *args) {
     Stm32Gpio *gpio[STM32F2XX_GPIO_COUNT];

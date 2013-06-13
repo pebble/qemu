@@ -23,7 +23,7 @@
  * QEMU model of the stm32f2xx GPIO module
  */
 
-#include "sysbus.h"
+#include "hw/sysbus.h"
 #include "stm32.h"
 
 #define R_GPIO_MODER   (0x00 / 4)

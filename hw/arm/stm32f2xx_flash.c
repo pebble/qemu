@@ -21,10 +21,10 @@
  */
 
 #include "sysemu/blockdev.h"
-#include "hw.h"
-#include "flash.h"
+#include "hw/hw.h"
+#include "hw/block/flash.h"
 #include "block/block.h"
-#include "sysbus.h"
+#include "hw/sysbus.h"
 
 struct f2xx_flash {
     SysBusDevice busdev;

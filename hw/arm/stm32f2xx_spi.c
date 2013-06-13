@@ -23,9 +23,9 @@
  * QEMU model of the stm32f2xx SPI controller.
  */
 
-#include "sysbus.h"
+#include "hw/sysbus.h"
 #include "stm32.h"
-#include "ssi.h"
+#include "hw/ssi.h"
 
 #define	R_CR1      (0x00 / 4)
 #define	R_CR2      (0x04 / 4)

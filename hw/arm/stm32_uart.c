@@ -20,10 +20,11 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "sysbus.h"
+#include "qemu/timer.h"
+#include "hw/sysbus.h"
 #include "stm32f1xx.h"
 #include "stm32f2xx.h"
-#include "char/char.h"
+#include "sysemu/char.h"
 
 
 /* DEFINITIONS*/

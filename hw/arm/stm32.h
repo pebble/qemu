@@ -22,9 +22,9 @@
 #ifndef STM32_H
 #define STM32_H
 
-#include "arm-misc.h"
+#include "hw/arm/arm.h"
 #include "qemu-common.h"
-#include "sysbus.h"
+#include "hw/sysbus.h"
 
 #define ENUM_STRING(x) [x] = #x
 #define ARRAY_LENGTH(array) (sizeof((array))/sizeof((array)[0]))

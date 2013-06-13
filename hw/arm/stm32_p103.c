@@ -21,12 +21,12 @@
  */
 
 #include "stm32f1xx.h"
-#include "sysbus.h"
-#include "arm-misc.h"
-#include "devices.h"
+#include "hw/sysbus.h"
+#include "hw/arm/arm.h"
+#include "hw/devices.h"
 #include "ui/console.h"
 #include "sysemu/sysemu.h"
-#include "boards.h"
+#include "hw/boards.h"
 
 
 typedef struct {

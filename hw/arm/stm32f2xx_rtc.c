@@ -22,7 +22,7 @@
 /*
  * QEMU stm32f2xx RTC emulation
  */
-#include "sysbus.h"
+#include "hw/sysbus.h"
 #include "qemu/timer.h"
 
 #define R_RTC_TR     (0x00 / 4)
