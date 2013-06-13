@@ -695,13 +695,6 @@ int net_init_tap(const NetClientOptions *opts, const char *name,
         return -1;
     }
 
-    /* QEMU vlans does not support multiqueue tap, in this case peer is set.
-     * For -netdev, peer is always NULL. */
-    if (peer && (tap->has_queues || tap->has_fds || tap->has_vhostfds)) {
-        error_report("Multiqueue tap cannnot be used with QEMU vlans");
-        return -1;
-    }
-
     if (tap->has_fd) {
         if (tap->has_ifname || tap->has_script || tap->has_downscript ||
             tap->has_vnet_hdr || tap->has_helper || tap->has_queues ||
