@@ -67,6 +67,8 @@ only minor changes to existing QEMU functionality.
 
 The changes can be reviewed by running `git diff --diff-filter=M v1.5.0-backports`.
 
+To list the added files, use `git diff --name-only --diff-filter=A v1.5.0-backports`.
+
 ## License
 
 The following points clarify the QEMU license:
