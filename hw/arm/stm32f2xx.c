@@ -176,4 +176,62 @@ void stm32f2xx_init(
 
     DeviceState *rtc_dev = qdev_create(NULL, "f2xx_rtc");
     stm32_init_periph(rtc_dev, STM32F2XX_RTC, 0x40002800, NULL);
+
+#define dummy_dev(name, start, size) do {\
+    DeviceState *dummy = qdev_create(NULL, "f2xx_dummy"); \
+    qdev_prop_set_ptr(dummy, "name", (void *)name); \
+    qdev_prop_set_int32(dummy, "size", size); \
+    qdev_init_nofail(dummy); \
+    sysbus_mmio_map(SYS_BUS_DEVICE(dummy), 0, start); \
+} while (0)
+
+    dummy_dev("TIM2",      0x40000000, 0x400);
+    dummy_dev("TIM3",      0x40000400, 0x400);
+    dummy_dev("TIM4",      0x40000800, 0x400);
+    dummy_dev("TIM5",      0x40000C00, 0x400);
+    dummy_dev("TIM6",      0x40001000, 0x400);
+    dummy_dev("TIM7",      0x40001400, 0x400);
+    dummy_dev("TIM12",     0x40001800, 0x400);
+    dummy_dev("TIM13",     0x40001C00, 0x400);
+    dummy_dev("TIM14",     0x40002000, 0x400);
+    dummy_dev("Reserved",  0x40002400, 0x400);
+    //
+    dummy_dev("WWDG",      0x40002C00, 0x400);
+    dummy_dev("IWDG",      0x40003000, 0x400);
+    dummy_dev("Reserved",  0x40003400, 0x400);
+    //
+    //
+    dummy_dev("Reserved",  0x40004000, 0x400);
+    //
+    //
+    //
+    //
+    dummy_dev("I2C1",      0x40005400, 0x400);
+    dummy_dev("I2C2",      0x40005800, 0x400);
+    dummy_dev("I2C3",      0x40005C00, 0x400);
+    dummy_dev("Reserved",  0x40006000, 0x400);
+    dummy_dev("BxCAN1",    0x40006400, 0x400);
+    dummy_dev("BxCAN2",    0x40006800, 0x400);
+    dummy_dev("Reserved",  0x40006C00, 0x400);
+    // PWR probably common
+    dummy_dev("DAC1/DAC2", 0x40007400, 0x400);
+    dummy_dev("Reserved",  0x40007800, 0x400);
+    dummy_dev("Reserved",  0x40008000, 0x8000);
+    dummy_dev("TIM1/PWM1", 0x40010000, 0x400);
+    dummy_dev("TIM8/PWM2", 0x40010400, 0x400);
+    // USART1
+    // USART6
+    dummy_dev("Reserved",  0x40011800, 0x800);
+    // ADC1 - ADC2 - ADC3
+    // skipped reserved from here on
+    dummy_dev("SDIO",      0x40012C00, 0x400);
+    // SPI1
+    // SYSCFG needed
+    // EXTI needed
+    dummy_dev("TIM9",      0x40014000, 0x400);
+    dummy_dev("TIM10",     0x40014400, 0x400);
+    dummy_dev("TIM11",     0x40014800, 0x400);
+
+    dummy_dev("DMA1",      0x40026000, 0x400);
+    dummy_dev("DMA2",      0x40026400, 0x400);
 }
