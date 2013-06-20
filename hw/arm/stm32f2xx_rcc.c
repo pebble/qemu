@@ -41,7 +41,7 @@ do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
 
 #define WARN_UNIMPLEMENTED(new_value, mask, reset_value) \
     if (!IS_RESET_VALUE(new_value, mask, reset_value)) { \
-        stm32_hw_warn("Not implemented: RCC " #mask ". Masked value: 0x%08x", (new_value & mask)); \
+        stm32_unimp("Not implemented: RCC " #mask ". Masked value: 0x%08x", (new_value & mask)); \
     }
 
 #define HSI_FREQ 16000000
@@ -635,10 +635,10 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
             STM32_NOT_IMPL_REG(offset, 4);
             return 0;
         case RCC_APB1RSTR_OFFSET:
-            stm32_hw_warn("Unimplemented read: RCC_APB1RSTR_OFFSET");
+            stm32_unimp("Unimplemented read: RCC_APB1RSTR_OFFSET");
             return 0;
         case RCC_APB2RSTR_OFFSET:
-            stm32_hw_warn("Unimplemented read: RCC_APB2RSTR_OFFSET");
+            stm32_unimp("Unimplemented read: RCC_APB2RSTR_OFFSET");
             return 0;
         case RCC_AHB1ENR_OFFSET:
             return stm32_rcc_RCC_AHB1ENR_read(s);
@@ -703,10 +703,10 @@ static void stm32_rcc_writew(void *opaque, hwaddr offset,
             stm32_rcc_RCC_CIR_write(s, value, false);
             break;
         case RCC_APB1RSTR_OFFSET:
-            stm32_hw_warn("Unimplemented write: RCC_APB1RSTR_OFFSET 0x%x", (uint32_t)value);
+            stm32_unimp("Unimplemented write: RCC_APB1RSTR_OFFSET 0x%x", (uint32_t)value);
             break;
         case RCC_APB2RSTR_OFFSET:
-            stm32_hw_warn("Unimplemented write: RCC_APB2RSTR_OFFSET 0x%x", (uint32_t)value);
+            stm32_unimp("Unimplemented write: RCC_APB2RSTR_OFFSET 0x%x", (uint32_t)value);
             break;
         case RCC_AHB3RSTR_OFFSET:
             STM32_NOT_IMPL_REG(offset, 4);
@@ -727,13 +727,13 @@ static void stm32_rcc_writew(void *opaque, hwaddr offset,
             stm32_rcc_RCC_APB1ENR_write(s, value, false);
             break;
         case RCC_AHB1LPENR_OFFSET:
-            stm32_hw_warn("Unimplemented: RCC_AHB1LPENR_OFFSET");
+            stm32_unimp("Unimplemented: RCC_AHB1LPENR_OFFSET");
             break;
         case RCC_AHB2LPENR_OFFSET:
-            stm32_hw_warn("Unimplemented: RCC_AHB2LPENR_OFFSET");
+            stm32_unimp("Unimplemented: RCC_AHB2LPENR_OFFSET");
             break;
         case RCC_AHB3LPENR_OFFSET:
-            stm32_hw_warn("Unimplemented: RCC_AHB3LPENR_OFFSET");
+            stm32_unimp("Unimplemented: RCC_AHB3LPENR_OFFSET");
             break;
         case RCC_BDCR_OFFSET:
             stm32_rcc_RCC_BDCR_write(s, value, false);

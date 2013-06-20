@@ -60,6 +60,7 @@
 void stm32_hw_warn(const char *fmt, ...)
     __attribute__ ((__format__ (__printf__, 1, 2)));
 
+#define stm32_unimp(x...) qemu_log_mask(LOG_UNIMP, x)
 
 
 
