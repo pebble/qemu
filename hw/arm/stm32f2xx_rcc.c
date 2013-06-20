@@ -33,7 +33,6 @@
 #ifdef DEBUG_STM32_RCC
 #define DPRINTF(fmt, ...)                                       \
 do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
-#define STM32_RCC_WARN_ALL
 #else
 #define DPRINTF(fmt, ...)
 #endif
@@ -361,10 +360,7 @@ static void stm32_rcc_RCC_CR_write(Stm32f2xxRcc *s, uint32_t new_value, bool ini
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_CR_PLLI2SON_CL_BIT, RCC_CR_RESET_VALUE);
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_CR_CSSON_BIT, RCC_CR_RESET_VALUE);
     WARN_UNIMPLEMENTED(new_value, RCC_CR_HSICAL_MASK, RCC_CR_RESET_VALUE);
-#ifdef STM32_RCC_WARN_ALL
-    /* Don't really care about trim settings for normal use. */
     WARN_UNIMPLEMENTED(new_value, RCC_CR_HSITRIM_MASK, RCC_CR_RESET_VALUE);
-#endif
 }
 
 static void stm32_rcc_RCC_PLLCFGR_write(Stm32f2xxRcc *s, uint32_t new_value, bool init)
