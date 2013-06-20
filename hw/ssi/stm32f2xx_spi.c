@@ -34,6 +34,7 @@
 #define	R_SR_RESET    0x0002
 #define	R_SR_MASK     0x01FF
 #define R_SR_OVR     (1 << 6)
+#define R_SR_TXE     (1 << 1)
 #define R_SR_RXNE    (1 << 0)
 
 #define	R_DR       (0x0C / 4)
@@ -97,12 +98,13 @@ stm32f2xx_spi_write(void *arg, hwaddr offset, uint64_t data, unsigned size)
 
     switch (offset) {
     case R_DR:
+        s->regs[R_SR] &= ~R_SR_TXE;
         if (s->regs[R_SR] & R_SR_RXNE) {
             s->regs[R_SR] |= R_SR_OVR;
         }
         s->regs[R_DR] = ssi_transfer(s->spi, data);
         s->regs[R_SR] |= R_SR_RXNE;
-//        stm32_hw_warn("SPI %d DR write %x", s->periph, (unsigned int)data);
+        s->regs[R_SR] |= R_SR_TXE;
         break;
     default:
         if (offset < ARRAY_SIZE(s->regs)) {
