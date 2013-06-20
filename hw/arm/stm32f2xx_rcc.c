@@ -294,7 +294,7 @@ static void stm32_rcc_periph_enable(
                                     int periph,
                                     uint32_t bit_mask)
 {
-    printf("rcc set 0x%x %s %d %x: %sable\n", new_value, s->PERIPHCLK[periph]->name, periph, bit_mask, IS_BIT_SET(new_value, bit_mask)?"en":"dis");
+    //printf("rcc set 0x%x %s %d %x: %sable\n", new_value, s->PERIPHCLK[periph]->name, periph, bit_mask, IS_BIT_SET(new_value, bit_mask)?"en":"dis");
     clktree_set_enabled(s->PERIPHCLK[periph], IS_BIT_SET(new_value, bit_mask));
 }
 
