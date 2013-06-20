@@ -61,17 +61,18 @@ stm32f2xx_gpio_read(void *arg, hwaddr offset, unsigned int size)
 }
 
 static void
-stm32f2xx_gpio_write(void *arg, hwaddr offset, uint64_t data, unsigned int size)
+stm32f2xx_gpio_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
 {
     stm32f2xx_gpio *s = arg;
+    int offset = addr % 3;
 
-    offset >>= 2;
-    switch (offset) {
+    addr >>= 2;
+    switch (addr) {
     default:
-        qemu_log_mask(LOG_UNIMP, "f2xx GPIO %d reg %x write (0x%x) unimplemented\n",
-          s->periph,  (int)offset << 2, (int)data);
-        if (offset < R_GPIO_MAX) {
-            s->regs[offset] = data;
+        qemu_log_mask(LOG_UNIMP, "f2xx GPIO %d reg 0x%x:%d write (0x%x) unimplemented\n",
+          s->periph,  (int)addr << 2, offset, (int)data);
+        if (addr < R_GPIO_MAX) {
+            s->regs[addr] = data;
         }
         break;
     }
@@ -82,7 +83,7 @@ static const MemoryRegionOps stm32f2xx_gpio_ops = {
     .write = stm32f2xx_gpio_write,
     .endianness = DEVICE_NATIVE_ENDIAN,
     .valid = {
-        .min_access_size = 4, /* XXX actually 1 */
+        .min_access_size = 1,
         .max_access_size = 4
     }
 };
