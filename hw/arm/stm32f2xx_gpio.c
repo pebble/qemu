@@ -68,7 +68,8 @@ stm32f2xx_gpio_write(void *arg, hwaddr offset, uint64_t data, unsigned int size)
     offset >>= 2;
     switch (offset) {
     default:
-printf("GPIO unit %d reg %x write 0x%x\n", s->periph, (int)offset << 2, (int)data);
+        qemu_log_mask(LOG_UNIMP, "f2xx GPIO %d reg %x write (0x%x) unimplemented\n",
+          s->periph,  (int)offset << 2, (int)data);
         if (offset < R_GPIO_MAX) {
             s->regs[offset] = data;
         }

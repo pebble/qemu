@@ -76,7 +76,8 @@ stm32f2xx_adc_common_read(stm32_adc *s, hwaddr offset, unsigned int size)
         r = s->ccr;
         break;
     default:
-        printf("%s unimplemented reg %d\n", __func__, (int)offset << 2);
+        qemu_log_mask(LOG_UNIMP, "f2xx adc unimplemented read reg 0x%x\n",
+          (int)offset << 2);
     }
 //printf("%s reg %d return 0x%x\n", __func__, (int)offset << 2, r);
     return 0;
@@ -117,7 +118,8 @@ stm32f2xx_adc_common_write(stm32_adc *s, hwaddr offset, uint64_t data,
         s->ccr = data;
         break;
     default:
-        printf("%s unimplemented reg %d\n", __func__, (int)offset << 2); 
+        qemu_log_mask(LOG_UNIMP, "f2xx adc unimplemented write reg 0x%x\n",
+          (int)offset << 2);
     }
 }
 

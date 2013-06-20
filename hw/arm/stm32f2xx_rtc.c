@@ -105,7 +105,8 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
 
     addr >>= 2;
     if (addr >= R_RTC_MAX) {
-        printf("guest error; unimpl\n");
+        qemu_log_mask(LOG_GUEST_ERROR, "invalid read f2xx rtc register 0x%x\n",
+          (unsigned int)addr << 2);
         return 0;
     }
     r = (s->regs[addr] >> offset * 8) & ((1ull << (8 * size)) - 1);
@@ -123,7 +124,8 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
 
     addr >>= 2;
     if (addr >= R_RTC_MAX) {
-        printf("unimpl\n");
+        qemu_log_mask(LOG_GUEST_ERROR, "invalid write f2xx rtc register 0x%x\n",
+          (unsigned int)addr << 2);
         return;
     }
 
@@ -153,8 +155,7 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     case 4:
         break;
     default:
-        printf("unimpl\n");
-        return;
+        abort();
     }
     if (addr >= R_RTC_BKPxR && addr <= R_RTC_BKPxR_LAST) {
         s->regs[addr] = data;
@@ -163,8 +164,8 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     /* Write protect */
     if (s->wp_count < 2 && addr != R_RTC_TAFCR && addr != R_RTC_ISR &&
       addr != R_RTC_WPR) {
-        printf("write to RTC reg 0x%x w/o write protect disable first\n",
-          (int)addr << 2);
+        qemu_log_mask(LOG_GUEST_ERROR, "f2xx rtc write reg 0x%x+%u without wp disable\n",
+          (unsigned int)addr << 2, offset);
         return;
     }
     switch(addr) {
@@ -182,7 +183,8 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
          */
         break;
     default:
-        printf("%s: reg 0x%x %d write %d\n", __func__, (int)addr << 2, offset, size);
+        qemu_log_mask(LOG_UNIMP, "f2xx rtc unimplemented write 0x%x+%u size %u val %u\n",
+          (unsigned int)addr << 2, offset, size, (unsigned int)data);
     }
     s->regs[addr] = data;
 
@@ -206,8 +208,6 @@ f2xx_rtc_set_from_host(f2xx_rtc *s)
     qemu_get_timedate(&now, 0);
     s->t = mktime(&now);
     f2xx_rtc_set_tdr(s);
-    printf("set to 0x%x 0x%x", s->regs[R_RTC_TR], s->regs[R_RTC_DR]);
-    printf(" %d %d %d\n", now.tm_mday, now.tm_mon, now.tm_year);
 }
 
 static int
