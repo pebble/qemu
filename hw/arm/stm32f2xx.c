@@ -187,7 +187,10 @@ void stm32f2xx_init(
 
     dummy_dev("TIM2",      0x40000000, 0x400);
     dummy_dev("TIM3",      0x40000400, 0x400);
-    dummy_dev("TIM4",      0x40000800, 0x400);
+
+    DeviceState *tim4 = qdev_create(NULL, "f2xx_tim");
+    stm32_init_periph(tim4, STM32F2XX_TIM4, 0x40000800, NULL);
+
     dummy_dev("TIM5",      0x40000C00, 0x400);
     dummy_dev("TIM6",      0x40001000, 0x400);
     dummy_dev("TIM7",      0x40001400, 0x400);
