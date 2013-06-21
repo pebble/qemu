@@ -66,10 +66,14 @@ static void
 f2xx_update_odr(stm32f2xx_gpio *s, uint16_t val)
 {
     int i;
+    uint16_t changed = s->regs[R_GPIO_ODR] ^ val;
 
     for (i = 0; i < STM32_GPIO_PIN_COUNT; i++)
     {
-        printf("gpio %u pin %u = %c\n", s->periph, i, val & 1<<i ? 'H' : 'l');
+        if ((changed & 1<<i) == 0)
+            continue;
+ 
+        //printf("gpio %u pin %u = %c\n", s->periph, i, val & 1<<i ? 'H' : 'l');
         qemu_set_irq(s->pin[i], !!(val & 1<<i));
     }
     s->regs[R_GPIO_ODR] = val;
