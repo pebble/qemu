@@ -18,6 +18,7 @@ done
 
 truncate -s 0 $DEBUGLOG
 $EMULATOR -rtc base=localtime -M pebble -s $flags -pflash micro_flash.bin \
+    -mtdblock spi_flash.bin \
     -serial file:uart1.log \
     -serial file:uart2.log \
     -serial file:$DEBUGLOG
