@@ -28,6 +28,8 @@
 #include "hw/ssi.h"
 
 #define	R_CR1      (0x00 / 4)
+#define	R_CR1_DFF   (1 << 11)
+#define	R_CR1_SPE   (1 <<  6)
 #define	R_CR2      (0x04 / 4)
 
 #define	R_SR       (0x08 / 4)
@@ -97,6 +99,12 @@ stm32f2xx_spi_write(void *arg, hwaddr offset, uint64_t data, unsigned size)
     offset >>= 2;
 
     switch (offset) {
+    case R_CR1:
+        if ((data & R_CR1_DFF) != s->regs[R_CR1] && (s->regs[R_CR1] & R_CR1_SPE) != 0)
+            qemu_log_mask(LOG_GUEST_ERROR, "cannot change DFF with SPE set\n");
+        if (data & R_CR1_DFF)
+            qemu_log_mask(LOG_UNIMP, "f2xx DFF 16-bit mode not implemented\n");
+        break;
     case R_DR:
         s->regs[R_SR] &= ~R_SR_TXE;
         if (s->regs[R_SR] & R_SR_RXNE) {
