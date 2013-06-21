@@ -240,6 +240,7 @@ void stm32f2xx_init(
     dummy_dev("TIM10",     0x40014400, 0x400);
     dummy_dev("TIM11",     0x40014800, 0x400);
 
-    dummy_dev("DMA1",      0x40026000, 0x400);
-    dummy_dev("DMA2",      0x40026400, 0x400);
+    dummy_dev("CRC",       0x40023000, 0x400); //XXX p
+    dummy_dev("DMA1",      0x40026000, 0x400); //XXX p
+    dummy_dev("DMA2",      0x40026400, 0x400); //XXX p
 }
