@@ -209,8 +209,13 @@ void stm32f2xx_init(
     //
     //
     //
-    dummy_dev("I2C1",      0x40005400, 0x400);
-    dummy_dev("I2C2",      0x40005800, 0x400);
+
+    DeviceState *i2c1 = qdev_create(NULL, "f2xx_i2c");
+    stm32_init_periph(i2c1, STM32F2XX_I2C1, 0x40005400, NULL);
+
+    DeviceState *i2c2 = qdev_create(NULL, "f2xx_i2c");
+    stm32_init_periph(i2c2, STM32F2XX_I2C2, 0x40005800, NULL);
+
     dummy_dev("I2C3",      0x40005C00, 0x400);
     dummy_dev("Reserved",  0x40006000, 0x400);
     dummy_dev("BxCAN1",    0x40006400, 0x400);
