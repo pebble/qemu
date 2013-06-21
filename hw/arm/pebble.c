@@ -40,6 +40,10 @@ static void pebble1_init(QEMUMachineInitArgs *args) {
     spi_flash = ssi_create_slave_no_init(spi, "n25q032a");
     qdev_init_nofail(spi_flash);
 
+    qemu_irq cs;
+    cs = qdev_get_gpio_in(spi_flash, 0);
+    qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOA_INDEX], 4, cs);
+
     /* Display */
     spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[1], "ssi");
     DeviceState *display_dev = ssi_create_slave_no_init(spi, "sm-lcd");
