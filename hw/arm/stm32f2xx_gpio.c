@@ -44,6 +44,8 @@ typedef struct {
 
     stm32_periph_t periph;
 
+    qemu_irq pin[STM32_GPIO_PIN_COUNT];
+
     uint32_t regs[R_GPIO_MAX];
     uint32_t ccr;
 } stm32f2xx_gpio;
@@ -61,19 +63,60 @@ stm32f2xx_gpio_read(void *arg, hwaddr offset, unsigned int size)
 }
 
 static void
+f2xx_update_odr(stm32f2xx_gpio *s, uint16_t val)
+{
+    int i;
+
+    for (i = 0; i < STM32_GPIO_PIN_COUNT; i++)
+    {
+        printf("gpio %u pin %u = %c\n", s->periph, i, val & 1<<i ? 'H' : 'l');
+        qemu_set_irq(s->pin[i], !!(val & 1<<i));
+    }
+    s->regs[R_GPIO_ODR] = val;
+}
+
+static void
 stm32f2xx_gpio_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
 {
     stm32f2xx_gpio *s = arg;
     int offset = addr % 3;
 
     addr >>= 2;
+    if (addr > R_GPIO_MAX) {
+        qemu_log_mask(LOG_GUEST_ERROR, "invalid GPIO %d write reg 0x%x\n",
+          s->periph, (unsigned int)addr << 2);
+        return;
+    }
+
+    switch(size) {
+    case 1:
+        data = (s->regs[addr] & ~(0xff << (offset * 8))) | data << (offset * 8);
+        break;
+    case 2:
+        data = (s->regs[addr] & ~(0xffff << (offset * 8))) | data << (offset * 8);
+        break;
+    case 4:
+        break;
+    default:
+        abort();
+    }
+
     switch (addr) {
+    case R_GPIO_ODR:
+        f2xx_update_odr(s, data);
+        break;
+    case R_GPIO_BSRR:
+    {
+        uint16_t new_val = s->regs[R_GPIO_ODR];
+        new_val &= ~((data >> 16) & 0xffff); /* BRy */
+        new_val |= data & 0xffff; /* BSy */
+        f2xx_update_odr(s, new_val);
+        break;
+    }
     default:
         qemu_log_mask(LOG_UNIMP, "f2xx GPIO %d reg 0x%x:%d write (0x%x) unimplemented\n",
           s->periph,  (int)addr << 2, offset, (int)data);
-        if (addr < R_GPIO_MAX) {
-            s->regs[addr] = data;
-        }
+        s->regs[addr] = data;
         break;
     }
 }
@@ -121,6 +164,8 @@ stm32f2xx_gpio_init(SysBusDevice *dev)
 
     memory_region_init_io(&s->iomem, &stm32f2xx_gpio_ops, s, "gpio", 0x400);
     sysbus_init_mmio(dev, &s->iomem);
+
+    qdev_init_gpio_out(&dev->qdev, s->pin, STM32_GPIO_PIN_COUNT);
 
     return 0;
 }
