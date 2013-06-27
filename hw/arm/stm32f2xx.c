@@ -240,7 +240,8 @@ void stm32f2xx_init(
     dummy_dev("TIM10",     0x40014400, 0x400);
     dummy_dev("TIM11",     0x40014800, 0x400);
 
-    dummy_dev("CRC",       0x40023000, 0x400); //XXX p
+    DeviceState *crc = qdev_create(NULL, "f2xx_crc");
+    stm32_init_periph(crc, STM32F2XX_CRC, 0x40023000, NULL);
     dummy_dev("DMA1",      0x40026000, 0x400); //XXX p
     dummy_dev("DMA2",      0x40026400, 0x400); //XXX p
 }
