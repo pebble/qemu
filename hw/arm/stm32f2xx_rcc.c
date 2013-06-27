@@ -519,6 +519,11 @@ static uint32_t stm32_rcc_RCC_AHB1ENR_read(Stm32f2xxRcc *s)
 
 static void stm32_rcc_RCC_AHB1ENR_write(Stm32f2xxRcc *s, uint32_t new_value, bool init)
 {
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_DMA2], IS_BIT_SET(new_value, RCC_AHB1ENR_DMA2EN_BIT));
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_DMA1], IS_BIT_SET(new_value, RCC_AHB1ENR_DMA1EN_BIT));
+
+    clktree_set_enabled(s->PERIPHCLK[STM32F2XX_CRC], IS_BIT_SET(new_value, RCC_AHB1ENR_CRCEN_BIT));
+
     clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOI], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOIEN_BIT));
     clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOH], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOHEN_BIT));
     clktree_set_enabled(s->PERIPHCLK[STM32F2XX_GPIOG], IS_BIT_SET(new_value, RCC_AHB1ENR_GPIOGEN_BIT));
@@ -537,10 +542,7 @@ static void stm32_rcc_RCC_AHB1ENR_write(Stm32f2xxRcc *s, uint32_t new_value, boo
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_ETHMACRXEN_BIT, RCC_AHB1ENR_RESET_VALUE);
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_ETHMACTXEN_BIT, RCC_AHB1ENR_RESET_VALUE);
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_ETHMACEN_BIT, RCC_AHB1ENR_RESET_VALUE);
-    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_DMA2EN_BIT, RCC_AHB1ENR_RESET_VALUE);
-    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_DMA1EN_BIT, RCC_AHB1ENR_RESET_VALUE);
     WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_BKPSRAMEN_BIT, RCC_AHB1ENR_RESET_VALUE);
-    WARN_UNIMPLEMENTED(new_value, 1 << RCC_AHB1ENR_CRCEN_BIT, RCC_AHB1ENR_RESET_VALUE);
 }
 
 
@@ -888,6 +890,11 @@ static void stm32_rcc_init_clk(Stm32f2xxRcc *s)
     s->PERIPHCLK[STM32F2XX_GPIOG] = clktree_create_clk("GPIOG", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
     s->PERIPHCLK[STM32F2XX_GPIOH] = clktree_create_clk("GPIOG", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
     s->PERIPHCLK[STM32F2XX_GPIOI] = clktree_create_clk("GPIOG", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
+
+    s->PERIPHCLK[STM32F2XX_CRC] = clktree_create_clk("CRC", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
+
+    s->PERIPHCLK[STM32F2XX_DMA1] = clktree_create_clk("DMA1", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
+    s->PERIPHCLK[STM32F2XX_DMA2] = clktree_create_clk("DMA2", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
     
     s->PERIPHCLK[STM32F2XX_SYSCFG] = clktree_create_clk("SYSCFG", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK2, NULL);
 
