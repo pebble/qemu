@@ -87,18 +87,29 @@ stm32f2xx_spi_read(void *arg, hwaddr offset, unsigned size)
 
 
 static void
-stm32f2xx_spi_write(void *arg, hwaddr offset, uint64_t data, unsigned size)
+stm32f2xx_spi_write(void *arg, hwaddr addr, uint64_t data, unsigned size)
 {
     struct stm32f2xx_spi_s *s = (struct stm32f2xx_spi_s *)arg;
+    int offset = addr & 0x3;
 
-    if (size != 2 && size != 4) {
-        STM32_BAD_REG(offset, size);
-    }
     /* SPI registers are all at most 16 bits wide */
     data &= 0xFFFFF;
-    offset >>= 2;
+    addr >>= 2;
 
-    switch (offset) {
+    switch (size) {
+        case 1:
+            data = (s->regs[addr] & ~(0xff << (offset * 8))) | data << (offset * 8);
+            break;
+        case 2:
+            data = (s->regs[addr] & ~(0xffff << (offset * 8))) | data << (offset * 8);
+            break;
+        case 4:
+            break;
+        default:
+            abort();
+    }
+
+    switch (addr) {
     case R_CR1:
         if ((data & R_CR1_DFF) != s->regs[R_CR1] && (s->regs[R_CR1] & R_CR1_SPE) != 0)
             qemu_log_mask(LOG_GUEST_ERROR, "cannot change DFF with SPE set\n");
@@ -115,10 +126,10 @@ stm32f2xx_spi_write(void *arg, hwaddr offset, uint64_t data, unsigned size)
         s->regs[R_SR] |= R_SR_TXE;
         break;
     default:
-        if (offset < ARRAY_SIZE(s->regs)) {
-            s->regs[offset] = data;
+        if (addr < ARRAY_SIZE(s->regs)) {
+            s->regs[addr] = data;
         } else {
-            STM32_BAD_REG(offset, WORD_ACCESS_SIZE);
+            STM32_BAD_REG(addr, size);
         }
     }
 }
