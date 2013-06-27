@@ -79,7 +79,6 @@ stm32f2xx_adc_common_read(stm32_adc *s, hwaddr offset, unsigned int size)
         qemu_log_mask(LOG_UNIMP, "f2xx adc unimplemented read reg 0x%x\n",
           (int)offset << 2);
     }
-//printf("%s reg %d return 0x%x\n", __func__, (int)offset << 2, r);
     return 0;
 }
 
@@ -99,8 +98,21 @@ stm32f2xx_adc_read(void *arg, hwaddr offset, unsigned int size)
     case R_ADC_SR:
         r |= R_ADC_SR_EOC;
         break;
+
+    /* Registers with standard read behaviour. */
+    case R_ADC_CR1:
+    case R_ADC_CR2:
+    case R_ADC_SMPR1:
+    case R_ADC_SMPR2:
+    case R_ADC_SQR1:
+    case R_ADC_SQR2:
+    case R_ADC_SQR3:
+        break;
+    case R_ADC_DR:
+        break; /* Hack */
+    default:
+        qemu_log_mask(LOG_UNIMP, "adc %d reg %x return 0x%x\n", unit, (int)offset << 2, r);
     }
-printf("adc %d reg %x return 0x%x\n", unit, (int)offset << 2, r);
     return r;
 }
 
@@ -132,14 +144,36 @@ stm32f2xx_adc_write(void *arg, hwaddr offset, uint64_t data, unsigned int size)
     if (unit == 3) {
         stm32f2xx_adc_common_write(s, offset - 0x300, data, size);
         return;
-    } 
+    }
     offset = (offset & 0xFF) >> 2;
     switch (offset) {
     case R_ADC_SR:
         s->regs[unit][offset] &= data; /* rc_w0 */
         break;
+    case R_ADC_CR1:
+        s->regs[unit][offset] = data;
+        if (data != 0) {
+            qemu_log_mask(LOG_UNIMP, "f2xx adc unimplemented CR1 write 0x%08x\n", (unsigned int)data);
+        }
+        break;
+    case R_ADC_CR2:
+        if (data & ~0x40000001) {
+            qemu_log_mask(LOG_UNIMP, "f2xx adc unimplemented CR2 write 0x%08x\n", (unsigned int)data);
+        }
+        s->regs[unit][offset] = data;
+        break;
+    case R_ADC_SMPR1: /* XXX Ignore sampling time setting. */
+    case R_ADC_SQR1:
+    case R_ADC_SQR2:
+    case R_ADC_SQR3:
+        s->regs[unit][offset] = data;
+        break;
+    case R_ADC_DR:
+        qemu_log_mask(LOG_GUEST_ERROR, "f2xx adc write to r/o data reg\n");
+        break;
     default:
-printf("adc %d reg %x write 0x%x\n", unit, (int)offset << 2, (int)data);
+        qemu_log_mask(LOG_UNIMP, "adc %d reg %x write 0x%x\n", unit,
+          (int)offset << 2, (int)data);
         if (offset < R_ADC_MAX) {
             s->regs[unit][offset] = data;
         }
@@ -156,6 +190,16 @@ static const MemoryRegionOps stm32f2xx_adc_ops = {
         .max_access_size = 4
     }
 };
+
+static void
+f2xx_adc_reset(DeviceState *ds)
+{
+    stm32_adc *s = FROM_SYSBUS(stm32_adc, SYS_BUS_DEVICE(ds));
+
+    /* Hack for battery voltage ~ 3.8V */
+    s->regs[0][R_ADC_DR] = 2730;
+    s->regs[1][R_ADC_DR] = 3331;
+}
 
 static int
 stm32f2xx_adc_init(SysBusDevice *dev)
@@ -183,7 +227,7 @@ stm32f2xx_adc_class_init(ObjectClass *klass, void *data)
     SysBusDeviceClass *sc = SYS_BUS_DEVICE_CLASS(klass);
 
     sc->init = stm32f2xx_adc_init;
-//    dc->reset = stm32f2xx_adc_reset;
+    dc->reset = f2xx_adc_reset;
     dc->props = stm32f2xx_adc_properties;
 }
 
