@@ -125,6 +125,7 @@ typedef int32_t stm32_periph_t;
 
 /* IRQs */
 #define STM32_RCC_IRQ 5
+#define STM32_DMA1_STREAM4_IRQ 15
 
 #define STM32_UART1_IRQ 37
 #define STM32_UART2_IRQ 38

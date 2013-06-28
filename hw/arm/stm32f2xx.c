@@ -245,6 +245,8 @@ void stm32f2xx_init(
     
     DeviceState *dma1 = qdev_create(NULL, "f2xx_dma");
     stm32_init_periph(dma1, STM32F2XX_DMA1, 0x40026000, NULL);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 4, pic[STM32_DMA1_STREAM4_IRQ]);
+
     DeviceState *dma2 = qdev_create(NULL, "f2xx_dma");
     stm32_init_periph(dma2, STM32F2XX_DMA2, 0x40026400, NULL);
 }
