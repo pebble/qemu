@@ -27,10 +27,11 @@
 #include "hw/arm/stm32.h"
 #include "hw/ssi.h"
 
-#define	R_CR1      (0x00 / 4)
-#define	R_CR1_DFF   (1 << 11)
-#define	R_CR1_SPE   (1 <<  6)
-#define	R_CR2      (0x04 / 4)
+#define	R_CR1             (0x00 / 4)
+#define	R_CR1_DFF      (1 << 11)
+#define	R_CR1_LSBFIRST (1 <<  7)
+#define	R_CR1_SPE      (1 <<  6)
+#define	R_CR2             (0x04 / 4)
 
 #define	R_SR       (0x08 / 4)
 #define	R_SR_RESET    0x0002
@@ -85,6 +86,11 @@ stm32f2xx_spi_read(void *arg, hwaddr offset, unsigned size)
     return r;
 }
 
+static uint8_t
+bitswap(uint8_t val)
+{
+    return ((val * 0x0802LU & 0x22110LU) | (val * 0x8020LU & 0x88440LU)) * 0x10101LU >> 16;
+}
 
 static void
 stm32f2xx_spi_write(void *arg, hwaddr addr, uint64_t data, unsigned size)
@@ -115,13 +121,19 @@ stm32f2xx_spi_write(void *arg, hwaddr addr, uint64_t data, unsigned size)
             qemu_log_mask(LOG_GUEST_ERROR, "cannot change DFF with SPE set\n");
         if (data & R_CR1_DFF)
             qemu_log_mask(LOG_UNIMP, "f2xx DFF 16-bit mode not implemented\n");
+        s->regs[R_CR1] = data;
         break;
     case R_DR:
         s->regs[R_SR] &= ~R_SR_TXE;
         if (s->regs[R_SR] & R_SR_RXNE) {
             s->regs[R_SR] |= R_SR_OVR;
         }
-        s->regs[R_DR] = ssi_transfer(s->spi, data);
+        if (s->regs[R_CR1] & R_CR1_LSBFIRST) {
+            s->regs[R_DR] = bitswap(ssi_transfer(s->spi, bitswap(data)));
+        } else {
+            s->regs[R_DR] = ssi_transfer(s->spi, data);
+        }
+        
         s->regs[R_SR] |= R_SR_RXNE;
         s->regs[R_SR] |= R_SR_TXE;
         break;
