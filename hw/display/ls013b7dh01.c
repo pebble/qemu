@@ -57,10 +57,18 @@ typedef struct {
     xfer_state_t state;
 } lcd_state;
 
+static uint8_t
+bitswap(uint8_t val)
+{
+    return ((val * 0x0802LU & 0x22110LU) | (val * 0x8020LU & 0x88440LU)) * 0x10101LU >> 16;
+}
+
 static uint32_t
 sm_lcd_transfer(SSISlave *dev, uint32_t data)
 {
     lcd_state *s = FROM_SSI_SLAVE(lcd_state, dev);
+    /* XXX QEMU's SPI infrastructure is implicitly MSB-first */
+    data = bitswap(data);
 
     switch(s->state) {
     case COMMAND:
@@ -97,7 +105,10 @@ sm_lcd_transfer(SSISlave *dev, uint32_t data)
         }
         break;
     case TRAILER:
-        assert(data == 0);
+        if (data != 0) {
+            qemu_log_mask(LOG_GUEST_ERROR,
+              "ls013 memory lcd received non-zero data in TRAILER\n");
+        }
         s->state = LINENO;
         s->redraw = true;
         break;
