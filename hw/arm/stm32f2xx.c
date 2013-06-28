@@ -242,6 +242,9 @@ void stm32f2xx_init(
 
     DeviceState *crc = qdev_create(NULL, "f2xx_crc");
     stm32_init_periph(crc, STM32F2XX_CRC, 0x40023000, NULL);
-    dummy_dev("DMA1",      0x40026000, 0x400); //XXX p
-    dummy_dev("DMA2",      0x40026400, 0x400); //XXX p
+    
+    DeviceState *dma1 = qdev_create(NULL, "f2xx_dma");
+    stm32_init_periph(dma1, STM32F2XX_DMA1, 0x40026000, NULL);
+    DeviceState *dma2 = qdev_create(NULL, "f2xx_dma");
+    stm32_init_periph(dma2, STM32F2XX_DMA2, 0x40026400, NULL);
 }

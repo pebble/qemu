@@ -15,6 +15,7 @@ obj-y += stm32f2xx_dummy.o
 obj-y += stm32f2xx_tim.o
 obj-y += stm32f2xx_i2c.o
 obj-y += stm32f2xx_crc.o
+obj-y += stm32f2xx_dma.o
 obj-y += stm32_p103.o stm32_p2xx.o
 obj-y += pebble.o
 obj-y += clktree.o
