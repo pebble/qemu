@@ -366,6 +366,14 @@ static void nvic_writel(nvic_state *s, uint32_t offset, uint32_t value)
         qemu_log_mask(LOG_UNIMP,
                       "NVIC: fault status registers unimplemented\n");
         break;
+    case 0xd9c:
+    case 0xda0:
+    case 0xda4:
+    case 0xda8:
+    case 0xdac:
+    case 0xdb0:
+        /* XXX memory protection - just ignore it. */
+        break;
     case 0xf00: /* Software Triggered Interrupt Register */
         if ((value & 0x1ff) < s->num_irq) {
             gic_set_pending_private(&s->gic, 0, value & 0x1ff);
