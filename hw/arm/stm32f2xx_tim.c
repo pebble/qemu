@@ -20,7 +20,7 @@
  * THE SOFTWARE.
  */
 /*
- * QEMU stm32f2xx RTC emulation
+ * QEMU stm32f2xx TIM emulation
  */
 #include "hw/sysbus.h"
 #include "qemu/timer.h"
@@ -50,6 +50,7 @@ typedef struct f2xx_tim {
     SysBusDevice busdev;
     MemoryRegion iomem;
     QEMUTimer *timer;
+    qemu_irq irq;
     time_t t;
     uint32_t regs[R_TIM_MAX];
 } f2xx_tim;
@@ -65,7 +66,7 @@ f2xx_period(f2xx_tim *s)
                (((prer >> R_RTC_PRER_PREDIV_S_SHIFT) & R_RTC_PRER_PREDIV_S_MASK) + 1);
     return 1000000000LL * prescale / 32768;
 #else
-    return 1000000000LL;
+    return 100000000LL;
 #endif
 }
 
@@ -76,6 +77,8 @@ f2xx_tim_timer(void *arg)
 
     s->t++;
     qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_period(s));
+    qemu_set_irq(s->irq, 1);
+    //printf("f2xx tim timer expired\n");
 }
 
 static uint64_t
@@ -87,11 +90,18 @@ f2xx_tim_read(void *arg, hwaddr addr, unsigned int size)
 
     addr >>= 2;
     if (addr >= R_TIM_MAX) {
-        qemu_log_mask(LOG_GUEST_ERROR, "invalid read f2xx rtc register 0x%x\n",
+        qemu_log_mask(LOG_GUEST_ERROR, "f2xx tim invalid read register 0x%x\n",
           (unsigned int)addr << 2);
         return 0;
     }
     r = (s->regs[addr] >> offset * 8) & ((1ull << (8 * size)) - 1);
+    switch (addr) {
+    case R_TIM_CR1:
+        break;
+    default:
+        qemu_log_mask(LOG_UNIMP, "f2xx tim unimplemented read 0x%x+%u size %u val 0x%x\n",
+          (unsigned int)addr << 2, offset, size, (unsigned int)r);
+    }
     return r;
 }
 
@@ -103,7 +113,7 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
 
     addr >>= 2;
     if (addr >= R_TIM_MAX) {
-        qemu_log_mask(LOG_GUEST_ERROR, "invalid write f2xx rtc register 0x%x\n",
+        qemu_log_mask(LOG_GUEST_ERROR, "f2xx tim invalid write register 0x%x\n",
           (unsigned int)addr << 2);
         return;
     }
@@ -123,20 +133,29 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
 
     switch(addr) {
     case R_TIM_CR1:
+        if (data & ~1) {
+            qemu_log_mask(LOG_UNIMP, "f2xx tim non-zero CR1 unimplemented\n");
+        }
+        s->regs[addr] = data;
         break;
     case R_TIM_SR:
+        if (s->regs[addr] & 1 && (data & 1) == 0) {
+            qemu_set_irq(s->irq, 0);
+        }
+        s->regs[addr] &= data;
         break;
     case R_TIM_EGR:
+        qemu_log_mask(LOG_UNIMP, "f2xx tim unimplemented write 0x%x+%u size %u val 0x%x\n",
+          (unsigned int)addr << 2, offset, size, (unsigned int)data);
         break;
     case R_TIM_PSC:
-        break;
     case R_TIM_ARR:
+        s->regs[addr] = data;
         break;
     default:
-        qemu_log_mask(LOG_UNIMP, "f2xx rtc unimplemented write 0x%x+%u size %u val %u\n",
+        qemu_log_mask(LOG_UNIMP, "f2xx tim unimplemented write 0x%x+%u size %u val 0x%x\n",
           (unsigned int)addr << 2, offset, size, (unsigned int)data);
     }
-    s->regs[addr] = data;
 
 }
 
@@ -146,7 +165,7 @@ static const MemoryRegionOps f2xx_tim_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
     .impl = {
         .min_access_size = 1,
-        .max_access_size = 1,
+        .max_access_size = 4,
     }
 };
 
@@ -155,13 +174,15 @@ f2xx_tim_init(SysBusDevice *dev)
 {
     f2xx_tim *s = FROM_SYSBUS(f2xx_tim, dev);
 
-    memory_region_init_io(&s->iomem, &f2xx_tim_ops, s, "rtc", 0xa0);
+    memory_region_init_io(&s->iomem, &f2xx_tim_ops, s, "tim", 0xa0);
     sysbus_init_mmio(dev, &s->iomem);
     //s->regs[R_RTC_ISR] = R_RTC_ISR_RESET;
     ////s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
     //s->regs[R_RTC_WUTR] = R_RTC_WUTR_RESET;
     s->timer = qemu_new_timer_ns(vm_clock, f2xx_tim_timer, s);
     qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_period(s));
+    sysbus_init_irq(dev, &s->irq);
+    
     return 0;
 }
 
