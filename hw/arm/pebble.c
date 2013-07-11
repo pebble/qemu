@@ -24,6 +24,55 @@
 #include "hw/ssi.h"
 #include "sysemu/sysemu.h"
 #include "hw/boards.h"
+#include "ui/console.h"
+
+struct button_map {
+    int gpio;
+    int pin;
+};
+
+struct button_map button_map_bb2_ev1_ev2[] = {
+    {STM32_GPIOC_INDEX, 3},
+    {STM32_GPIOA_INDEX, 2},
+    {STM32_GPIOC_INDEX, 6},
+    {STM32_GPIOA_INDEX, 1},
+};
+
+struct button_map button_map_bigboard[] = {
+    {STM32_GPIOA_INDEX, 2},
+    {STM32_GPIOA_INDEX, 1},
+    {STM32_GPIOA_INDEX, 3},
+    {STM32_GPIOC_INDEX, 9}
+};
+
+static void
+pebble_key_handler(void *arg, int keycode)
+{
+    int pressed = (keycode & 0x80) == 0;
+    int button_id;
+    qemu_irq *button_irq = arg;
+
+    keycode &= 0x7f;
+    switch (keycode) {
+    case 16: /* Q */
+        button_id = 0;
+        break;
+    case 17: /* W */
+        button_id = 1;
+        break;
+    case 31: /* S */
+        button_id = 2;
+        break;
+    case 45: /* X */
+        button_id = 3;
+        break;
+    default:
+        return;
+    }
+
+    printf("button %d %s\n", button_id, pressed ? "pressed" : "released");
+    qemu_set_irq(button_irq[button_id], !pressed);
+}
 
 static void pebble1_init(QEMUMachineInitArgs *args) {
     Stm32Gpio *gpio[STM32F2XX_GPIO_COUNT];
@@ -53,6 +102,15 @@ static void pebble1_init(QEMUMachineInitArgs *args) {
     stm32_uart_connect(uart[0], serial_hds[0], 0);
     stm32_uart_connect(uart[1], serial_hds[1], 0);
     stm32_uart_connect(uart[2], serial_hds[2], 0); /* Debug */
+
+    /* Buttons */
+    static qemu_irq button[4];
+    struct button_map *map = button_map_bb2_ev1_ev2;
+    int i;
+    for (i = 0; i < 4; i++) {
+        button[i] = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
+    }
+    qemu_add_kbd_event_handler(pebble_key_handler, &button);
 }
 
 static QEMUMachine pebble1_machine = {
