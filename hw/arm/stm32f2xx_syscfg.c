@@ -100,17 +100,18 @@ static void stm32_syscfg_SYSCFG_EXTICR_write(Stm32Syscfg *s, unsigned index,
 
     /* Loop through the four EXTI lines controlled by this register. */
     for(i = 0; i < SYSCFG_EXTI_PER_CR; i++) {
-        /* For each line, notify the EXTI module.  This shouldn't
-         * happen often, so we update all four, even if they all don't
-         * change. */
+        /* For each line, notify the EXTI module if it has changed. */
         exti_line = (index * SYSCFG_EXTI_PER_CR) + i;
         start = i * 4;
 
+        new_gpio_index = (new_value >> start) & 0xf;
         if(!init) {
             old_gpio_index = (s->SYSCFG_EXTICR[index] >> start) & 0xf;
+            if (old_gpio_index == new_gpio_index) {
+                continue;
+            }
             stm32_exti_reset_gpio(s->stm32_exti, exti_line, old_gpio_index);
         }
-        new_gpio_index = (new_value >> start) & 0xf;
         stm32_exti_set_gpio(s->stm32_exti, exti_line, new_gpio_index);
     }
 
