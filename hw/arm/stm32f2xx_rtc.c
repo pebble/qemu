@@ -182,6 +182,13 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
          * the timer for the remaining period.
          */
         break;
+    case R_RTC_TAFCR:
+        if (data) {
+            qemu_log_mask(LOG_UNIMP,
+              "f2xx rtc unimplemented write TAFCR+%u size %u val %u\n",
+              offset, size, (unsigned int)data);
+        }
+        break;
     default:
         qemu_log_mask(LOG_UNIMP, "f2xx rtc unimplemented write 0x%x+%u size %u val %u\n",
           (unsigned int)addr << 2, offset, size, (unsigned int)data);
