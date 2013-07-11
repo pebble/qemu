@@ -158,7 +158,21 @@ stm32f2xx_gpio_reset(DeviceState *dev)
         break;
     }
     /* XXX default IDR to all-1s */
-    s->regs[R_GPIO_IDR] = 0xffffffff;
+    s->regs[R_GPIO_IDR] = 0x0000ffff;
+}
+
+static void
+f2xx_gpio_set(void *arg, int pin, int level)
+{
+    stm32f2xx_gpio *s = arg;
+    uint32_t bit = 1<<pin;
+
+    if (level)
+        s->regs[R_GPIO_IDR] |= bit;
+    else
+        s->regs[R_GPIO_IDR] &= ~bit;
+
+    printf("GPIO %d set pin %d level %d\n", s->periph, pin, level);
 }
 
 static int
@@ -169,6 +183,7 @@ stm32f2xx_gpio_init(SysBusDevice *dev)
     memory_region_init_io(&s->iomem, &stm32f2xx_gpio_ops, s, "gpio", 0x400);
     sysbus_init_mmio(dev, &s->iomem);
 
+    qdev_init_gpio_in(&dev->qdev, f2xx_gpio_set, STM32_GPIO_PIN_COUNT);
     qdev_init_gpio_out(&dev->qdev, s->pin, STM32_GPIO_PIN_COUNT);
 
     return 0;
