@@ -203,7 +203,7 @@ static const MemoryRegionOps f2xx_rtc_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
     .impl = {
         .min_access_size = 1,
-        .max_access_size = 1,
+        .max_access_size = 4,
     }
 };
 
