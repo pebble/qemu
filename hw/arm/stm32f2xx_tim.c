@@ -56,18 +56,10 @@ typedef struct f2xx_tim {
 } f2xx_tim;
 
 static uint32_t
-f2xx_period(f2xx_tim *s)
+f2xx_tim_period(f2xx_tim *s)
 {
-#if 0
-    uint32_t prer = s->regs[R_RTC_PRER];
-    unsigned int prescale;
-
-    prescale = (((prer >> R_RTC_PRER_PREDIV_A_SHIFT) & R_RTC_PRER_PREDIV_A_MASK) + 1) *
-               (((prer >> R_RTC_PRER_PREDIV_S_SHIFT) & R_RTC_PRER_PREDIV_S_MASK) + 1);
-    return 1000000000LL * prescale / 32768;
-#else
-    return 100000000LL;
-#endif
+    /* FIXME: hard coded to 32kHz */
+    return 31250;
 }
 
 static void
@@ -76,7 +68,7 @@ f2xx_tim_timer(void *arg)
     f2xx_tim *s = arg;
 
     s->t++;
-    qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_period(s));
+    qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_tim_period(s));
     qemu_set_irq(s->irq, 1);
     //printf("f2xx tim timer expired\n");
 }
@@ -180,7 +172,7 @@ f2xx_tim_init(SysBusDevice *dev)
     ////s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
     //s->regs[R_RTC_WUTR] = R_RTC_WUTR_RESET;
     s->timer = qemu_new_timer_ns(vm_clock, f2xx_tim_timer, s);
-    qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_period(s));
+    qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_tim_period(s));
     sysbus_init_irq(dev, &s->irq);
     
     return 0;
