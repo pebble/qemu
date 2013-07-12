@@ -49,6 +49,8 @@
 #define R_RTC_BKPxR_LAST (0x9c / 4)
 #define R_RTC_MAX    (0xa0 / 4)
 
+#define DEBUG_ALARM(x...)
+
 typedef struct f2xx_rtc {
     SysBusDevice busdev;
     MemoryRegion iomem;
@@ -134,7 +136,7 @@ f2xx_alarm_check(f2xx_rtc *s, int unit)
         if (f2xx_alarm_match(s, s->regs[R_RTC_ALRMAR + unit])) {
             isr |= 1<<(8 + unit);
             s->regs[R_RTC_ISR] = isr;
-            //printf("f2xx rtc alarm activated 0x%x 0x%x\n", isr, cr);
+            DEBUG_ALARM("f2xx rtc alarm activated 0x%x 0x%x\n", isr, cr);
         }
     }
     qemu_set_irq(s->irq[unit], cr & 1<<(12 + unit) && isr & 1<<(8 + unit));
@@ -231,6 +233,7 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         break;
     case R_RTC_ISR:
         if ((data & 1<<8) == 0 && (s->regs[R_RTC_ISR] & 1<<8) != 0) {
+            DEBUG_ALARM("f2xx rtc isr lowered\n");
             qemu_irq_lower(s->irq[0]);
         }
         break;
