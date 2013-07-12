@@ -105,7 +105,7 @@ static void pebble1_init(QEMUMachineInitArgs *args) {
 
     /* Buttons */
     static qemu_irq button[4];
-    struct button_map *map = button_map_bb2_ev1_ev2;
+    struct button_map *map = button_map_bigboard;
     int i;
     for (i = 0; i < 4; i++) {
         button[i] = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
