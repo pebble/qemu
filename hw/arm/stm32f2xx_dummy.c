@@ -58,7 +58,7 @@ static const MemoryRegionOps f2xx_dummy_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
     .impl = {
         .min_access_size = 1,
-        .max_access_size = 1,
+        .max_access_size = 4,
     }
 };
 
