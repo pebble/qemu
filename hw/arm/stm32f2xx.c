@@ -91,10 +91,12 @@ void stm32f2xx_init(
         stm32_gpio[i] = (Stm32Gpio *)gpio_dev[i];
     }
 
+    /* EXTI */
     DeviceState *exti_dev = qdev_create(NULL, "stm32_exti");
     qdev_prop_set_ptr(exti_dev, "stm32_gpio", gpio_dev);
     stm32_init_periph(exti_dev, STM32F2XX_EXTI, 0x40013C00, NULL);
     SysBusDevice *exti_busdev = SYS_BUS_DEVICE(exti_dev);
+    /* IRQs from EXTI to NVIC */
     sysbus_connect_irq(exti_busdev, 0, pic[STM32_EXTI0_IRQ]);
     sysbus_connect_irq(exti_busdev, 1, pic[STM32_EXTI1_IRQ]);
     sysbus_connect_irq(exti_busdev, 2, pic[STM32_EXTI2_IRQ]);
@@ -105,6 +107,12 @@ void stm32f2xx_init(
     sysbus_connect_irq(exti_busdev, 7, pic[STM32_PVD_IRQ]);
     sysbus_connect_irq(exti_busdev, 8, pic[STM32_RTCAlarm_IRQ]);
     sysbus_connect_irq(exti_busdev, 9, pic[STM32_OTG_FS_WKUP_IRQ]);
+#if 0
+    sysbus_connect_irq(exti_busdev, 10, pic[STM32_ETH_WKUP_IRQ]);
+    sysbus_connect_irq(exti_busdev, 11, pic[STM32_OTG_HS_WKUP_IRQ]);
+    sysbus_connect_irq(exti_busdev, 12, pic[STM32_TAMP_STAMP_IRQ]);
+    sysbus_connect_irq(exti_busdev, 13, pic[STM32_RTC_WKUP_IRQ]);
+#endif
 
     DeviceState *syscfg_dev = qdev_create(NULL, "stm32f2xx_syscfg");
     qdev_prop_set_ptr(syscfg_dev, "stm32_rcc", rcc_dev);
@@ -172,8 +180,10 @@ void stm32f2xx_init(
     DeviceState *adc_dev = qdev_create(NULL, "stm32f2xx_adc");
     stm32_init_periph(adc_dev, STM32F2XX_ADC1, 0x40012000, NULL);
 
+    /* RTC real time clock */
     DeviceState *rtc_dev = qdev_create(NULL, "f2xx_rtc");
     stm32_init_periph(rtc_dev, STM32F2XX_RTC, 0x40002800, NULL);
+    sysbus_connect_irq(SYS_BUS_DEVICE(rtc_dev), 0, qdev_get_gpio_in(exti_dev, 17));
 
 #define dummy_dev(name, start, size) do {\
     DeviceState *dummy = qdev_create(NULL, "f2xx_dummy"); \
@@ -233,7 +243,6 @@ void stm32f2xx_init(
     dummy_dev("SDIO",      0x40012C00, 0x400);
     // SPI1
     // SYSCFG needed
-    // EXTI needed
     dummy_dev("TIM9",      0x40014000, 0x400);
     dummy_dev("TIM10",     0x40014400, 0x400);
     dummy_dev("TIM11",     0x40014800, 0x400);
