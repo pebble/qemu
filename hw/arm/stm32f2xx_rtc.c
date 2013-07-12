@@ -92,19 +92,19 @@ f2xx_alarm_match(f2xx_rtc *s, uint32_t alarm_reg)
 {
     uint32_t tr = s->regs[R_RTC_TR];
 
-    if (alarm_reg & (1<<7) && (tr & 0x7f) != (alarm_reg & 0x7f)) {
+    if ((alarm_reg & (1<<7)) == 0 && (tr & 0x7f) != (alarm_reg & 0x7f)) {
         /* Seconds match requested, but do not match. */
         return false;
     }
-    if (alarm_reg & (1<<15) && (tr & 0x7f00) != (alarm_reg & 0x7f00)) {
+    if ((alarm_reg & (1<<15)) == 0 && (tr & 0x7f00) != (alarm_reg & 0x7f00)) {
         /* Minutes match requested, but do not match. */
         return false;
     }
-    if (alarm_reg & (1<<23) && (tr & 0x7f0000) != (alarm_reg & 0x7f0000)) {
+    if ((alarm_reg & (1<<23)) == 0 && (tr & 0x7f0000) != (alarm_reg & 0x7f0000)) {
         /* Hours match requested, but do not match. */
         return false;
     }
-    if (alarm_reg & (1<<31)) { /* Day match. */
+    if ((alarm_reg & (1<<31)) == 0) { /* Day match. */
         uint32_t dr = s->regs[R_RTC_DR];
         if (alarm_reg & (1<<30)) { /* Day is week day. */
             if (((alarm_reg>>24) & 0xf) != ((dr>>13) & 0xf)) {
