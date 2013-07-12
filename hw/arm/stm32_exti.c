@@ -103,7 +103,7 @@ static void stm32_exti_gpio_in_handler(void *opaque, int n, int level)
     Stm32Exti *s = (Stm32Exti *)opaque;
     unsigned pin = n;
 
-    assert(pin < STM32_GPIO_PIN_COUNT);
+    assert(pin < EXTI_LINE_COUNT);
 
     /* Check the level - if it is rising, then trigger an interrupt if the
      * corresponding Rising Trigger Selection Register flag is set.  Otherwise,
@@ -374,9 +374,7 @@ static int stm32_exti_init(SysBusDevice *dev)
         sysbus_init_irq(dev, &s->irq[i]);
     }
 
-    /* Create the handlers to handle GPIO input pin changes. */
-    s->gpio_in_irqs = qemu_allocate_irqs(stm32_exti_gpio_in_handler, (void *)s,
-                                        STM32_GPIO_PIN_COUNT);
+    qdev_init_gpio_in(&dev->qdev, stm32_exti_gpio_in_handler, EXTI_LINE_COUNT);
 
     return 0;
 }
