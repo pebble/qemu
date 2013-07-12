@@ -84,7 +84,7 @@ pebble_key_handler(void *arg, int keycode)
     qemu_set_irq(bs[button_id].irq, !pressed);
 }
 
-static void pebble1_init(QEMUMachineInitArgs *args) {
+static void pebble_init(QEMUMachineInitArgs *args, struct button_map *map) {
     Stm32Gpio *gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *uart[STM32_UART_COUNT];
     DeviceState *spi_flash;
@@ -115,7 +115,6 @@ static void pebble1_init(QEMUMachineInitArgs *args) {
 
     /* Buttons */
     static struct button_state bs[4];
-    struct button_map *map = button_map_bigboard;
     int i;
     for (i = 0; i < 4; i++) {
         bs[i].pressed = 0;
@@ -124,15 +123,32 @@ static void pebble1_init(QEMUMachineInitArgs *args) {
     qemu_add_kbd_event_handler(pebble_key_handler, bs);
 }
 
-static QEMUMachine pebble1_machine = {
-    .name = "pebble",
-    .desc = "Pebble smartwatch",
-    .init = pebble1_init
-};
-
-static void pebble1_machine_init(void)
-{
-    qemu_register_machine(&pebble1_machine);
+static void
+pebble_bb2_init(QEMUMachineInitArgs *args) {
+    pebble_init(args, button_map_bb2_ev1_ev2);
 }
 
-machine_init(pebble1_machine_init);
+static QEMUMachine pebble_bb2_machine = {
+    .name = "pebble-bb2",
+    .desc = "Pebble smartwatch (bb2/ev1/ev2)",
+    .init = pebble_bb2_init
+};
+
+static void
+pebble_bb_init(QEMUMachineInitArgs *args) {
+    pebble_init(args, button_map_bigboard);
+}
+
+static QEMUMachine pebble_bb_machine = {
+    .name = "pebble",
+    .desc = "Pebble smartwatch (bb)",
+    .init = pebble_bb_init
+};
+
+static void pebble_machine_init(void)
+{
+    qemu_register_machine(&pebble_bb2_machine);
+    qemu_register_machine(&pebble_bb_machine);
+}
+
+machine_init(pebble_machine_init);
