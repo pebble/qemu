@@ -61,13 +61,26 @@ f2xx_tim_period(f2xx_tim *s)
     return 31250;
 }
 
+static int64_t
+f2xx_tim_next_transition(f2xx_tim *s, int64_t current_time)
+{
+    if (s->regs[R_TIM_CR1] & 0x70) {
+        qemu_log_mask(LOG_UNIMP, "f2xx tim, only upedge-aligned mode supported\n");
+        return -1;
+    }
+    return current_time + f2xx_tim_period(s) * s->regs[R_TIM_ARR];
+}
+
 static void
 f2xx_tim_timer(void *arg)
 {
     f2xx_tim *s = arg;
 
-    qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_tim_period(s));
-    if (!s->regs[R_TIM_SR] & 1) printf("f2xx tim timer expired, setting int\n");
+    if (s->regs[R_TIM_CR1] & 1) {
+        qemu_mod_timer(s->timer, f2xx_tim_next_transition(s, qemu_get_clock_ns(vm_clock)));
+    }
+    if (!(s->regs[R_TIM_SR] & 1))
+        printf("f2xx tim timer expired, setting int\n");
     s->regs[R_TIM_SR] |= 1;
     qemu_set_irq(s->irq, 1);
 }
@@ -89,6 +102,7 @@ f2xx_tim_read(void *arg, hwaddr addr, unsigned int size)
     switch (addr) {
     case R_TIM_CR1:
     case R_TIM_DIER:
+    case R_TIM_SR:
         break;
     default:
         qemu_log_mask(LOG_UNIMP, "f2xx tim unimplemented read 0x%x+%u size %u val 0x%x\n",
@@ -127,6 +141,12 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     case R_TIM_CR1:
         if (data & ~1) {
             qemu_log_mask(LOG_UNIMP, "f2xx tim non-zero CR1 unimplemented\n");
+        }
+        if ((s->regs[addr] & 1) == 0 && data & 1) {
+            printf("f2xx tim started\n");
+            qemu_mod_timer(s->timer, f2xx_tim_next_transition(s, qemu_get_clock_ns(vm_clock)));
+        } else if (s->regs[addr] & 1 && (data & 1) == 0) {
+            qemu_del_timer(s->timer);
         }
         s->regs[addr] = data;
         break;
@@ -174,7 +194,6 @@ f2xx_tim_init(SysBusDevice *dev)
     ////s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
     //s->regs[R_RTC_WUTR] = R_RTC_WUTR_RESET;
     s->timer = qemu_new_timer_ns(vm_clock, f2xx_tim_timer, s);
-    qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_tim_period(s));
     sysbus_init_irq(dev, &s->irq);
     
     return 0;
