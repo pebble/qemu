@@ -45,12 +45,17 @@ struct button_map button_map_bigboard[] = {
     {STM32_GPIOC_INDEX, 9}
 };
 
+struct button_state {
+    qemu_irq irq;
+    int pressed;
+};
+
 static void
 pebble_key_handler(void *arg, int keycode)
 {
     int pressed = (keycode & 0x80) == 0;
     int button_id;
-    qemu_irq *button_irq = arg;
+    struct button_state *bs = arg;
 
     keycode &= 0x7f;
     switch (keycode) {
@@ -70,8 +75,13 @@ pebble_key_handler(void *arg, int keycode)
         return;
     }
 
+    if (bs[button_id].pressed == pressed) {
+        return;
+    }
+    bs[button_id].pressed = pressed;
+
     printf("button %d %s\n", button_id, pressed ? "pressed" : "released");
-    qemu_set_irq(button_irq[button_id], !pressed);
+    qemu_set_irq(bs[button_id].irq, !pressed);
 }
 
 static void pebble1_init(QEMUMachineInitArgs *args) {
@@ -104,13 +114,14 @@ static void pebble1_init(QEMUMachineInitArgs *args) {
     stm32_uart_connect(uart[2], serial_hds[2], 0); /* Debug */
 
     /* Buttons */
-    static qemu_irq button[4];
+    static struct button_state bs[4];
     struct button_map *map = button_map_bigboard;
     int i;
     for (i = 0; i < 4; i++) {
-        button[i] = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
+        bs[i].pressed = 0;
+        bs[i].irq = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
     }
-    qemu_add_kbd_event_handler(pebble_key_handler, &button);
+    qemu_add_kbd_event_handler(pebble_key_handler, bs);
 }
 
 static QEMUMachine pebble1_machine = {
