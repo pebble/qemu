@@ -132,8 +132,9 @@ f2xx_alarm_check(f2xx_rtc *s, int unit)
 #endif
     if ((isr & 1<<(8 + unit)) == 0) {
         if (f2xx_alarm_match(s, s->regs[R_RTC_ALRMAR + unit])) {
-            s->regs[R_RTC_ISR] |= 1<<(8 + unit);
-            printf("f2xx rtc alarm activated\n");
+            isr |= 1<<(8 + unit);
+            s->regs[R_RTC_ISR] = isr;
+            //printf("f2xx rtc alarm activated 0x%x 0x%x\n", isr, cr);
         }
     }
     qemu_set_irq(s->irq[unit], cr & 1<<(12 + unit) && isr & 1<<(8 + unit));
