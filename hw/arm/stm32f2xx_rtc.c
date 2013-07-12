@@ -53,6 +53,7 @@ typedef struct f2xx_rtc {
     SysBusDevice busdev;
     MemoryRegion iomem;
     QEMUTimer *timer;
+    qemu_irq irq[2];
     time_t t;
     uint32_t regs[R_RTC_MAX];
     int wp_count; /* Number of correct writes to WP reg */
@@ -86,6 +87,58 @@ f2xx_period(f2xx_rtc *s)
     return 1000000000LL * prescale / 32768;
 }
 
+static bool
+f2xx_alarm_match(f2xx_rtc *s, uint32_t alarm_reg)
+{
+    uint32_t tr = s->regs[R_RTC_TR];
+
+    if (alarm_reg & (1<<7) && (tr & 0x7f) != (alarm_reg & 0x7f)) {
+        /* Seconds match requested, but do not match. */
+        return false;
+    }
+    if (alarm_reg & (1<<15) && (tr & 0x7f00) != (alarm_reg & 0x7f00)) {
+        /* Minutes match requested, but do not match. */
+        return false;
+    }
+    if (alarm_reg & (1<<23) && (tr & 0x7f0000) != (alarm_reg & 0x7f0000)) {
+        /* Hours match requested, but do not match. */
+        return false;
+    }
+    if (alarm_reg & (1<<31)) { /* Day match. */
+        uint32_t dr = s->regs[R_RTC_DR];
+        if (alarm_reg & (1<<30)) { /* Day is week day. */
+            if (((alarm_reg>>24) & 0xf) != ((dr>>13) & 0xf)) {
+                return false;
+            }
+        } else { /* Day is day of month. */
+            if (((alarm_reg>>24) & 0x3f) != (dr & 0x3f)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static void
+f2xx_alarm_check(f2xx_rtc *s, int unit)
+{
+    uint32_t cr = s->regs[R_RTC_CR];
+    uint32_t isr = s->regs[R_RTC_ISR];
+
+#if 0 
+    if ((cr & 1<<(8 + unit)) == 0) {
+        return; /* Not enabled. */
+    }
+#endif
+    if ((isr & 1<<(8 + unit)) == 0) {
+        if (f2xx_alarm_match(s, s->regs[R_RTC_ALRMAR + unit])) {
+            s->regs[R_RTC_ISR] |= 1<<(8 + unit);
+            printf("f2xx rtc alarm activated\n");
+        }
+    }
+    qemu_set_irq(s->irq[unit], cr & 1<<(12 + unit) && isr & 1<<(8 + unit));
+}
+
 static void
 f2xx_timer(void *arg)
 {
@@ -93,6 +146,8 @@ f2xx_timer(void *arg)
 
     s->t++;
     f2xx_rtc_set_tdr(s);
+    f2xx_alarm_check(s, 0);
+    f2xx_alarm_check(s, 1);
     qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_period(s));
 }
 
@@ -174,6 +229,9 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     case R_RTC_CR:
         break;
     case R_RTC_ISR:
+        if ((data & 1<<8) == 0 && (s->regs[R_RTC_ISR] & 1<<8) != 0) {
+            qemu_irq_lower(s->irq[0]);
+        }
         break;
     case R_RTC_PRER:
         /*
@@ -181,6 +239,9 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
          * would need to account for the time already elapsed, and then update
          * the timer for the remaining period.
          */
+        break;
+    case R_RTC_ALRMAR:
+    case R_RTC_ALRMBR:
         break;
     case R_RTC_TAFCR:
         if (data) {
@@ -190,7 +251,7 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         }
         break;
     default:
-        qemu_log_mask(LOG_UNIMP, "f2xx rtc unimplemented write 0x%x+%u size %u val %u\n",
+        qemu_log_mask(LOG_UNIMP, "f2xx rtc unimplemented write 0x%x+%u size %u val 0x%x\n",
           (unsigned int)addr << 2, offset, size, (unsigned int)data);
     }
     s->regs[addr] = data;
@@ -224,6 +285,8 @@ f2xx_rtc_init(SysBusDevice *dev)
 
     memory_region_init_io(&s->iomem, &f2xx_rtc_ops, s, "rtc", 0xa0);
     sysbus_init_mmio(dev, &s->iomem);
+    sysbus_init_irq(dev, &s->irq[0]);
+    sysbus_init_irq(dev, &s->irq[1]);
     f2xx_rtc_set_from_host(s);
     s->regs[R_RTC_ISR] = R_RTC_ISR_RESET;
     s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
