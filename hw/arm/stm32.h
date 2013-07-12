@@ -146,6 +146,13 @@ typedef int32_t stm32_periph_t;
 #define STM32_OTG_FS_WKUP_IRQ 42
 #define STM32_ETH_WKUP_IRQ 62
 
+#define STM32_TIM1_BRK_TIM9_IRQ 24
+#define STM32_TIM1_UP_TIM10_IRQ 25
+#define STM32_TIM1_TRG_COM_TIM11_IRQ 26
+#define STM32_TIM1_CC_IRQ 27
+#define STM32_TIM2_IRQ 28
+#define STM32_TIM3_IRQ 29
+#define STM32_TIM4_IRQ 30
 
 
 
