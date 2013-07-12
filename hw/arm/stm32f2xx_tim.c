@@ -28,7 +28,7 @@
 #define R_TIM_CR1    (0x00 / 4) //p
 #define R_TIM_CR2    (0x04 / 4)
 #define R_TIM_SMCR   (0x08 / 4)
-#define R_TIM_DIER   (0x0c / 4)
+#define R_TIM_DIER   (0x0c / 4) //p
 #define R_TIM_SR     (0x10 / 4) //p
 #define R_TIM_EGR    (0x14 / 4) //p
 #define R_TIM_CCMR1  (0x18 / 4)
@@ -51,7 +51,6 @@ typedef struct f2xx_tim {
     MemoryRegion iomem;
     QEMUTimer *timer;
     qemu_irq irq;
-    time_t t;
     uint32_t regs[R_TIM_MAX];
 } f2xx_tim;
 
@@ -67,10 +66,10 @@ f2xx_tim_timer(void *arg)
 {
     f2xx_tim *s = arg;
 
-    s->t++;
     qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_tim_period(s));
+    if (!s->regs[R_TIM_SR] & 1) printf("f2xx tim timer expired, setting int\n");
+    s->regs[R_TIM_SR] |= 1;
     qemu_set_irq(s->irq, 1);
-    //printf("f2xx tim timer expired\n");
 }
 
 static uint64_t
@@ -89,6 +88,7 @@ f2xx_tim_read(void *arg, hwaddr addr, unsigned int size)
     r = (s->regs[addr] >> offset * 8) & ((1ull << (8 * size)) - 1);
     switch (addr) {
     case R_TIM_CR1:
+    case R_TIM_DIER:
         break;
     default:
         qemu_log_mask(LOG_UNIMP, "f2xx tim unimplemented read 0x%x+%u size %u val 0x%x\n",
@@ -132,14 +132,16 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         break;
     case R_TIM_SR:
         if (s->regs[addr] & 1 && (data & 1) == 0) {
+            printf("f2xx tim clearing int\n");
             qemu_set_irq(s->irq, 0);
         }
         s->regs[addr] &= data;
         break;
     case R_TIM_EGR:
-        qemu_log_mask(LOG_UNIMP, "f2xx tim unimplemented write 0x%x+%u size %u val 0x%x\n",
-          (unsigned int)addr << 2, offset, size, (unsigned int)data);
+        qemu_log_mask(LOG_UNIMP, "f2xx tim unimplemented write EGR+%u size %u val 0x%x\n",
+          offset, size, (unsigned int)data);
         break;
+    case R_TIM_DIER:
     case R_TIM_PSC:
     case R_TIM_ARR:
         s->regs[addr] = data;
