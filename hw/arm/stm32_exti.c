@@ -180,11 +180,19 @@ static void stm32_exti_change_EXTI_PR_bit(Stm32Exti *s, unsigned pos,
         } else if(pos == 18) {
             /* OTG_FS_WKUP IRQ */
             qemu_set_irq(s->irq[9], new_bit_value);
+        } else if(pos == 19) {
+            /* ETH_WKUP IRQ */
+            qemu_set_irq(s->irq[10], new_bit_value);
+        } else if(pos == 20) {
+            /* OTG_HS_WKUP IRQ */
+            qemu_set_irq(s->irq[11], new_bit_value);
+        } else if(pos == 21) {
+            /* TAMP_STAMP IRQ */
+            qemu_set_irq(s->irq[12], new_bit_value);
+        } else if(pos == 22) {
+            /* RTC_WKUP IRQ */
+            qemu_set_irq(s->irq[13], new_bit_value);
         } else {
-            /* FIXME: TAMP_STAMP */
-            /* FIXME: ETH_WKUP */
-            /* FIXME: OTG_HS_WKUP */
-            /* FIXME: RTC_WKUP */
             assert(false);
         }
 
