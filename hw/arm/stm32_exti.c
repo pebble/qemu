@@ -60,7 +60,7 @@ struct Stm32Exti {
 
     /* Copy of stm32_gpio_prop correctly typed as an array of Stm32Gpio
      * pointers. */
-    Stm32Gpio **stm32_gpio;
+    stm32f2xx_gpio **stm32_gpio;
 
     uint32_t
         EXTI_IMR,
@@ -68,12 +68,6 @@ struct Stm32Exti {
         EXTI_FTSR,
         EXTI_SWIER,
         EXTI_PR;
-
-    /* An array of IRQs to handle interrupts when a GPIO pin changes.
-     * There are 16 IRQs, one for each GPIO pin.  Each IRQ will be registered
-     * with the appropriate GPIO based on the AFIO External Interrupt
-     * configuration register. */
-    qemu_irq *gpio_in_irqs;
 
     qemu_irq irq[EXTI_IRQ_COUNT];
 };
@@ -337,9 +331,7 @@ void stm32_exti_set_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_in
     assert(exti_line < EXTI_LINE_COUNT);
 
     /* Call the GPIO module with the EXTI lines IRQ handler. */
-#if 0
-    stm32_gpio_set_exti_irq(s->stm32_gpio[gpio_index], exti_line, s->gpio_in_irqs[exti_line]);
-#endif
+    f2xx_exti_set(s->stm32_gpio[gpio_index], exti_line, qdev_get_gpio_in(&s->busdev.qdev, exti_line));
 }
 
 void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_index)
@@ -347,9 +339,7 @@ void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_
     assert(exti_line < EXTI_LINE_COUNT);
 
     /* Call the GPIO module to clear its IRQ assignment. */
-#if 0
-    stm32_gpio_set_exti_irq(s->stm32_gpio[gpio_index], exti_line, NULL);
-#endif
+    f2xx_exti_set(s->stm32_gpio[gpio_index], exti_line, NULL);
 }
 
 
@@ -362,9 +352,7 @@ static int stm32_exti_init(SysBusDevice *dev)
 
     Stm32Exti *s = FROM_SYSBUS(Stm32Exti, dev);
 
-#if 0
-    s->stm32_gpio = (Stm32Gpio **)s->stm32_gpio_prop;
-#endif
+    s->stm32_gpio = (stm32f2xx_gpio **)s->stm32_gpio_prop;
 
     memory_region_init_io(&s->iomem, &stm32_exti_ops, s,
             "exti", 0x03ff);

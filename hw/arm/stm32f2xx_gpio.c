@@ -38,17 +38,18 @@
 #define R_GPIO_AFRH    (0x24 / 4)
 #define R_GPIO_MAX     (0x28 / 4)
 
-typedef struct {
+struct stm32f2xx_gpio {
     SysBusDevice busdev;
     MemoryRegion iomem;
 
     stm32_periph_t periph;
 
     qemu_irq pin[STM32_GPIO_PIN_COUNT];
+    qemu_irq exti[STM32_GPIO_PIN_COUNT];
 
     uint32_t regs[R_GPIO_MAX];
     uint32_t ccr;
-} stm32f2xx_gpio;
+};
 
 static uint64_t
 stm32f2xx_gpio_read(void *arg, hwaddr offset, unsigned int size)
@@ -172,7 +173,17 @@ f2xx_gpio_set(void *arg, int pin, int level)
     else
         s->regs[R_GPIO_IDR] &= ~bit;
 
+    /* Inform EXTI module of pin state */
+    qemu_set_irq(s->exti[pin], level);
+
     printf("GPIO %d set pin %d level %d\n", s->periph, pin, level);
+}
+
+void
+f2xx_exti_set(stm32f2xx_gpio *s, unsigned pin, qemu_irq irq)
+{
+    s->exti[pin] = irq;
+    printf("GPIO %d set exti %d irq %p\n", s->periph, pin, irq);
 }
 
 static int

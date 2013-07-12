@@ -116,9 +116,7 @@ void stm32f2xx_init(
 
     DeviceState *syscfg_dev = qdev_create(NULL, "stm32f2xx_syscfg");
     qdev_prop_set_ptr(syscfg_dev, "stm32_rcc", rcc_dev);
-#if 0
     qdev_prop_set_ptr(syscfg_dev, "stm32_exti", exti_dev);
-#endif
     qdev_prop_set_bit(syscfg_dev, "boot0", 0);
     qdev_prop_set_bit(syscfg_dev, "boot1", 0);
     stm32_init_periph(syscfg_dev, STM32F2XX_SYSCFG, 0x40013800, NULL);
