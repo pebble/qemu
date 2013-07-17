@@ -97,16 +97,12 @@ static void stm32_p103_init(QEMUMachineInitArgs *args) {
     const char* kernel_filename = args->kernel_filename;
     qemu_irq *led_irq;
     Stm32P103 *s;
-    Stm32Gpio *stm32_gpio[STM32F1XX_GPIO_COUNT];
-    Stm32Uart *stm32_uart[STM32_UART_COUNT];
 
     s = (Stm32P103 *)g_malloc0(sizeof(Stm32P103));
 
     stm32f1xx_init(/*flash_size*/ 128,
                /*ram_size*/ 20,
                kernel_filename,
-               stm32_gpio,
-               stm32_uart,
                8000000,
                32768);
 

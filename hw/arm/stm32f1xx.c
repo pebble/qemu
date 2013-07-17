@@ -74,11 +74,12 @@ void stm32f1xx_init(
             ram_addr_t flash_size,
             ram_addr_t ram_size,
             const char *kernel_filename,
-            Stm32Gpio **stm32_gpio,
-            Stm32Uart **stm32_uart,
             uint32_t osc_freq,
             uint32_t osc32_freq)
 {
+    Stm32Gpio *stm32_gpio[STM32F1XX_GPIO_COUNT];
+    Stm32Uart *stm32_uart[STM32_UART_COUNT];
+
     MemoryRegion *address_space_mem = get_system_memory();
     qemu_irq *pic;
     int i;
