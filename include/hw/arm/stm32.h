@@ -142,24 +142,6 @@ const char *stm32_periph_name(stm32_periph_t periph);
 #define STM32_GPIO_PERIPH_FROM_INDEX(gpio_index) (STM32_GPIOA + gpio_index)
 
 
-/* REGISTER HELPERS */
-/* Macros used for converting a half-word into a word.
- *  * Assume that memory alignment can be determined by looking at offset
- *   * i.e. the base address should always be 4 byte aligned.
- *    * Also assume that odd offsets will never occur
- *     * i.e. all offsets must be 2 byte aligned.
- *      */
-#define STM32_REG_READH_VALUE(offset, value32) \
-              ((offset & 3) ? \
-                           (value32 & 0xffff0000) >> 16 : \
-                           value32 & 0x0000ffff)
-#define STM32_REG_WRITEH_VALUE(offset, old_value32, new_value32) \
-              ((offset & 3) ? \
-                           (old_value32 & 0x0000ffff) | ((new_value32 & 0x0000ffff) << 16) : \
-                           (old_value32 & 0xffff0000) | (new_value32 & 0x0000ffff) )
-
-
-/* REGISTER HELPERS */
 /* Error handlers */
 # define STM32_BAD_REG(offset, size)       \
         hw_error("%s: Bad register 0x%x - size %u\n", __FUNCTION__, (int)offset, size)
