@@ -59,6 +59,8 @@ struct Stm32Gpio {
      */
     uint32_t GPIOx_CRy[2];
 
+    uint16_t in;
+
     /* 0 = input
      * 1 = output
      */
@@ -72,8 +74,6 @@ struct Stm32Gpio {
      * the output should be updated to match the input in this case....
      */
     qemu_irq out_irq[STM32_GPIO_PIN_COUNT];
-
-    uint16_t in;
 
     /* EXTI IRQ to notify on input change - there is one EXTI IRQ per pin. */
     qemu_irq exti_irq[STM32_GPIO_PIN_COUNT];
@@ -228,9 +228,13 @@ static void stm32_gpio_GPIOx_BRR_write(Stm32Gpio *s, uint32_t new_value)
             false);
 }
 
-
-static uint64_t stm32_gpio_readw(Stm32Gpio *s, hwaddr offset)
+static uint64_t stm32_gpio_read(void *opaque, hwaddr offset,
+                          unsigned size)
 {
+    Stm32Gpio *s = (Stm32Gpio *)opaque;
+
+    assert(size == 4);
+
     switch (offset) {
         case GPIOx_CRL_OFFSET: /* GPIOx_CRL */
             return s->GPIOx_CRy[GPIOx_CRL_INDEX];
@@ -257,8 +261,16 @@ static uint64_t stm32_gpio_readw(Stm32Gpio *s, hwaddr offset)
     }
 }
 
-static void stm32_gpio_writew(Stm32Gpio *s, hwaddr offset, uint64_t value)
+static void stm32_gpio_write(void *opaque, hwaddr offset,
+                       uint64_t value, unsigned size)
 {
+    Stm32Gpio *s = (Stm32Gpio *)opaque;
+
+    assert(size == 4);
+
+    // FIXME: We don't have a sysbus available here.
+    //STM32_RCC_GET_CLASS(s->stm32_rcc)->check_periph_clk(s->stm32_rcc, s->periph, NULL);
+
     switch (offset) {
         case GPIOx_CRL_OFFSET: /* GPIOx_CRL */
             stm32_gpio_GPIOx_CRy_write(s, GPIOx_CRL_INDEX, value, false);
@@ -288,41 +300,11 @@ static void stm32_gpio_writew(Stm32Gpio *s, hwaddr offset, uint64_t value)
     }
 }
 
-
-
-static uint64_t stm32_gpio_read(void *opaque, hwaddr offset, unsigned size)
-{
-    Stm32Gpio *s = (Stm32Gpio *)opaque;
-
-    switch(size) {
-        case WORD_ACCESS_SIZE:
-            return stm32_gpio_readw(s, offset);
-        default:
-            STM32_BAD_REG(offset, size);
-            return 0;
-    }
-}
-
-static void stm32_gpio_write(void *opaque, hwaddr offset, uint64_t value,
-                             unsigned size)
-{
-    Stm32Gpio *s = (Stm32Gpio *)opaque;
-
-    STM32_RCC_GET_CLASS(s->stm32_rcc)->check_periph_clk(s->stm32_rcc, s->periph, &s->busdev);
-
-    switch(size) {
-        case WORD_ACCESS_SIZE:
-            stm32_gpio_writew(s, offset, value);
-            break;
-        default:
-            STM32_BAD_REG(offset, size);
-            break;
-    }
-}
-
 static const MemoryRegionOps stm32_gpio_ops = {
     .read = stm32_gpio_read,
     .write = stm32_gpio_write,
+    .valid.min_access_size = 4,
+    .valid.max_access_size = 4,
     .endianness = DEVICE_NATIVE_ENDIAN
 };
 
