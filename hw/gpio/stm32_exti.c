@@ -46,23 +46,23 @@
 #define EXTI_IRQ_COUNT 14
 
 #define OBJECT_STM32_EXTI(obj) \
-    OBJECT_CHECK(Stm32Exti, (obj), "stm32_exti")
+    OBJECT_CHECK(Stm32Exti, (obj), TYPE_STM32_EXTI)
 
 
 struct Stm32Exti {
     /* Inherited */
     SysBusDevice busdev;
 
-    /* Properties */
-    /* Array of Stm32Gpio pointers (one for each GPIO).  The QEMU property
-     * library expects this to be a void pointer. */
-    void *stm32_gpio_prop;
-
     /* Private */
     MemoryRegion iomem;
 
+    /* Properties */
+    /* Array of Stm32Gpio pointers (one for each GPIO).  The QEMU property
+     *  * library expects this to be a void pointer. */
+    void *stm32_gpio_prop;
+
     /* Copy of stm32_gpio_prop correctly typed as an array of Stm32Gpio
-     * pointers. */
+     *  * pointers. */
     stm32f2xx_gpio **stm32_gpio;
 
     uint32_t
@@ -307,23 +307,21 @@ static void stm32_exti_reset(DeviceState *dev)
 }
 
 
-
 /* PUBLIC FUNCTIONS */
 
 void stm32_exti_set_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_index)
 {
     assert(exti_line < EXTI_LINE_COUNT);
 
-    /* Call the GPIO module with the EXTI lines IRQ handler. */
-    f2xx_exti_set(s->stm32_gpio[gpio_index], exti_line, qdev_get_gpio_in(DEVICE(&s->busdev), exti_line));
+    sysbus_connect_irq(SYS_BUS_DEVICE(s->stm32_gpio[gpio_index]), exti_line,
+            qdev_get_gpio_in(DEVICE(s), exti_line));
 }
 
 void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_index)
 {
     assert(exti_line < EXTI_LINE_COUNT);
 
-    /* Call the GPIO module to clear its IRQ assignment. */
-    f2xx_exti_set(s->stm32_gpio[gpio_index], exti_line, NULL);
+    sysbus_connect_irq(SYS_BUS_DEVICE(s->stm32_gpio[gpio_index]), exti_line, NULL);
 }
 
 
@@ -346,6 +344,7 @@ static int stm32_exti_init(SysBusDevice *dev)
         sysbus_init_irq(dev, &s->irq[i]);
     }
 
+    /* Create the handlers to handle GPIO input pin changes. */
     qdev_init_gpio_in(DEVICE(dev), stm32_exti_gpio_in_handler, EXTI_LINE_COUNT);
 
     return 0;
@@ -367,7 +366,7 @@ static void stm32_exti_class_init(ObjectClass *klass, void *data)
 }
 
 static TypeInfo stm32_exti_info = {
-    .name  = "stm32_exti",
+    .name  = TYPE_STM32_EXTI,
     .parent = TYPE_SYS_BUS_DEVICE,
     .instance_size  = sizeof(Stm32Exti),
     .class_init = stm32_exti_class_init

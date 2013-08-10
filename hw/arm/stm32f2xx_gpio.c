@@ -200,6 +200,11 @@ stm32f2xx_gpio_init(SysBusDevice *dev)
     qdev_init_gpio_in(DEVICE(dev), f2xx_gpio_set, STM32_GPIO_PIN_COUNT);
     qdev_init_gpio_out(DEVICE(dev), s->pin, STM32_GPIO_PIN_COUNT);
 
+    unsigned pin;
+    for (pin = 0; pin < STM32_GPIO_PIN_COUNT; pin++) {
+        sysbus_init_irq(dev, &s->exti[pin]);
+    }
+
     return 0;
 }
 

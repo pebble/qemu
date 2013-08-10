@@ -63,7 +63,7 @@ struct Stm32Gpio {
      */
     qemu_irq out_irq[STM32_GPIO_PIN_COUNT];
 
-    /* IRQs which relay input pin changes to other STM32 peripherals */
+    /* EXTI IRQ to notify on input change - there is one EXTI IRQ per pin. */
     qemu_irq in_irq[STM32_GPIO_PIN_COUNT];
 };
 
@@ -81,15 +81,11 @@ static void stm32_gpio_in_trigger(void *opaque, int irq, int level)
 
     assert(pin < STM32_GPIO_PIN_COUNT);
 
-    /* Only proceed if the pin has actually changed value (the trigger
-     * will fire when the IRQ is set, even if it set to the same level). */
-    if(GET_BIT_VALUE(s->in, pin) != level) {
-        /* Update internal pin state. */
-        CHANGE_BIT(s->in, pin, level);
+    /* Update internal pin state. */
+    CHANGE_BIT(s->in, pin, level);
 
-        /* Propagate the trigger to the EXTI module. */
-        qemu_set_irq(s->in_irq[pin], level);
-    }
+    /* Propagate the trigger to the input IRQs. */
+    qemu_set_irq(s->in_irq[pin], level);
 }
 
 
@@ -304,7 +300,6 @@ uint8_t stm32_gpio_get_mode_bits(Stm32Gpio *s, unsigned pin) {
 
 static int stm32_gpio_init(SysBusDevice *dev)
 {
-    unsigned pin;
     Stm32Gpio *s = STM32_GPIO(dev);
 
     s->stm32_rcc = (Stm32Rcc *)s->stm32_rcc_prop;
@@ -316,7 +311,8 @@ static int stm32_gpio_init(SysBusDevice *dev)
     qdev_init_gpio_in(DEVICE(dev), stm32_gpio_in_trigger, STM32_GPIO_PIN_COUNT);
     qdev_init_gpio_out(DEVICE(dev), s->out_irq, STM32_GPIO_PIN_COUNT);
 
-    for(pin = 0; pin < STM32_GPIO_PIN_COUNT; pin++) {
+    unsigned pin;
+    for (pin = 0; pin < STM32_GPIO_PIN_COUNT; pin++) {
         sysbus_init_irq(dev, &s->in_irq[pin]);
     }
 

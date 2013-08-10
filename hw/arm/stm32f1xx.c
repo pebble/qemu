@@ -119,7 +119,7 @@ void stm32f1xx_init(
         stm32_gpio[i] = (Stm32Gpio *)gpio_dev[i];
     }
 
-    DeviceState *exti_dev = qdev_create(NULL, "stm32_exti");
+    DeviceState *exti_dev = qdev_create(NULL, TYPE_STM32_EXTI);
     qdev_prop_set_ptr(exti_dev, "stm32_gpio", gpio_dev);
     stm32_init_periph(exti_dev, STM32F1XX_EXTI, 0x40010400, NULL);
     SysBusDevice *exti_busdev = SYS_BUS_DEVICE(exti_dev);
@@ -136,7 +136,6 @@ void stm32f1xx_init(
 
     DeviceState *afio_dev = qdev_create(NULL, TYPE_STM32_AFIO);
     qdev_prop_set_ptr(afio_dev, "stm32_rcc", rcc_dev);
-    qdev_prop_set_ptr(afio_dev, "stm32_exti", exti_dev);
     stm32_init_periph(afio_dev, STM32F1XX_AFIO, 0x40010000, NULL);
 
     // Create UARTs:
