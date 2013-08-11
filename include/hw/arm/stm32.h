@@ -255,11 +255,6 @@ typedef struct Stm32Gpio Stm32Gpio;
 #define STM32_GPIO_COUNT (STM32_GPIOG - STM32_GPIOA + 1)
 #define STM32_GPIO_PIN_COUNT 16
 
-/* Sets the EXTI IRQ for the specified pin.  When a change occurs
- *  * on this pin, and interrupt will be generated on this IRQ.
- *   */
-void stm32_gpio_set_exti_irq(Stm32Gpio *s, unsigned pin, qemu_irq in_irq);
-
 #define TYPE_STM32_GPIO "stm32-gpio"
 #define STM32_GPIO(obj) OBJECT_CHECK(Stm32Gpio, (obj), TYPE_STM32_GPIO)
 
