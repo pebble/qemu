@@ -15,8 +15,9 @@ while getopts Sd opt; do
     esac
 done
 
-$EMULATOR -rtc base=localtime -M pebble-bb2 -s $flags -pflash micro_flash.bin \
-    -mtdblock spi_flash.bin \
+$EMULATOR -rtc base=localtime -M pebble-bb2 -s $flags \
+    -pflash qemu_micro_flash.bin \
+    -mtdblock qemu_spi_flash.bin \
     -serial file:uart1.log \
     -serial file:uart2.log \
     -serial tcp::12345,server,nowait
