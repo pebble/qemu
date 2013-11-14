@@ -148,7 +148,7 @@ f2xx_dma_stream_start(f2xx_dma_stream *s)
     }
 
     /* XXX hack do the entire transfer here for now. */
-printf("dma transferring %d x %d byte(s) from 0x%08x to 0x%08x\n", s->ndtr, msize, s->m0ar, s->par);
+    //printf("dma transferring %d x %d byte(s) from 0x%08x to 0x%08x\n", s->ndtr, msize, s->m0ar, s->par);
     while (s->ndtr--) {
         cpu_physical_memory_read(s->m0ar, buf, msize);
         cpu_physical_memory_write(s->par, buf, msize);

@@ -80,7 +80,7 @@ f2xx_tim_timer(void *arg)
         qemu_mod_timer(s->timer, f2xx_tim_next_transition(s, qemu_get_clock_ns(vm_clock)));
     }
     if (!(s->regs[R_TIM_SR] & 1))
-        printf("f2xx tim timer expired, setting int\n");
+        //printf("f2xx tim timer expired, setting int\n");
     s->regs[R_TIM_SR] |= 1;
     qemu_set_irq(s->irq, 1);
 }
@@ -143,7 +143,7 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
             qemu_log_mask(LOG_UNIMP, "f2xx tim non-zero CR1 unimplemented\n");
         }
         if ((s->regs[addr] & 1) == 0 && data & 1) {
-            printf("f2xx tim started\n");
+            //printf("f2xx tim started\n");
             qemu_mod_timer(s->timer, f2xx_tim_next_transition(s, qemu_get_clock_ns(vm_clock)));
         } else if (s->regs[addr] & 1 && (data & 1) == 0) {
             qemu_del_timer(s->timer);
@@ -152,7 +152,7 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         break;
     case R_TIM_SR:
         if (s->regs[addr] & 1 && (data & 1) == 0) {
-            printf("f2xx tim clearing int\n");
+            //printf("f2xx tim clearing int\n");
             qemu_set_irq(s->irq, 0);
         }
         s->regs[addr] &= data;
