@@ -1,7 +1,6 @@
 #!/bin/sh
 
 EMULATOR=arm-softmmu/qemu-system-arm
-DEBUGLOG=debug.log
 
 while getopts Sd opt; do
     case $opt in
@@ -16,9 +15,8 @@ while getopts Sd opt; do
     esac
 done
 
-truncate -s 0 $DEBUGLOG
-$EMULATOR -rtc base=localtime -M pebble -s $flags -pflash micro_flash.bin \
+$EMULATOR -rtc base=localtime -M pebble-bb2 -s $flags -pflash micro_flash.bin \
     -mtdblock spi_flash.bin \
     -serial file:uart1.log \
     -serial file:uart2.log \
-    -serial file:$DEBUGLOG
+    -serial tcp::12345,server,nowait
