@@ -34,12 +34,18 @@ Configure options that are useful when developing (tested only on OS X 10.8.3 / 
         --extra-cflags=-DDEBUG_STM32_UART --extra-cflags=-DSTM32_UART_ENABLE_OVERRUN \
         --extra-cflags=-DDEBUG_GIC
 
+[MT 2014/01/02] This configuration stopped working (1a46030e0e6f4f14bb2f8e7b4a939a8eb5947dc0 / OS X 10.9.1 Mavericks)...
+
 Useful make commands when rebuilding:
 
         make defconfig
         make clean
 
 ## Generating Images
+Use `./waf build qemu_images` to generate `qemu_micro_flash.bin` and `qemu_spi_flash.bin` from tintin.
+
+### Under the covers of the images
+
 QEMU's -pflash argument is used to specify a file to use as the micro flash.
 An image can be created by concatenating the boot and main firmware files,
 like so:
@@ -49,6 +55,10 @@ like so:
 	truncate -s 512k micro_flash.bin
 
 ## Running
+There is a convenience script `pebble.sh` that runs QEMU. It depends on the existence of (symlinked) images `qemu_micro_flash.bin` and `qemu_spi_flash.bin`.
+
+### More details about running QEMU
+
 The generated executable is arm-softmmu/qemu-system-arm .
 
 Example:
