@@ -96,7 +96,7 @@ static void pebble_init(QEMUMachineInitArgs *args, struct button_map *map) {
 
     /* SPI flash */
     spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[0], "ssi");
-    spi_flash = ssi_create_slave_no_init(spi, "n25q032a");
+    spi_flash = ssi_create_slave_no_init(spi, "n25q032a11");
     qdev_init_nofail(spi_flash);
 
     qemu_irq cs;
