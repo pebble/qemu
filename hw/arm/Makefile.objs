@@ -5,3 +5,18 @@ obj-y += tosa.o versatilepb.o vexpress.o xilinx_zynq.o z2.o
 
 obj-y += armv7m.o exynos4210.o pxa2xx.o pxa2xx_gpio.o pxa2xx_pic.o
 obj-y += omap1.o omap2.o strongarm.o
+obj-y += stm32.o stm32f1xx.o stm32f2xx.o stm32_flash.o
+obj-y += stm32_rcc.o stm32f1xx_rcc.o stm32f2xx_rcc.o stm32_gpio.o stm32_uart.o
+obj-y += stm32f2xx_gpio.o stm32f2xx_adc.o
+obj-y += stm32_afio.o stm32_exti.o stm32f2xx_syscfg.o
+obj-y += stm32f2xx_rtc.o
+obj-y += stm32f2xx_flash.o
+obj-y += stm32f2xx_dummy.o
+obj-y += stm32f2xx_tim.o
+obj-y += stm32f2xx_i2c.o
+obj-y += stm32f2xx_crc.o
+obj-y += stm32f2xx_dma.o
+obj-y += stm32_p103.o stm32_p2xx.o
+obj-y += pebble.o
+obj-y += clktree.o
+

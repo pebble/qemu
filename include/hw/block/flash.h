@@ -61,4 +61,7 @@ uint8_t ecc_digest(ECCState *s, uint8_t sample);
 void ecc_reset(ECCState *s);
 extern VMStateDescription vmstate_ecc_state;
 
+typedef struct f2xx_flash f2xx_flash_t;
+f2xx_flash_t *f2xx_flash_register(BlockDriverState *bdrv, hwaddr base,
+                                  hwaddr size);
 #endif

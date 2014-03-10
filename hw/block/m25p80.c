@@ -230,6 +230,9 @@ typedef enum {
     ERASE_4K = 0x20,
     ERASE_32K = 0x52,
     ERASE_SECTOR = 0xd8,
+
+    SLEEP = 0xb9,
+    WAKE = 0xab,
 } FlashCMD;
 
 typedef enum {
@@ -536,6 +539,8 @@ static void decode_new_cmd(Flash *s, uint32_t value)
         }
         break;
     case NOP:
+    case SLEEP:
+    case WAKE:
         break;
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "M25P80: Unknown cmd %x\n", value);
