@@ -106,6 +106,11 @@ static void arm_cpu_reset(CPUState *s)
     if (IS_M(env)) {
         uint32_t pc;
         env->uncached_cpsr &= ~CPSR_I;
+
+        /* We've changed this from upstream because we don't actually use a rom to store
+           our firmware. The flash storage for our "rom" is actually implemented as an io
+           device in stm32f2xx_flash.c. Therefore, to initialize these registers, we have to
+           use ldl_phys and fixed offsets as opposed to a value returned from rom_ptr */
         env->regs[13] = ldl_phys(0);
         pc = ldl_phys(4);
         env->thumb = pc & 1;
