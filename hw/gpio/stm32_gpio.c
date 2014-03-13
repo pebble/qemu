@@ -22,7 +22,7 @@
 /* use PL061 for inspiration. */
 
 #include "hw/sysbus.h"
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 
 
 
@@ -39,9 +39,6 @@
 
 #define GPIOx_CRL_INDEX 0
 #define GPIOx_CRH_INDEX 1
-
-#define STM32_GPIO(obj) \
-    OBJECT_CHECK(Stm32Gpio, (obj), "stm32_gpio")
 
 struct Stm32Gpio {
     /* Inherited */
@@ -245,10 +242,10 @@ static uint64_t stm32_gpio_readw(Stm32Gpio *s, hwaddr offset)
         /* Note that documentation says BSRR and BRR are write-only, but reads
          * work on real hardware.  We follow the documentation.*/
         case GPIOx_BSRR_OFFSET: /* GPIOC_BSRR */
-            STM32_WO_REG(offset);
+            STM32_WARN_WO_REG(offset);
             return 0;
         case GPIOx_BRR_OFFSET: /* GPIOC_BRR */
-            STM32_WO_REG(offset);
+            STM32_WARN_WO_REG(offset);
             return 0;
         case GPIOx_LCKR_OFFSET: /* GPIOx_LCKR */
             /* Locking is not yet implemented */
@@ -261,8 +258,6 @@ static uint64_t stm32_gpio_readw(Stm32Gpio *s, hwaddr offset)
 
 static void stm32_gpio_writew(Stm32Gpio *s, hwaddr offset, uint64_t value)
 {
-
-
     switch (offset) {
         case GPIOx_CRL_OFFSET: /* GPIOx_CRL */
             stm32_gpio_GPIOx_CRy_write(s, GPIOx_CRL_INDEX, value, false);
@@ -271,7 +266,7 @@ static void stm32_gpio_writew(Stm32Gpio *s, hwaddr offset, uint64_t value)
             stm32_gpio_GPIOx_CRy_write(s, GPIOx_CRH_INDEX, value, false);
             break;
         case GPIOx_IDR_OFFSET:
-            STM32_RO_REG(offset);
+            STM32_WARN_RO_REG(offset);
             break;
         case GPIOx_ODR_OFFSET: /* GPIOx_ODR */
             stm32_gpio_GPIOx_ODR_write(s, value, false);

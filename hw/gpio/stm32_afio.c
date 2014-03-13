@@ -19,7 +19,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stm32f1xx.h"
+#include "hw/arm/stm32f1xx.h"
 
 
 
@@ -42,9 +42,6 @@
 #define AFIO_EXTICR4_OFFSET 0x14
 
 #define AFIO_EXTI_PER_CR 4
-
-#define STM32_AFIO(obj) \
-    OBJECT_CHECK(Stm32Afio, (obj), "stm32_afio")
 
 struct Stm32Afio {
     /* Inherited */

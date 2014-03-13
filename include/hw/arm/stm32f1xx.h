@@ -1,4 +1,4 @@
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 
 enum {
     STM32F1XX_PERIPH_UNDEFINED = -1,
@@ -49,3 +49,13 @@ enum {
 };
 
 #define STM32F1XX_GPIO_COUNT (STM32F1XX_GPIOG - STM32F1XX_GPIOA + 1)
+
+void stm32f1xx_init(
+            ram_addr_t flash_size,
+            ram_addr_t ram_size,
+            const char *kernel_filename,
+            Stm32Gpio **stm32_gpio,
+            Stm32Uart **stm32_uart,
+            uint32_t osc_freq,
+            uint32_t osc32_freq);
+

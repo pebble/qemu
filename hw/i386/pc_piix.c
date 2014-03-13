@@ -106,7 +106,7 @@ static void pc_init1(QEMUMachineInitArgs *args,
 
     if (args->ram_size >= 0xe0000000) {
         above_4g_mem_size = args->ram_size - 0xe0000000;
-        below_4g_mem_size = 0xe0000000;
+        below_4g_mem_size = QEMU_BELOW_4G_RAM_END;
     } else {
         above_4g_mem_size = 0;
         below_4g_mem_size = args->ram_size;

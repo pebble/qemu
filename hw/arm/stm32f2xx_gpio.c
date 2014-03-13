@@ -24,7 +24,7 @@
  */
 
 #include "hw/sysbus.h"
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 
 #define R_GPIO_MODER   (0x00 / 4)
 #define R_GPIO_OTYPER  (0x04 / 4)
@@ -41,7 +41,7 @@
 #define STM32F2XX_GPIO(obj) \
     OBJECT_CHECK(stm32f2xx_gpio, (obj), "stm32f2xx_gpio")
 
-struct stm32f2xx_gpio {
+typedef struct stm32f2xx_gpio {
     SysBusDevice busdev;
     MemoryRegion iomem;
 
@@ -52,7 +52,7 @@ struct stm32f2xx_gpio {
 
     uint32_t regs[R_GPIO_MAX];
     uint32_t ccr;
-};
+} stm32f2xx_gpio;
 
 static uint64_t
 stm32f2xx_gpio_read(void *arg, hwaddr offset, unsigned int size)

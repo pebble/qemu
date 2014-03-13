@@ -94,6 +94,7 @@ gcov-files-sparc64-y += hw/m48t59.c
 check-qtest-sparc-y += tests/qom-test$(EXESUF)
 check-qtest-sparc64-y += tests/qom-test$(EXESUF)
 check-qtest-arm-y = tests/tmp105-test$(EXESUF)
+check-qtest-arm-y += tests/test-stm32$(EXESUF)
 gcov-files-arm-y += hw/tmp105.c
 check-qtest-arm-y += tests/qom-test$(EXESUF)
 check-qtest-ppc-y += tests/boot-order-test$(EXESUF)
@@ -205,6 +206,8 @@ tests/qom-test$(EXESUF): tests/qom-test.o
 tests/blockdev-test$(EXESUF): tests/blockdev-test.o $(libqos-pc-obj-y)
 tests/qdev-monitor-test$(EXESUF): tests/qdev-monitor-test.o $(libqos-pc-obj-y)
 tests/qemu-iotests/socket_scm_helper$(EXESUF): tests/qemu-iotests/socket_scm_helper.o
+
+tests/test-stm32$(EXESUF): tests/test-stm32.o
 
 # QTest rules
 

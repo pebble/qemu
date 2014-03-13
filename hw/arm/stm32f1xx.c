@@ -19,8 +19,8 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stm32.h"
-#include "stm32f1xx.h"
+#include "hw/arm/stm32.h"
+#include "hw/arm/stm32f1xx.h"
 #include "exec/address-spaces.h"
 
 static const char *stm32f1xx_periph_name_arr[] = {
@@ -83,7 +83,9 @@ void stm32f1xx_init(
     qemu_irq *pic;
     int i;
 
-    pic = armv7m_init(address_space_mem, flash_size, ram_size, kernel_filename, "cortex-m3");
+    Object *stm32_container = container_get(qdev_get_machine(), "/stm32");
+
+    pic = armv7m_init(stm32_container, address_space_mem, flash_size, ram_size, kernel_filename, "cortex-m3");
 
     DeviceState *flash_dev = qdev_create(NULL, "stm32_flash");
     qdev_prop_set_uint32(flash_dev, "size", flash_size * 1024);
@@ -145,7 +147,7 @@ void stm32f1xx_init(
         qdev_prop_set_ptr(uart_dev, "stm32_rcc", rcc_dev);
         qdev_prop_set_ptr(uart_dev, "stm32_gpio", gpio_dev);
         qdev_prop_set_ptr(uart_dev, "stm32_afio", afio_dev);
-        qdev_prop_set_ptr(uart_dev, "stm32_check_tx_pin_callback", (void *)stm32_afio_uart_check_tx_pin_callback);
+        qdev_prop_set_ptr(uart_dev, "stm32_check_tx_pin_callback", stm32_afio_uart_check_tx_pin_callback);
         stm32_init_periph(uart_dev, periph, uart_desc[i].addr, pic[uart_desc[i].irq_idx]);
     }
 }

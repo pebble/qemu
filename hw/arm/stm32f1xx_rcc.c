@@ -164,7 +164,7 @@ do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
 #define SW_HSE_SELECTED 1
 #define SW_PLL_SELECTED 2
 
-#define STM32_RCC(obj) \
+#define OBJECT_STM32_RCC(obj) \
     OBJECT_CHECK(Stm32Rcc, (obj), "stm32f1xx_rcc");
 
 /* HELPER FUNCTIONS */
@@ -525,7 +525,7 @@ static const MemoryRegionOps stm32_rcc_ops = {
 
 static void stm32_rcc_reset(DeviceState *dev)
 {
-    Stm32Rcc *s = STM32_RCC(dev);
+    Stm32Rcc *s = OBJECT_STM32_RCC(dev);
 
     stm32_rcc_RCC_CR_write(s, 0x00000083, true);
     stm32_rcc_RCC_CFGR_write(s, 0x00000000, true);
@@ -649,7 +649,7 @@ static void stm32_rcc_init_clk(Stm32Rcc *s)
 
 static int stm32_rcc_init(SysBusDevice *dev)
 {
-    Stm32Rcc *s = STM32_RCC(dev);
+    Stm32Rcc *s = OBJECT_STM32_RCC(dev);
 
     memory_region_init_io(&s->iomem, NULL, &stm32_rcc_ops, s,
                           "rcc", 0x1000);

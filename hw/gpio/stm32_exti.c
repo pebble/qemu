@@ -19,7 +19,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 
 
 
@@ -45,7 +45,7 @@
 /* The number of IRQ connections to the NVIC */
 #define EXTI_IRQ_COUNT 14
 
-#define STM32_EXTI(obj) \
+#define OBJECT_STM32_EXTI(obj) \
     OBJECT_CHECK(Stm32Exti, (obj), "stm32_exti")
 
 
@@ -316,7 +316,7 @@ static const MemoryRegionOps stm32_exti_ops = {
 
 static void stm32_exti_reset(DeviceState *dev)
 {
-    Stm32Exti *s = STM32_EXTI(dev);
+    Stm32Exti *s = OBJECT_STM32_EXTI(dev);
 
     s->EXTI_IMR = 0x00000000;
     s->EXTI_RTSR = 0x00000000;
@@ -353,7 +353,7 @@ static int stm32_exti_init(SysBusDevice *dev)
 {
     int i;
 
-    Stm32Exti *s = STM32_EXTI(dev);
+    Stm32Exti *s = OBJECT_STM32_EXTI(dev);
 
     s->stm32_gpio = (stm32f2xx_gpio **)s->stm32_gpio_prop;
 

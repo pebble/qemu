@@ -20,7 +20,7 @@
  */
 
 #include "hw/hw.h"
-#include "../clktree.h"
+#include "hw/arm/stm32_clktree.h"
 
 
 /* DEFINITIONS*/

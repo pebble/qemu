@@ -941,6 +941,13 @@ static uint64_t memory_region_dispatch_read1(MemoryRegion *mr,
     uint64_t data = 0;
 
     if (mr->ops->read) {
+        qemu_log_mask(LOG_GUEST_ERROR,
+                      "Invalid memory read: offset=0x%llx size=%d"
+                      " (memory region=%s 0x%llx)\n",
+                      (unsigned long long)addr,
+                      size,
+                      mr->name,
+                      (unsigned long long)mr->addr);
         access_with_adjusted_size(addr, &data, size,
                                   mr->ops->impl.min_access_size,
                                   mr->ops->impl.max_access_size,

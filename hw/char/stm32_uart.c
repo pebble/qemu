@@ -22,8 +22,8 @@
 
 #include "qemu/timer.h"
 #include "hw/sysbus.h"
-#include "stm32f1xx.h"
-#include "stm32f2xx.h"
+#include "hw/arm/stm32f1xx.h"
+#include "hw/arm/stm32f2xx.h"
 #include "sysemu/char.h"
 
 

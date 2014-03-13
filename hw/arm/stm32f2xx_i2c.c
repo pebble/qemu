@@ -24,7 +24,7 @@
  */
 
 #include "hw/sysbus.h"
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 #include "hw/i2c/i2c.h"
 
 #define	R_I2C_CR1      (0x00 / 4)

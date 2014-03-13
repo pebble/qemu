@@ -540,7 +540,6 @@ static CharDriverState *qemu_chr_open_mux(CharDriverState *drv)
      */
     chr->explicit_be_open = muxes_realized ? 0 : 1;
     chr->is_mux = 1;
-
     return chr;
 }
 
