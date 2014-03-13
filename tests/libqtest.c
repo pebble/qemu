@@ -33,15 +33,17 @@
 #include "qapi/qmp/json-streamer.h"
 #include "qapi/qmp/json-parser.h"
 
+#define MAX_GPIO_INTERCEPTS 20
 #define MAX_IRQ 256
 
 QTestState *global_qtest;
 
 struct QTestState
 {
+    gpio_id last_intercept_gpio_id;
     int fd;
     int qmp_fd;
-    bool irq_level[MAX_IRQ];
+    bool irq_level[MAX_GPIO_INTERCEPTS][MAX_IRQ];
     GString *rx;
     gchar *pid_file; /* QEMU PID file */
     int child_pid;   /* Child process created to execute QEMU */
@@ -109,7 +111,7 @@ static pid_t qtest_qemu_pid(QTestState *s)
 QTestState *qtest_init(const char *extra_args)
 {
     QTestState *s;
-    int sock, qmpsock, i;
+    int sock, qmpsock, i, j;
     gchar *pid_file;
     gchar *command;
     const char *qemu_binary;
@@ -149,8 +151,12 @@ QTestState *qtest_init(const char *extra_args)
     s->rx = g_string_new("");
     s->pid_file = pid_file;
     s->child_pid = pid;
-    for (i = 0; i < MAX_IRQ; i++) {
-        s->irq_level[i] = false;
+
+    s->last_intercept_gpio_id = -1;
+    for(i = 0; i < MAX_GPIO_INTERCEPTS; i++) {
+        for (j = 0; j < MAX_IRQ; j++) {
+            s->irq_level[i][j] = false;
+        }
     }
 
     /* Read the QMP greeting and then do the handshake */
@@ -262,18 +268,24 @@ redo:
 
     if (strcmp(words[0], "IRQ") == 0) {
         int irq;
+        gpio_id id;
 
         g_assert(words[1] != NULL);
         g_assert(words[2] != NULL);
+        g_assert(words[3] != NULL);
 
-        irq = strtoul(words[2], NULL, 0);
+        id = strtoul(words[2], NULL, 0);
+        g_assert_cmpint(id, >=, 0);
+        g_assert_cmpint(id, <, MAX_GPIO_INTERCEPTS);
+
+        irq = strtoul(words[3], NULL, 0);
         g_assert_cmpint(irq, >=, 0);
         g_assert_cmpint(irq, <, MAX_IRQ);
 
         if (strcmp(words[1], "raise") == 0) {
-            s->irq_level[irq] = true;
+            s->irq_level[id][irq] = true;
         } else {
-            s->irq_level[irq] = false;
+            s->irq_level[id][irq] = false;
         }
 
         g_strfreev(words);
@@ -384,11 +396,18 @@ const char *qtest_get_arch(void)
 
 bool qtest_get_irq(QTestState *s, int num)
 {
+    g_assert(s->last_intercept_gpio_id >= 0);
+    return qtest_get_irq_for_gpio(s, 0, num);
+}
+
+bool qtest_get_irq_for_gpio(QTestState *s, gpio_id id, int num)
+{
     /* dummy operation in order to make sure irq is up to date */
     qtest_inb(s, 0);
 
-    return s->irq_level[num];
+    return s->irq_level[id][num];
 }
+
 
 static int64_t qtest_clock_rsp(QTestState *s)
 {
@@ -418,15 +437,32 @@ int64_t qtest_clock_set(QTestState *s, int64_t val)
     return qtest_clock_rsp(s);
 }
 
-void qtest_irq_intercept_out(QTestState *s, const char *qom_path)
+static gpio_id get_next_intercept_gpio_id(QTestState *s)
 {
-    qtest_sendf(s, "irq_intercept_out %s\n", qom_path);
-    qtest_rsp(s, 0);
+    gpio_id next_gpio_id = ++(s->last_intercept_gpio_id);
+    g_assert(next_gpio_id < MAX_GPIO_INTERCEPTS);
+    return next_gpio_id;
 }
 
-void qtest_irq_intercept_in(QTestState *s, const char *qom_path)
+gpio_id qtest_irq_intercept_out(QTestState *s, const char *qom_path)
 {
-    qtest_sendf(s, "irq_intercept_in %s\n", qom_path);
+    gpio_id next_gpio_id = get_next_intercept_gpio_id(s);
+    qtest_sendf(s, "irq_intercept_out %s %d\n", qom_path, next_gpio_id);
+    qtest_rsp(s, 0);
+    return next_gpio_id;
+}
+
+gpio_id qtest_irq_intercept_in(QTestState *s, const char *qom_path)
+{
+    gpio_id next_gpio_id = get_next_intercept_gpio_id(s);
+    qtest_sendf(s, "irq_intercept_in %s %d\n", qom_path, next_gpio_id);
+    qtest_rsp(s, 0);
+    return next_gpio_id;
+}
+
+void qtest_set_irq_in(QTestState *s, const char *string, int num, int level)
+{
+    qtest_sendf(s, "set_irq_in %s %d %s\n", string, num, level ? "raise" : "lower");
     qtest_rsp(s, 0);
 }
 
