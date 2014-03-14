@@ -99,12 +99,22 @@ void stm32f1xx_init(
 
     DeviceState **gpio_dev = (DeviceState **)g_malloc0(sizeof(DeviceState *) * STM32F1XX_GPIO_COUNT);
     for(i = 0; i < STM32F1XX_GPIO_COUNT; i++) {
+        char child_name[8];
         stm32_periph_t periph = STM32F1XX_GPIOA + i;
-        gpio_dev[i] = qdev_create(NULL, "stm32_gpio");
+
+        gpio_dev[i] = qdev_create(NULL, TYPE_STM32_GPIO);
+
+        QDEV_PROP_SET_PERIPH_T(gpio_dev[i], "periph", periph);
+
         gpio_dev[i]->id = stm32f1xx_periph_name_arr[periph];
-        qdev_prop_set_int32(gpio_dev[i], "periph", periph);
+
         qdev_prop_set_ptr(gpio_dev[i], "stm32_rcc", rcc_dev);
+
+        snprintf(child_name, sizeof(child_name), "gpio[%c]", 'a' + i);
+        object_property_add_child(stm32_container, child_name, OBJECT(gpio_dev[i]), NULL);
+
         stm32_init_periph(gpio_dev[i], periph, 0x40010800 + (i * 0x400), NULL);
+
         stm32_gpio[i] = (Stm32Gpio *)gpio_dev[i];
     }
 
@@ -123,12 +133,13 @@ void stm32f1xx_init(
     sysbus_connect_irq(exti_busdev, 8, pic[STM32_RTCAlarm_IRQ]);
     sysbus_connect_irq(exti_busdev, 9, pic[STM32_OTG_FS_WKUP_IRQ]);
 
-    DeviceState *afio_dev = qdev_create(NULL, "stm32_afio");
+    DeviceState *afio_dev = qdev_create(NULL, TYPE_STM32_AFIO);
     qdev_prop_set_ptr(afio_dev, "stm32_rcc", rcc_dev);
     qdev_prop_set_ptr(afio_dev, "stm32_exti", exti_dev);
     stm32_init_periph(afio_dev, STM32F1XX_AFIO, 0x40010000, NULL);
 
     // Create UARTs:
+    // FIXME: Use stm32_create_uart_dev
     struct {
         uint32_t addr;
         uint8_t irq_idx;
@@ -148,6 +159,11 @@ void stm32f1xx_init(
         qdev_prop_set_ptr(uart_dev, "stm32_gpio", gpio_dev);
         qdev_prop_set_ptr(uart_dev, "stm32_afio", afio_dev);
         qdev_prop_set_ptr(uart_dev, "stm32_check_tx_pin_callback", stm32_afio_uart_check_tx_pin_callback);
+
+        char child_name[8];
+        snprintf(child_name, sizeof(child_name), "uart[%i]", i + 1);
+        object_property_add_child(stm32_container, child_name, OBJECT(uart_dev), NULL);
+
         stm32_init_periph(uart_dev, periph, uart_desc[i].addr, pic[uart_desc[i].irq_idx]);
     }
 }

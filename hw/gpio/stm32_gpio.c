@@ -401,7 +401,7 @@ static void stm32_gpio_class_init(ObjectClass *klass, void *data)
 }
 
 static TypeInfo stm32_gpio_info = {
-    .name  = "stm32_gpio",
+    .name  = TYPE_STM32_GPIO,
     .parent = TYPE_SYS_BUS_DEVICE,
     .instance_size  = sizeof(Stm32Gpio),
     .class_init = stm32_gpio_class_init
