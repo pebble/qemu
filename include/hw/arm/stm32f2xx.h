@@ -1,3 +1,5 @@
+#pragma once
+
 #include "hw/arm/stm32.h"
 
 enum {

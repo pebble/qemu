@@ -20,52 +20,33 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "hw/arm/stm32.h"
-#include "hw/arm/stm32_clktree.h"
 #include "hw/arm/stm32_rcc.h"
-#include "qemu/bitops.h"
-#include <stdio.h>
 
+static Property stm32_rcc_properties[] = {
+    DEFINE_PROP_UINT32("osc_freq", Stm32Rcc, osc_freq, 0),
+    DEFINE_PROP_UINT32("osc32_freq", Stm32Rcc, osc32_freq, 0),
+    DEFINE_PROP_END_OF_LIST()
+};
 
-void stm32_rcc_check_periph_clk(Stm32Rcc *s, stm32_periph_t periph, SysBusDevice *busdev)
+static void stm32_rcc_class_init(ObjectClass *klass, void *data)
 {
-    assert(periph >= 0);
-    Clk clk = s->PERIPHCLK[periph];
+    DeviceClass *dc = DEVICE_CLASS(klass);
 
-    assert(clk != NULL);
-
-    if(!clktree_is_enabled(clk)) {
-        /* I assume writing to a peripheral register while the peripheral clock
-         * is disabled is a bug and give a warning to unsuspecting programmers.
-         * When I made this mistake on real hardware the write had no effect.
-         */
-        stm32_hw_warn("Warning: You are attempting to use the %s peripheral while "
-                      "its clock is disabled.\n", DEVICE(busdev)->id);
-    }
+    dc->props = stm32_rcc_properties;
 }
 
-void stm32_rcc_set_periph_clk_irq(
-        Stm32Rcc *s,
-        stm32_periph_t periph,
-        qemu_irq periph_irq)
+static TypeInfo stm32_rcc_info = {
+    .name  = TYPE_STM32_RCC,
+    .parent = TYPE_SYS_BUS_DEVICE,
+    .instance_size  = sizeof(Stm32Rcc),
+    .class_size = sizeof(Stm32RccClass),
+    .class_init = stm32_rcc_class_init
+};
+
+static void stm32_rcc_register_types(void)
 {
-    Clk clk = s->PERIPHCLK[periph];
-
-    assert(clk != NULL);
-
-    clktree_adduser(clk, periph_irq);
+    type_register_static(&stm32_rcc_info);
 }
 
-uint32_t stm32_rcc_get_periph_freq(
-        Stm32Rcc *s,
-        stm32_periph_t periph)
-{
-    Clk clk;
-
-    clk = s->PERIPHCLK[periph];
-
-    assert(clk != NULL);
-
-    return clktree_get_output_freq(clk);
-}
+type_init(stm32_rcc_register_types)
 

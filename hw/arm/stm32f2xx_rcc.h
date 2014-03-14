@@ -5,22 +5,12 @@
 
 typedef struct Stm32f2xxRcc {
     /* Inherited */
-    union {
-        Stm32Rcc inherited;
-        struct {
-            /* Inherited */
-            SysBusDevice busdev;
+    Stm32Rcc parent_obj;
 
-            /* Properties */
-            uint32_t osc_freq;
-            uint32_t osc32_freq;
+    /* Private */
+    MemoryRegion iomem;
+    qemu_irq irq;
 
-            /* Private */
-            MemoryRegion iomem;
-            qemu_irq irq;
-        };
-    };
-    
     /* Peripheral clocks */
     Clk PERIPHCLK[STM32F2XX_PERIPH_COUNT], // MUST be first field after `inherited`, because Stm32Rcc's last field aliases this array
     HSICLK,
@@ -59,5 +49,5 @@ typedef struct Stm32f2xxRcc {
 
     uint16_t
     RCC_PLLCFGR_PLLN;
-
 } Stm32f2xxRcc;
+

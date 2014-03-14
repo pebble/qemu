@@ -20,6 +20,7 @@
  */
 
 #include "hw/arm/stm32f1xx.h"
+#include "hw/arm/stm32_rcc.h"
 
 
 
@@ -176,7 +177,7 @@ static uint64_t stm32_afio_read(void *opaque, hwaddr offset, unsigned size)
 {
     Stm32Afio *s = (Stm32Afio *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F1XX_AFIO, &s->busdev);
+    STM32_RCC_GET_CLASS(s->stm32_rcc)->check_periph_clk(s->stm32_rcc, STM32F1XX_AFIO, &s->busdev);
 
     switch(size) {
         case 4:
@@ -192,7 +193,7 @@ static void stm32_afio_write(void *opaque, hwaddr offset, uint64_t value,
 {
     Stm32Afio *s = (Stm32Afio *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F1XX_AFIO, &s->busdev);
+    STM32_RCC_GET_CLASS(s->stm32_rcc)->check_periph_clk(s->stm32_rcc, STM32F1XX_AFIO, &s->busdev);
 
     switch(size) {
         case 4:

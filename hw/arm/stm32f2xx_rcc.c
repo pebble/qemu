@@ -264,30 +264,8 @@ do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
 #define SW_HSE_SELECTED 1
 #define SW_PLL_SELECTED 2
 
-#define OBJECT_STM32_RCC(obj) \
+#define STM32F2XX_RCC(obj) \
     OBJECT_CHECK(Stm32f2xxRcc, (obj), "stm32f2xx_rcc");
-
-/* HELPER FUNCTIONS */
-struct Clk {                                                                    
-    const char *name;                                                           
-                                                                                
-    bool enabled;                                                               
-                                                                                
-    uint32_t input_freq, output_freq, max_output_freq;                          
-                                                                                
-    uint16_t multiplier, divisor;                                               
-                                                                                
-    unsigned user_count;                                                        
-    qemu_irq user[CLKTREE_MAX_IRQ]; /* Who to notify on change */               
-                                                                                
-    unsigned output_count;                                                      
-    struct Clk *output[CLKTREE_MAX_OUTPUT];                                     
-                                                                                
-    unsigned input_count;                                                       
-    int selected_input;                                                         
-    struct Clk *input[CLKTREE_MAX_INPUT];                                       
-};                                                                              
-                                                                                
 
 /* Enable the peripheral clock if the specified bit is set in the value. */
 static void stm32_rcc_periph_enable(
@@ -300,10 +278,6 @@ static void stm32_rcc_periph_enable(
     //printf("rcc set 0x%x %s %d %x: %sable\n", new_value, s->PERIPHCLK[periph]->name, periph, bit_mask, IS_BIT_SET(new_value, bit_mask)?"en":"dis");
     clktree_set_enabled(s->PERIPHCLK[periph], IS_BIT_SET(new_value, bit_mask));
 }
-
-
-
-
 
 /* REGISTER IMPLEMENTATION */
 
@@ -783,6 +757,47 @@ static void stm32_rcc_write(void *opaque, hwaddr offset,
     }
 }
 
+static void stm32f2xx_rcc_check_periph_clk(Stm32Rcc *s, stm32_periph_t periph, SysBusDevice *busdev)
+{
+    Stm32f2xxRcc *stm32f2xx_rcc = STM32F2XX_RCC(s);
+
+    assert(periph >= 0);
+    Clk clk = stm32f2xx_rcc->PERIPHCLK[periph];
+
+    assert(clk != NULL);
+
+    if (!clktree_is_enabled(clk)) {
+        /* I assume writing to a peripheral register while the peripheral clock
+         * is disabled is a bug and give a warning to unsuspecting programmers.
+         * When I made this mistake on real hardware the write had no effect.
+         */
+         stm32_hw_warn("Warning: You are attempting to use the %s peripheral while "
+                       "its clock is disabled.\n", DEVICE(busdev)->id);
+    }
+}
+
+static void stm32f2xx_rcc_set_periph_clk_irq(Stm32Rcc *s, stm32_periph_t periph, qemu_irq periph_irq)
+{
+    Stm32f2xxRcc *stm32f2xx_rcc = STM32F2XX_RCC(s);
+
+    Clk clk = stm32f2xx_rcc->PERIPHCLK[periph];
+
+    assert(clk != NULL);
+
+    clktree_adduser(clk, periph_irq);
+}
+
+static uint32_t stm32f2xx_rcc_get_periph_freq(Stm32Rcc *s, stm32_periph_t periph)
+{
+    Stm32f2xxRcc *stm32f2xx_rcc = STM32F2XX_RCC(s);
+
+    Clk clk = stm32f2xx_rcc->PERIPHCLK[periph];
+
+    assert(clk != NULL);
+
+    return clktree_get_output_freq(clk);
+}
+
 static const MemoryRegionOps stm32_rcc_ops = {
     .read = stm32_rcc_read,
     .write = stm32_rcc_write,
@@ -790,9 +805,9 @@ static const MemoryRegionOps stm32_rcc_ops = {
 };
 
 
-static void stm32_rcc_reset(DeviceState *dev)
+static void stm32f2xx_rcc_reset(DeviceState *dev)
 {
-    Stm32f2xxRcc *s = OBJECT_STM32_RCC(dev);
+    Stm32f2xxRcc *s = STM32F2XX_RCC(dev);
 
     stm32_rcc_RCC_CR_write(s, RCC_CR_RESET_VALUE, true);
     stm32_rcc_RCC_PLLCFGR_write(s, RCC_PLLCFGR_RESET_VALUE, true);
@@ -811,7 +826,7 @@ static void stm32_rcc_hclk_upd_irq_handler(void *opaque, int n, int level)
 
     uint32_t hclk_freq = 0;
     uint32_t ext_ref_freq = 0;
-    
+
     hclk_freq = clktree_get_output_freq(s->HCLK);
 
     /* Only update the scales if the frequency is not zero. */
@@ -840,11 +855,19 @@ static void stm32_rcc_hclk_upd_irq_handler(void *opaque, int n, int level)
 /* DEVICE INITIALIZATION */
 
 /* Set up the clock tree */
-static void stm32_rcc_init_clk(Stm32f2xxRcc *s)
+static int stm32f2xx_rcc_init(SysBusDevice *dev)
 {
+    Stm32f2xxRcc *s = STM32F2XX_RCC(dev);
+    Stm32Rcc *stm32_rcc = OBJECT_STM32_RCC(s);
+
+    memory_region_init_io(&s->iomem, NULL, &stm32_rcc_ops, s,
+                          "rcc", 0x40023BFF - 0x40023800 + 1);
+    sysbus_init_mmio(dev, &s->iomem);
+    sysbus_init_irq(dev, &s->irq);
+
     int i;
     qemu_irq *hclk_upd_irq =
-    qemu_allocate_irqs(stm32_rcc_hclk_upd_irq_handler, s, 1);
+            qemu_allocate_irqs(stm32_rcc_hclk_upd_irq_handler, s, 1);
 
     /* Make sure all the peripheral clocks are null initially.
      * This will be used for error checking to make sure
@@ -862,8 +885,8 @@ static void stm32_rcc_init_clk(Stm32f2xxRcc *s)
      */
     s->HSICLK = clktree_create_src_clk("HSI", HSI_FREQ, false);
     s->LSICLK = clktree_create_src_clk("LSI", LSI_FREQ, false);
-    s->HSECLK = clktree_create_src_clk("HSE", s->osc_freq, false);
-    s->LSECLK = clktree_create_src_clk("LSE", s->osc32_freq, false);
+    s->HSECLK = clktree_create_src_clk("HSE", stm32_rcc->osc_freq, false);
+    s->LSECLK = clktree_create_src_clk("LSE", stm32_rcc->osc32_freq, false);
 
     s->IWDGCLK = clktree_create_clk("IWDGCLK", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->LSICLK, NULL);
     s->RTCCLK = clktree_create_clk("RTCCLK", 1, 1, false, CLKTREE_NO_MAX_FREQ, CLKTREE_NO_INPUT, s->LSECLK, s->LSICLK, s->HSECLK, NULL);
@@ -907,57 +930,35 @@ static void stm32_rcc_init_clk(Stm32f2xxRcc *s)
     s->PERIPHCLK[STM32F2XX_UART4] = clktree_create_clk("UART4", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK1, NULL);
     s->PERIPHCLK[STM32F2XX_UART5] = clktree_create_clk("UART5", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK1, NULL);
     s->PERIPHCLK[STM32F2XX_UART6] = clktree_create_clk("UART6", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK1, NULL);
-}
-
-
-
-
-
-
-static int stm32_rcc_init(SysBusDevice *dev)
-{
-    Stm32f2xxRcc *s = OBJECT_STM32_RCC(dev);
-
-    memory_region_init_io(&s->iomem, NULL, &stm32_rcc_ops, s,
-                          "rcc", 0x40023BFF - 0x40023800 + 1);
-
-    sysbus_init_mmio(dev, &s->iomem);
-
-    sysbus_init_irq(dev, &s->irq);
-
-    stm32_rcc_init_clk(s);
 
     return 0;
 }
 
 
-static Property stm32_rcc_properties[] = {
-    DEFINE_PROP_UINT32("osc_freq", Stm32f2xxRcc, osc_freq, 0),
-    DEFINE_PROP_UINT32("osc32_freq", Stm32f2xxRcc, osc32_freq, 0),
-    DEFINE_PROP_END_OF_LIST()
-};
-
-
-static void stm32_rcc_class_init(ObjectClass *klass, void *data)
+static void stm32f2xx_rcc_class_init(ObjectClass *klass, void *data)
 {
+    Stm32RccClass *rcc_class = STM32_RCC_CLASS(klass);
+    rcc_class->check_periph_clk = stm32f2xx_rcc_check_periph_clk;
+    rcc_class->set_periph_clk_irq = stm32f2xx_rcc_set_periph_clk_irq;
+    rcc_class->get_periph_freq = stm32f2xx_rcc_get_periph_freq;
+
     DeviceClass *dc = DEVICE_CLASS(klass);
-    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+    dc->reset = stm32f2xx_rcc_reset;
 
-    k->init = stm32_rcc_init;
-    dc->reset = stm32_rcc_reset;
-    dc->props = stm32_rcc_properties;
+    SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+    k->init = stm32f2xx_rcc_init;
 }
 
-static TypeInfo stm32_rcc_info = {
+static TypeInfo stm32f2xx_rcc_info = {
     .name  = "stm32f2xx_rcc",
-    .parent = TYPE_SYS_BUS_DEVICE,
+    .parent = TYPE_STM32_RCC,
     .instance_size  = sizeof(Stm32f2xxRcc),
-    .class_init = stm32_rcc_class_init
+    .class_init = stm32f2xx_rcc_class_init
 };
 
-static void stm32_rcc_register_types(void)
+static void stm32f2xx_rcc_register_types(void)
 {
-    type_register_static(&stm32_rcc_info);
+    type_register_static(&stm32f2xx_rcc_info);
 }
 
-type_init(stm32_rcc_register_types)
+type_init(stm32f2xx_rcc_register_types)

@@ -24,6 +24,7 @@
 #include "hw/sysbus.h"
 #include "hw/arm/stm32f1xx.h"
 #include "hw/arm/stm32f2xx.h"
+#include "hw/arm/stm32f2xx_rcc.h"
 #include "sysemu/char.h"
 
 
@@ -239,7 +240,7 @@ void stm32_afio_uart_check_tx_pin_callback(Stm32Uart *s)
 /* Update the baud rate based on the USART's peripheral clock frequency. */
 static void stm32_uart_baud_update(Stm32Uart *s)
 {
-    uint32_t clk_freq = stm32_rcc_get_periph_freq(s->stm32_rcc, s->periph);
+    uint32_t clk_freq = STM32_RCC_GET_CLASS(s->stm32_rcc)->get_periph_freq(s->stm32_rcc, s->periph);
     uint64_t ns_per_bit;
 
     if((s->USART_BRR == 0) || (clk_freq == 0)) {
@@ -793,7 +794,7 @@ static void stm32_uart_write(void *opaque, hwaddr offset,
 {
     Stm32Uart *s = (Stm32Uart *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, s->periph, &s->busdev);
+    STM32_RCC_GET_CLASS(s->stm32_rcc)->check_periph_clk(s->stm32_rcc, s->periph, &s->busdev);
 
     switch(size) {
         case HALFWORD_ACCESS_SIZE:
@@ -864,7 +865,8 @@ static int stm32_uart_init(SysBusDevice *dev)
     /* Register handlers to handle updates to the USART's peripheral clock. */
     clk_irq =
           qemu_allocate_irqs(stm32_uart_clk_irq_handler, (void *)s, 1);
-    stm32_rcc_set_periph_clk_irq(s->stm32_rcc, s->periph, clk_irq[0]);
+
+    STM32_RCC_GET_CLASS(s->stm32_rcc)->set_periph_clk_irq(s->stm32_rcc, s->periph, clk_irq[0]);
 
     stm32_uart_reset((DeviceState *)s);
 

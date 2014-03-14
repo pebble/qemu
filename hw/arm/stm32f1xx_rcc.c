@@ -164,14 +164,14 @@ do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
 #define SW_HSE_SELECTED 1
 #define SW_PLL_SELECTED 2
 
-#define OBJECT_STM32_RCC(obj) \
-    OBJECT_CHECK(Stm32Rcc, (obj), "stm32f1xx_rcc");
+#define STM32F1XX_RCC(obj) \
+    OBJECT_CHECK(Stm32f1xxRcc, (obj), TYPE_STM32F1XX_RCC);
 
 /* HELPER FUNCTIONS */
 
 /* Enable the peripheral clock if the specified bit is set in the value. */
 static void stm32_rcc_periph_enable(
-                                    Stm32Rcc *s,
+                                    Stm32f1xxRcc *s,
                                     uint32_t new_value,
                                     bool init,
                                     int periph,
@@ -187,7 +187,7 @@ static void stm32_rcc_periph_enable(
 /* REGISTER IMPLEMENTATION */
 
 /* Read the configuration register. */
-static uint32_t stm32_rcc_RCC_CR_read(Stm32Rcc *s)
+static uint32_t stm32_rcc_RCC_CR_read(Stm32f1xxRcc *s)
 {
     /* Get the status of the clocks. */
     bool PLLON = clktree_is_enabled(s->PLLCLK);
@@ -210,7 +210,7 @@ static uint32_t stm32_rcc_RCC_CR_read(Stm32Rcc *s)
  * saved - when the register is read, its value will be built using the clock
  * states.
  */
-static void stm32_rcc_RCC_CR_write(Stm32Rcc *s, uint32_t new_value, bool init)
+static void stm32_rcc_RCC_CR_write(Stm32f1xxRcc *s, uint32_t new_value, bool init)
 {
     bool new_PLLON, new_HSEON, new_HSION;
 
@@ -243,7 +243,7 @@ static void stm32_rcc_RCC_CR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 }
 
 
-static uint32_t stm32_rcc_RCC_CFGR_read(Stm32Rcc *s)
+static uint32_t stm32_rcc_RCC_CFGR_read(Stm32f1xxRcc *s)
 {
     return (s->RCC_CFGR_PLLMUL << RCC_CFGR_PLLMUL_START) |
     (s->RCC_CFGR_PLLXTPRE << RCC_CFGR_PLLXTPRE_BIT) |
@@ -256,7 +256,7 @@ static uint32_t stm32_rcc_RCC_CFGR_read(Stm32Rcc *s)
 }
 
 
-static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
+static void stm32_rcc_RCC_CFGR_write(Stm32f1xxRcc *s, uint32_t new_value, bool init)
 {
     uint32_t new_PLLMUL, new_PLLXTPRE, new_PLLSRC;
 
@@ -338,7 +338,7 @@ static void stm32_rcc_RCC_CFGR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 
 /* Write the APB2 peripheral clock enable register
  * Enables/Disables the peripheral clocks based on each bit. */
-static void stm32_rcc_RCC_APB2ENR_write(Stm32Rcc *s, uint32_t new_value,
+static void stm32_rcc_RCC_APB2ENR_write(Stm32f1xxRcc *s, uint32_t new_value,
                                         bool init)
 {
     stm32_rcc_periph_enable(s, new_value, init, STM32F1XX_UART1,
@@ -365,7 +365,7 @@ static void stm32_rcc_RCC_APB2ENR_write(Stm32Rcc *s, uint32_t new_value,
 
 /* Write the APB1 peripheral clock enable register
  * Enables/Disables the peripheral clocks based on each bit. */
-static void stm32_rcc_RCC_APB1ENR_write(Stm32Rcc *s, uint32_t new_value,
+static void stm32_rcc_RCC_APB1ENR_write(Stm32f1xxRcc *s, uint32_t new_value,
                                         bool init)
 {
     stm32_rcc_periph_enable(s, new_value, init, STM32F1XX_UART5,
@@ -380,7 +380,7 @@ static void stm32_rcc_RCC_APB1ENR_write(Stm32Rcc *s, uint32_t new_value,
     s->RCC_APB1ENR = new_value & 0x00005e7d;
 }
 
-static uint32_t stm32_rcc_RCC_BDCR_read(Stm32Rcc *s)
+static uint32_t stm32_rcc_RCC_BDCR_read(Stm32f1xxRcc *s)
 {
     bool lseon = clktree_is_enabled(s->LSECLK);
 
@@ -388,13 +388,13 @@ static uint32_t stm32_rcc_RCC_BDCR_read(Stm32Rcc *s)
     GET_BIT_MASK(RCC_BDCR_LSEON_BIT, lseon);
 }
 
-static void stm32_rcc_RCC_BDCR_write(Stm32Rcc *s, uint32_t new_value, bool init)
+static void stm32_rcc_RCC_BDCR_write(Stm32f1xxRcc *s, uint32_t new_value, bool init)
 {
     clktree_set_enabled(s->LSECLK, IS_BIT_SET(new_value, RCC_BDCR_LSEON_BIT));
 }
 
 /* Works the same way as stm32_rcc_RCC_CR_read */
-static uint32_t stm32_rcc_RCC_CSR_read(Stm32Rcc *s)
+static uint32_t stm32_rcc_RCC_CSR_read(Stm32f1xxRcc *s)
 {
     bool lseon = clktree_is_enabled(s->LSICLK);
 
@@ -403,7 +403,7 @@ static uint32_t stm32_rcc_RCC_CSR_read(Stm32Rcc *s)
 }
 
 /* Works the same way as stm32_rcc_RCC_CR_write */
-static void stm32_rcc_RCC_CSR_write(Stm32Rcc *s, uint32_t new_value, bool init)
+static void stm32_rcc_RCC_CSR_write(Stm32f1xxRcc *s, uint32_t new_value, bool init)
 {
     clktree_set_enabled(s->LSICLK, IS_BIT_SET(new_value, RCC_CSR_LSION_BIT));
 }
@@ -412,7 +412,7 @@ static void stm32_rcc_RCC_CSR_write(Stm32Rcc *s, uint32_t new_value, bool init)
 
 static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
 {
-    Stm32Rcc *s = (Stm32Rcc *)opaque;
+    Stm32f1xxRcc *s = (Stm32f1xxRcc *)opaque;
 
     switch (offset) {
         case RCC_CR_OFFSET:
@@ -450,7 +450,7 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
 static void stm32_rcc_writew(void *opaque, hwaddr offset,
                              uint64_t value)
 {
-    Stm32Rcc *s = (Stm32Rcc *)opaque;
+    Stm32f1xxRcc *s = (Stm32f1xxRcc *)opaque;
 
     switch(offset) {
         case RCC_CR_OFFSET:
@@ -516,6 +516,47 @@ static void stm32_rcc_write(void *opaque, hwaddr offset,
     }
 }
 
+static void stm32f1xx_rcc_check_periph_clk(Stm32Rcc *s, stm32_periph_t periph, SysBusDevice *busdev)
+{
+    Stm32f1xxRcc *stm32f1xx_rcc = STM32F1XX_RCC(s);
+
+    assert(periph >= 0);
+    Clk clk = stm32f1xx_rcc->PERIPHCLK[periph];
+
+    assert(clk != NULL);
+
+    if (!clktree_is_enabled(clk)) {
+        /* I assume writing to a peripheral register while the peripheral clock
+         * is disabled is a bug and give a warning to unsuspecting programmers.
+         * When I made this mistake on real hardware the write had no effect.
+         */
+         stm32_hw_warn("Warning: You are attempting to use the %s peripheral while "
+                       "its clock is disabled.\n", DEVICE(busdev)->id);
+    }
+}
+
+static void stm32f1xx_rcc_set_periph_clk_irq(Stm32Rcc *s, stm32_periph_t periph, qemu_irq periph_irq)
+{
+    Stm32f1xxRcc *stm32f1xx_rcc = STM32F1XX_RCC(s);
+
+    Clk clk = stm32f1xx_rcc->PERIPHCLK[periph];
+
+    assert(clk != NULL);
+
+    clktree_adduser(clk, periph_irq);
+}
+
+static uint32_t stm32f1xx_rcc_get_periph_freq(Stm32Rcc *s, stm32_periph_t periph)
+{
+    Stm32f1xxRcc *stm32f1xx_rcc = STM32F1XX_RCC(s);
+
+    Clk clk = stm32f1xx_rcc->PERIPHCLK[periph];
+
+    assert(clk != NULL);
+
+    return clktree_get_output_freq(clk);
+}
+
 static const MemoryRegionOps stm32_rcc_ops = {
     .read = stm32_rcc_read,
     .write = stm32_rcc_write,
@@ -523,9 +564,9 @@ static const MemoryRegionOps stm32_rcc_ops = {
 };
 
 
-static void stm32_rcc_reset(DeviceState *dev)
+static void stm32f1xx_rcc_reset(DeviceState *dev)
 {
-    Stm32Rcc *s = OBJECT_STM32_RCC(dev);
+    Stm32f1xxRcc *s = STM32F1XX_RCC(dev);
 
     stm32_rcc_RCC_CR_write(s, 0x00000083, true);
     stm32_rcc_RCC_CFGR_write(s, 0x00000000, true);
@@ -539,7 +580,7 @@ static void stm32_rcc_reset(DeviceState *dev)
  * This updates the SysTick scales. */
 static void stm32_rcc_hclk_upd_irq_handler(void *opaque, int n, int level)
 {
-    Stm32Rcc *s = (Stm32Rcc *)opaque;
+    Stm32f1xxRcc *s = (Stm32f1xxRcc *)opaque;
 
     uint32_t hclk_freq = 0;
     uint32_t ext_ref_freq = 0;
@@ -573,8 +614,10 @@ static void stm32_rcc_hclk_upd_irq_handler(void *opaque, int n, int level)
 /* DEVICE INITIALIZATION */
 
 /* Set up the clock tree */
-static void stm32_rcc_init_clk(Stm32Rcc *s)
+static void stm32_rcc_init_clk(Stm32f1xxRcc *s)
 {
+    Stm32Rcc *stm32_rcc = OBJECT_STM32_RCC(s);
+
     int i;
     qemu_irq *hclk_upd_irq =
     qemu_allocate_irqs(stm32_rcc_hclk_upd_irq_handler, s, 1);
@@ -596,8 +639,8 @@ static void stm32_rcc_init_clk(Stm32Rcc *s)
      */
     s->HSICLK = clktree_create_src_clk("HSI", HSI_FREQ, false);
     s->LSICLK = clktree_create_src_clk("LSI", LSI_FREQ, false);
-    s->HSECLK = clktree_create_src_clk("HSE", s->osc_freq, false);
-    s->LSECLK = clktree_create_src_clk("LSE", s->osc32_freq, false);
+    s->HSECLK = clktree_create_src_clk("HSE", stm32_rcc->osc_freq, false);
+    s->LSECLK = clktree_create_src_clk("LSE", stm32_rcc->osc32_freq, false);
 
     HSI_DIV2 = clktree_create_clk("HSI/2", 1, 2, true, CLKTREE_NO_MAX_FREQ, 0,
                                   s->HSICLK, NULL);
@@ -642,14 +685,9 @@ static void stm32_rcc_init_clk(Stm32Rcc *s)
     s->PERIPHCLK[STM32F1XX_UART5] = clktree_create_clk("UART5", 1, 1, false, CLKTREE_NO_MAX_FREQ, 0, s->PCLK1, NULL);
 }
 
-
-
-
-
-
-static int stm32_rcc_init(SysBusDevice *dev)
+static int stm32f1xx_rcc_init(SysBusDevice *dev)
 {
-    Stm32Rcc *s = OBJECT_STM32_RCC(dev);
+    Stm32f1xxRcc *s = STM32F1XX_RCC(dev);
 
     memory_region_init_io(&s->iomem, NULL, &stm32_rcc_ops, s,
                           "rcc", 0x1000);
@@ -664,33 +702,30 @@ static int stm32_rcc_init(SysBusDevice *dev)
 }
 
 
-static Property stm32_rcc_properties[] = {
-    DEFINE_PROP_UINT32("osc_freq", Stm32Rcc, osc_freq, 0),
-    DEFINE_PROP_UINT32("osc32_freq", Stm32Rcc, osc32_freq, 0),
-    DEFINE_PROP_END_OF_LIST()
-};
-
-
-static void stm32_rcc_class_init(ObjectClass *klass, void *data)
+static void stm32f1xx_rcc_class_init(ObjectClass *klass, void *data)
 {
-    DeviceClass *dc = DEVICE_CLASS(klass);
     SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
+    k->init = stm32f1xx_rcc_init;
 
-    k->init = stm32_rcc_init;
-    dc->reset = stm32_rcc_reset;
-    dc->props = stm32_rcc_properties;
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    dc->reset = stm32f1xx_rcc_reset;
+
+    Stm32RccClass *rcc_class = STM32_RCC_CLASS(klass);
+    rcc_class->check_periph_clk = stm32f1xx_rcc_check_periph_clk;
+    rcc_class->set_periph_clk_irq = stm32f1xx_rcc_set_periph_clk_irq;
+    rcc_class->get_periph_freq = stm32f1xx_rcc_get_periph_freq;
 }
 
-static TypeInfo stm32_rcc_info = {
-    .name  = "stm32f1xx_rcc",
-    .parent = TYPE_SYS_BUS_DEVICE,
-    .instance_size  = sizeof(Stm32Rcc),
-    .class_init = stm32_rcc_class_init
+static TypeInfo stm32f1xx_rcc_info = {
+    .name  = TYPE_STM32F1XX_RCC,
+    .parent = TYPE_STM32_RCC,
+    .instance_size  = sizeof(Stm32f1xxRcc),
+    .class_init = stm32f1xx_rcc_class_init
 };
 
-static void stm32_rcc_register_types(void)
+static void stm32f1xx_rcc_register_types(void)
 {
-    type_register_static(&stm32_rcc_info);
+    type_register_static(&stm32f1xx_rcc_info);
 }
 
-type_init(stm32_rcc_register_types)
+type_init(stm32f1xx_rcc_register_types)

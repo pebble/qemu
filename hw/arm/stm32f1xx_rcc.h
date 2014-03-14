@@ -1,17 +1,17 @@
 #include "hw/sysbus.h"
 #include "hw/arm/stm32_clktree.h"
+#include "hw/arm/stm32_rcc.h"
 #include "hw/arm/stm32f1xx.h"
 
-struct Stm32Rcc {
-    /* Inherited */
-    SysBusDevice busdev;
+#define TYPE_STM32F1XX_RCC "stm32f1xx_rcc"
 
-    /* Properties */
-    uint32_t osc_freq;
-    uint32_t osc32_freq;
+typedef struct Stm32f1xxRcc {
+    /* Inherited */
+    Stm32Rcc parent_obj;
 
     /* Private */
     MemoryRegion iomem;
+    qemu_irq irq;
 
     /* Register Values */
     uint32_t
@@ -40,6 +40,4 @@ struct Stm32Rcc {
     PCLK1, /* Output from APB1 Prescaler */
     PCLK2, /* Output from APB2 Prescaler */
     PERIPHCLK[STM32F1XX_PERIPH_COUNT];
-
-    qemu_irq irq;
-};
+} Stm32f1xxRcc;

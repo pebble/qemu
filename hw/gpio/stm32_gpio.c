@@ -23,6 +23,7 @@
 
 #include "hw/sysbus.h"
 #include "hw/arm/stm32.h"
+#include "hw/arm/stm32_rcc.h"
 
 
 
@@ -307,7 +308,7 @@ static void stm32_gpio_write(void *opaque, hwaddr offset, uint64_t value,
 {
     Stm32Gpio *s = (Stm32Gpio *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, s->periph, &s->busdev);
+    STM32_RCC_GET_CLASS(s->stm32_rcc)->check_periph_clk(s->stm32_rcc, s->periph, &s->busdev);
 
     switch(size) {
         case WORD_ACCESS_SIZE:

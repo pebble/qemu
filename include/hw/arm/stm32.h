@@ -286,34 +286,7 @@ uint8_t stm32_gpio_get_config_bits(Stm32Gpio *s, unsigned pin);
 typedef struct stm32f2xx_gpio stm32f2xx_gpio;
 void f2xx_exti_set(stm32f2xx_gpio *, unsigned, qemu_irq);
 
-
-/* RCC */
 typedef struct Stm32Rcc Stm32Rcc;
-
-/* Checks if the specified peripheral clock is enabled.
- * Generates a hardware error if not.
- */
-void stm32_rcc_check_periph_clk(Stm32Rcc *s, stm32_periph_t periph, SysBusDevice *busdev);
-
-/* Sets the IRQ to be called when the specified peripheral clock changes
- * frequency. */
-void stm32_rcc_set_periph_clk_irq(
-        Stm32Rcc *s,
-        stm32_periph_t periph,
-        qemu_irq periph_irq);
-
-/* Gets the frequency of the specified peripheral clock. */
-uint32_t stm32_rcc_get_periph_freq(
-        Stm32Rcc *s,
-        stm32_periph_t periph);
-
-
-
-
-
-
-
-
 
 /* UART */
 #define STM32_UART_COUNT 5
