@@ -38,6 +38,13 @@
 
 QTestState *global_qtest;
 
+typedef struct SocketInfo
+{
+    int sock;
+    int fd;
+    const char *path;
+} SocketInfo;
+
 struct QTestState
 {
     gpio_id last_intercept_gpio_id;
@@ -47,14 +54,21 @@ struct QTestState
     GString *rx;
     gchar *pid_file; /* QEMU PID file */
     int child_pid;   /* Child process created to execute QEMU */
-    char *socket_path, *qmp_socket_path;
+    SocketInfo qtest_socket, qmp_socket;
+    int num_serial_ports;
+    SocketInfo *serial_port_sockets;
 };
 
 #define g_assert_no_errno(ret) do { \
     g_assert_cmpint(ret, !=, -1); \
 } while (0)
 
-static int init_socket(const char *socket_path)
+static gchar *get_temp_file_path(const gchar *name)
+{
+   return g_strdup_printf("/tmp/qtest-%d.%s", getpid(), name);
+}
+
+static void init_socket(SocketInfo *socket_info)
 {
     struct sockaddr_un addr;
     int sock;
@@ -64,7 +78,7 @@ static int init_socket(const char *socket_path)
     g_assert_no_errno(sock);
 
     addr.sun_family = AF_UNIX;
-    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", socket_path);
+    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", socket_info->path);
     qemu_set_cloexec(sock);
 
     do {
@@ -73,13 +87,14 @@ static int init_socket(const char *socket_path)
     g_assert_no_errno(ret);
     listen(sock, 1);
 
-    return sock;
+    socket_info->sock = sock;
 }
 
-static int socket_accept(int sock)
+static void socket_accept(SocketInfo *socket_info)
 {
     struct sockaddr_un addr;
     socklen_t addrlen;
+    int sock = socket_info->sock;
     int ret;
 
     addrlen = sizeof(addr);
@@ -89,7 +104,7 @@ static int socket_accept(int sock)
     g_assert_no_errno(ret);
     close(sock);
 
-    return ret;
+    socket_info->fd = ret;
 }
 
 static pid_t qtest_qemu_pid(QTestState *s)
@@ -108,45 +123,74 @@ static pid_t qtest_qemu_pid(QTestState *s)
     return pid;
 }
 
-QTestState *qtest_init(const char *extra_args)
+QTestState *qtest_init(const char *extra_args, int num_serial_ports)
 {
     QTestState *s;
-    int sock, qmpsock, i, j;
+    int i, j;
     gchar *pid_file;
     gchar *command;
-    const char *qemu_binary;
+    GString *extra_socket_args;
+    const char *qemu_binary, *external_args, *qtest_log_path;
     pid_t pid;
 
     qemu_binary = getenv("QTEST_QEMU_BINARY");
     g_assert(qemu_binary != NULL);
 
+    external_args = getenv("QTEST_QEMU_ARGS");
+    qtest_log_path = getenv("QTEST_LOG_FILE");
+
     s = g_malloc(sizeof(*s));
 
-    s->socket_path = g_strdup_printf("/tmp/qtest-%d.sock", getpid());
-    s->qmp_socket_path = g_strdup_printf("/tmp/qtest-%d.qmp", getpid());
-    pid_file = g_strdup_printf("/tmp/qtest-%d.pid", getpid());
+    s->qtest_socket.path = get_temp_file_path("sock");
+    s->qmp_socket.path = get_temp_file_path("qmp");
+    pid_file = get_temp_file_path("pid");
 
-    sock = init_socket(s->socket_path);
-    qmpsock = init_socket(s->qmp_socket_path);
+    init_socket(&s->qtest_socket);
+    init_socket(&s->qmp_socket);
+
+    s->num_serial_ports = num_serial_ports;
+    s->serial_port_sockets = g_malloc(num_serial_ports * sizeof(SocketInfo));
+    extra_socket_args = g_string_new("");
+    for(i = 0; i < num_serial_ports; i++) {
+        gchar *serial_socket_path;
+        gchar *socket_name = g_strdup_printf("serial%d", i);
+        serial_socket_path = get_temp_file_path(socket_name);
+        s->serial_port_sockets[i].path = serial_socket_path;
+        g_string_append_printf(extra_socket_args,
+                               "-serial unix:%s,nowait ",
+                               serial_socket_path);
+        init_socket(&s->serial_port_sockets[i]);
+    }
 
     pid = fork();
     if (pid == 0) {
         command = g_strdup_printf("%s "
                                   "-qtest unix:%s,nowait "
-                                  "-qtest-log /dev/null "
+                                  "-qtest-log %s "
                                   "-qmp unix:%s,nowait "
                                   "-pidfile %s "
                                   "-machine accel=qtest "
                                   "-display none "
-                                  "%s", qemu_binary, s->socket_path,
-                                  s->qmp_socket_path, pid_file,
-                                  extra_args ?: "");
+                                  "%s "
+                                  "%s "
+                                  "%s",
+                                  qemu_binary,
+                                  s->qtest_socket.path,
+                                  qtest_log_path ?: "/dev/null",
+                                  s->qmp_socket.path,
+                                  pid_file,
+                                  extra_socket_args->str,
+                                  extra_args ?: "",
+                                  external_args ?: "");
         execlp("/bin/sh", "sh", "-c", command, NULL);
         exit(1);
     }
 
-    s->fd = socket_accept(sock);
-    s->qmp_fd = socket_accept(qmpsock);
+    socket_accept(&s->qtest_socket);
+    socket_accept(&s->qmp_socket);
+    for(i = 0; i < num_serial_ports; i++) {
+        socket_accept(&s->serial_port_sockets[i]);
+    }
 
     s->rx = g_string_new("");
     s->pid_file = pid_file;
@@ -167,12 +211,14 @@ QTestState *qtest_init(const char *extra_args)
         kill(qtest_qemu_pid(s), SIGSTOP);
     }
 
+    g_string_free(extra_socket_args, true);
+
     return s;
 }
 
 void qtest_quit(QTestState *s)
 {
-    int status;
+    int status, i;
 
     pid_t pid = qtest_qemu_pid(s);
     if (pid != -1) {
@@ -184,15 +230,17 @@ void qtest_quit(QTestState *s)
     close(s->qmp_fd);
     g_string_free(s->rx, true);
     unlink(s->pid_file);
-    unlink(s->socket_path);
-    unlink(s->qmp_socket_path);
+    unlink(s->qtest_socket.path);
+    unlink(s->qmp_socket.path);
+    for(i = 0; i < s->num_serial_ports; i++) {
+        unlink(s->serial_port_sockets[i].path);
+    }
     g_free(s->pid_file);
-    g_free(s->socket_path);
-    g_free(s->qmp_socket_path);
     g_free(s);
+    g_free(s->serial_port_sockets);
 }
 
-static void socket_sendf(int fd, const char *fmt, va_list ap)
+static void socket_sendf(SocketInfo *socket_info, const char *fmt, va_list ap)
 {
     gchar *str;
     size_t size, offset;
@@ -204,7 +252,7 @@ static void socket_sendf(int fd, const char *fmt, va_list ap)
     while (offset < size) {
         ssize_t len;
 
-        len = write(fd, str + offset, size - offset);
+        len = write(socket_info->fd, str + offset, size - offset);
         if (len == -1 && errno == EINTR) {
             continue;
         }
@@ -221,7 +269,7 @@ static void GCC_FMT_ATTR(2, 3) qtest_sendf(QTestState *s, const char *fmt, ...)
     va_list ap;
 
     va_start(ap, fmt);
-    socket_sendf(s->fd, fmt, ap);
+    socket_sendf(&s->qtest_socket, fmt, ap);
     va_end(ap);
 }
 
@@ -235,7 +283,7 @@ static GString *qtest_recv_line(QTestState *s)
         ssize_t len;
         char buffer[1024];
 
-        len = read(s->fd, buffer, sizeof(buffer));
+        len = read(s->qtest_socket.fd, buffer, sizeof(buffer));
         if (len == -1 && errno == EINTR) {
             continue;
         }
@@ -332,7 +380,7 @@ QDict *qtest_qmpv(QTestState *s, const char *fmt, va_list ap)
     QMPResponseParser qmp;
 
     /* Send QMP request */
-    socket_sendf(s->qmp_fd, fmt, ap);
+    socket_sendf(&s->qmp_socket, fmt, ap);
 
     /* Receive reply */
     qmp.response = NULL;
@@ -341,7 +389,7 @@ QDict *qtest_qmpv(QTestState *s, const char *fmt, va_list ap)
         ssize_t len;
         char c;
 
-        len = read(s->qmp_fd, &c, 1);
+        len = read(s->qmp_socket.fd, &c, 1);
         if (len == -1 && errno == EINTR) {
             continue;
         }
@@ -464,6 +512,49 @@ void qtest_set_irq_in(QTestState *s, const char *string, int num, int level)
 {
     qtest_sendf(s, "set_irq_in %s %d %s\n", string, num, level ? "raise" : "lower");
     qtest_rsp(s, 0);
+}
+
+static SocketInfo *get_serial_port_socket(QTestState *s, int serial_socket_num)
+{
+    g_assert(serial_socket_num >= 0 &&
+             serial_socket_num < s->num_serial_ports);
+    return &s->serial_port_sockets[serial_socket_num];
+}
+
+void qtest_write_serial_port(QTestState *s,
+                             int serial_port_num,
+                             const char *fmt, ...)
+{
+    va_list ap;
+    SocketInfo *socket_info = get_serial_port_socket(s, serial_port_num);
+
+    va_start(ap, fmt);
+    socket_sendf(socket_info, fmt, ap);
+    va_end(ap);
+}
+
+uint8_t qtest_read_serial_port_byte(QTestState *s, int serial_port_num)
+{
+    ssize_t len;
+    uint8_t buffer;
+    SocketInfo *socket_info = get_serial_port_socket(s, serial_port_num);
+
+    do {
+        len = read(socket_info->fd, &buffer, sizeof(buffer));
+        if (errno == EINTR) {
+            continue;
+        }
+
+        if (len == -1 || len == 0) {
+            fprintf(stderr, "No character to read from socket %d\n",
+                               serial_port_num);
+            g_assert(false);
+        }
+    } while(len == -1);
+
+    g_assert_cmpint(len, ==, 1);
+
+    return buffer;
 }
 
 static void qtest_out(QTestState *s, const char *cmd, uint16_t addr, uint32_t value)
@@ -623,3 +714,15 @@ void qtest_memwrite(QTestState *s, uint64_t addr, const void *data, size_t size)
     qtest_sendf(s, "\n");
     qtest_rsp(s, 0);
 }
+
+void write_serial_port(int serial_port_num, const char *fmt, ...)
+{
+    va_list ap;
+    SocketInfo *socket_info = get_serial_port_socket(global_qtest,
+                                                     serial_port_num);
+
+    va_start(ap, fmt);
+    socket_sendf(socket_info, fmt, ap);
+    va_end(ap);
+}
+
