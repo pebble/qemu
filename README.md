@@ -25,7 +25,7 @@ Commands for a typical build:
         ./configure --disable-werror --enable-debug --target-list="arm-softmmu"
         make
 
-Configure options that are useful when developing (tested only on OS X 10.8.3 / Mountain Lion):
+Summary set of configure options that are useful when developing (tested only on OS X 10.8.3 / Mountain Lion):
 
         ./configure --enable-tcg-interpreter --extra-ldflags=-g \
         --with-coroutine=gthread --enable-debug-tcg --enable-cocoa \
@@ -33,8 +33,46 @@ Configure options that are useful when developing (tested only on OS X 10.8.3 / 
         --extra-cflags=-DDEBUG_CLKTREE --extra-cflags=-DDEBUG_STM32_RCC \
         --extra-cflags=-DDEBUG_STM32_UART --extra-cflags=-DSTM32_UART_ENABLE_OVERRUN \
         --extra-cflags=-DDEBUG_GIC
-
+        
 [MT 2014/01/02] This configuration stopped working (1a46030e0e6f4f14bb2f8e7b4a939a8eb5947dc0 / OS X 10.9.1 Mavericks)...
+
+####Configure options which control the STM32 implementation:
+
+    --extra-cflags=-DDEBUG_CLKTREE
+        Print out clock tree debug statements.
+
+    --extra-cflags=-DDEBUG_STM32_RCC
+        Print RCC debug statements.
+
+    --extra-cflags=-DDEBUG_STM32_UART
+        Print UART debug statements.
+
+    --extra-cflags=-DSTM32_UART_NO_BAUD_DELAY
+        Disable the BAUD rate timing simulation
+        (i.e. the UART will transmit or receive as fast as possible, rather than
+        using a realistic delay).
+
+    --extra-cflags=-DSTM32_UART_ENABLE_OVERRUN
+        Enable setting of the overrun flag if a character is
+        received before the last one is processed.  If this is not set, the UART
+        will not receive the next character until the previous one is read by
+        software.  Although less realisitic, this is safer in case the VM is
+        running slow.
+
+####Other QEMU configure options which are useful for troubleshooting:
+    --extra-cflags=-DDEBUG_GIC
+
+####qemu-system-arm options which are useful for trobuleshooting:
+    -d ?
+        To see available log levels
+
+    -d cpu,in_asm
+        Enable logging to view the CPU state during execution and the ARM
+        instructions which are being executed.  I believe --enable-debug must be
+        used for this to work.
+        By default, you can find the output in /tmp/qemu.log:
+
+
 
 Useful make commands when rebuilding:
 
