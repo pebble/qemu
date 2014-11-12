@@ -92,8 +92,9 @@ static void stm32_p103_key_event(void *opaque, int keycode)
 }
 
 
-static void stm32_p103_init(QEMUMachineInitArgs *args) {
+static void stm32_p103_init(MachineState *machine) {
     
+    const char* kernel_filename = machine->kernel_filename;
     qemu_irq *led_irq;
     Stm32P103 *s;
     Stm32Gpio *stm32_gpio[STM32F1XX_GPIO_COUNT];
@@ -103,7 +104,7 @@ static void stm32_p103_init(QEMUMachineInitArgs *args) {
 
     stm32f1xx_init(/*flash_size*/ 128,
                /*ram_size*/ 20,
-               args->kernel_filename,
+               kernel_filename,
                stm32_gpio,
                stm32_uart,
                8000000,
@@ -127,7 +128,7 @@ static void stm32_p103_init(QEMUMachineInitArgs *args) {
 static QEMUMachine stm32_p103_machine = {
     .name = "stm32-p103",
     .desc = "Olimex STM32 p103 Dev Board",
-    .init = stm32_p103_init
+    .init = stm32_p103_init,
 };
 
 

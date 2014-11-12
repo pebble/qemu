@@ -3,6 +3,8 @@
 
 /* Generic IRQ/GPIO pin infrastructure.  */
 
+#define TYPE_IRQ "irq"
+
 typedef struct IRQState *qemu_irq;
 
 typedef void (*qemu_irq_handler)(void *opaque, int n, int level);
@@ -30,13 +32,20 @@ static inline void qemu_irq_pulse(qemu_irq irq)
  */
 qemu_irq *qemu_allocate_irqs(qemu_irq_handler handler, void *opaque, int n);
 
+/*
+ * Allocates a single IRQ. The irq is assigned with a handler, an opaque
+ * data and the interrupt number.
+ */
+qemu_irq qemu_allocate_irq(qemu_irq_handler handler, void *opaque, int n);
+
 /* Extends an Array of IRQs. Old IRQs have their handlers and opaque data
  * preserved. New IRQs are assigned the argument handler and opaque data.
  */
 qemu_irq *qemu_extend_irqs(qemu_irq *old, int n_old, qemu_irq_handler handler,
                                 void *opaque, int n);
 
-void qemu_free_irqs(qemu_irq *s);
+void qemu_free_irqs(qemu_irq *s, int n);
+void qemu_free_irq(qemu_irq irq);
 
 /* Returns a new IRQ with opposite polarity.  */
 qemu_irq qemu_irq_invert(qemu_irq irq);
@@ -51,7 +60,14 @@ qemu_irq *qemu_irq_proxy(qemu_irq **target, int n);
 
 /* For internal use in qtest.  Similar to qemu_irq_split, but operating
    on an existing vector of qemu_irq.  */
-void qemu_irq_intercept_in(qemu_irq *gpio_in, qemu_irq_handler handler, int n);
-void qemu_irq_intercept_out(qemu_irq **gpio_out, qemu_irq_handler handler, int n);
+typedef struct IRQInterceptData {
+    qemu_irq *old_irqs;
+    int id;
+} IRQInterceptData;
+
+void qemu_irq_intercept_in(qemu_irq *gpio_in, qemu_irq_handler handler,
+                           int id, int n);
+void qemu_irq_intercept_out(qemu_irq **gpio_out, qemu_irq_handler handler,
+                            int id, int n);
 
 #endif
