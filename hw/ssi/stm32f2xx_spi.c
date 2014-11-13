@@ -177,7 +177,7 @@ stm32f2xx_spi_init(SysBusDevice *dev)
     memory_region_init_io(&s->iomem, NULL, &stm32f2xx_spi_ops, s, "spi", 0x3ff);
     sysbus_init_mmio(dev, &s->iomem);
     sysbus_init_irq(dev, &s->irq);
-    s->spi = ssi_create_bus(&dev->qdev, "ssi");
+    s->spi = ssi_create_bus(DEVICE(dev), "ssi");
 
     return 0;
 }

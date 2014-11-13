@@ -137,7 +137,7 @@ f2xx_i2c_init(SysBusDevice *dev)
     memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_i2c_ops, s, "i2c", 0x3ff);
     sysbus_init_mmio(dev, &s->iomem);
     sysbus_init_irq(dev, &s->irq);
-    s->bus = i2c_init_bus(&dev->qdev, "i2c");
+    s->bus = i2c_init_bus(DEVICE(dev), "i2c");
 
     return 0;
 }

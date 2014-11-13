@@ -194,8 +194,8 @@ stm32f2xx_gpio_init(SysBusDevice *dev)
     memory_region_init_io(&s->iomem, OBJECT(s), &stm32f2xx_gpio_ops, s, "gpio", 0x400);
     sysbus_init_mmio(dev, &s->iomem);
 
-    qdev_init_gpio_in(&dev->qdev, f2xx_gpio_set, STM32_GPIO_PIN_COUNT);
-    qdev_init_gpio_out(&dev->qdev, s->pin, STM32_GPIO_PIN_COUNT);
+    qdev_init_gpio_in(DEVICE(dev), f2xx_gpio_set, STM32_GPIO_PIN_COUNT);
+    qdev_init_gpio_out(DEVICE(dev), s->pin, STM32_GPIO_PIN_COUNT);
 
     return 0;
 }

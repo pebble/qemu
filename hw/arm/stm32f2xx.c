@@ -151,7 +151,7 @@ void stm32f2xx_init(
     };
     for (i = 0; i < ARRAY_LENGTH(uart_desc); ++i) {
         const stm32_periph_t periph = STM32F2XX_UART1 + i;
-        DeviceState *uart_dev = qdev_create(NULL, "stm32_uart");
+        DeviceState *uart_dev = qdev_create(NULL, "stm32-uart");
         uart_dev->id = stm32f2xx_periph_name_arr[periph];
         qdev_prop_set_int32(uart_dev, "periph", periph);
        qdev_prop_set_ptr(uart_dev, "stm32_rcc", rcc_dev);
