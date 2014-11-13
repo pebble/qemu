@@ -187,7 +187,7 @@ f2xx_crc_init(SysBusDevice *dev)
 {
     f2xx_crc *s = FROM_SYSBUS(f2xx_crc, dev);
 
-    memory_region_init_io(&s->iomem, &f2xx_crc_ops, s, "crc", 0x400);
+    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_crc_ops, s, "crc", 0x400);
     sysbus_init_mmio(dev, &s->iomem);
 
     return 0;
@@ -212,7 +212,7 @@ f2xx_crc_class_init(ObjectClass *klass, void *data)
     SysBusDeviceClass *sc = SYS_BUS_DEVICE_CLASS(klass);
     sc->init = f2xx_crc_init;
     dc->reset = f2xx_crc_reset;
-    dc->no_user = 1;
+    //TODO: fix this: dc->no_user = 1;
     dc->props = f2xx_crc_properties;
 }
 

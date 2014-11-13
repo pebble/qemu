@@ -84,14 +84,14 @@ pebble_key_handler(void *arg, int keycode)
     qemu_set_irq(bs[button_id].irq, !pressed);
 }
 
-static void pebble_init(QEMUMachineInitArgs *args, struct button_map *map) {
+static void pebble_init(MachineState *machine, struct button_map *map) {
     Stm32Gpio *gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *uart[STM32_UART_COUNT];
     DeviceState *spi_flash;
     SSIBus *spi;
     struct stm32f2xx stm;
 
-    stm32f2xx_init(512, 128, args->kernel_filename, gpio, uart, 8000000,
+    stm32f2xx_init(512, 128, machine->kernel_filename, gpio, uart, 8000000,
       32768, &stm);
 
     /* SPI flash */
@@ -124,8 +124,8 @@ static void pebble_init(QEMUMachineInitArgs *args, struct button_map *map) {
 }
 
 static void
-pebble_bb2_init(QEMUMachineInitArgs *args) {
-    pebble_init(args, button_map_bb2_ev1_ev2);
+pebble_bb2_init(MachineState *machine) {
+    pebble_init(machine, button_map_bb2_ev1_ev2);
 }
 
 static QEMUMachine pebble_bb2_machine = {
@@ -135,8 +135,8 @@ static QEMUMachine pebble_bb2_machine = {
 };
 
 static void
-pebble_bb_init(QEMUMachineInitArgs *args) {
-    pebble_init(args, button_map_bigboard);
+pebble_bb_init(MachineState *machine) {
+    pebble_init(machine, button_map_bigboard);
 }
 
 static QEMUMachine pebble_bb_machine = {

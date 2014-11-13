@@ -357,11 +357,20 @@ uint32_t stm32_afio_get_periph_map(Stm32Afio *s, int32_t periph_num);
 
 void stm32_afio_uart_check_tx_pin_callback(Stm32Uart *s);
 
-
+void stm32_create_uart_dev(
+        Object *stm32_container,
+        stm32_periph_t periph,
+        int uart_num,
+        DeviceState *rcc_dev,
+        DeviceState **gpio_dev,
+        DeviceState *afio_dev,
+        hwaddr addr,
+        qemu_irq irq);
 
 /* STM32 PERIPHERALS - GENERAL */
 DeviceState *stm32_init_periph(DeviceState *dev, stm32_periph_t periph,
                                hwaddr addr, qemu_irq irq);
+
 
 /* STM32 MICROCONTROLLER - GENERAL */
 typedef struct Stm32 Stm32;

@@ -151,7 +151,7 @@ f2xx_timer(void *arg)
     f2xx_rtc_set_tdr(s);
     f2xx_alarm_check(s, 0);
     f2xx_alarm_check(s, 1);
-    qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_period(s));
+    timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + f2xx_period(s));
 }
 
 static uint64_t
@@ -287,7 +287,7 @@ f2xx_rtc_init(SysBusDevice *dev)
 {
     f2xx_rtc *s = FROM_SYSBUS(f2xx_rtc, dev);
 
-    memory_region_init_io(&s->iomem, &f2xx_rtc_ops, s, "rtc", 0xa0);
+    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_rtc_ops, s, "rtc", 0xa0);
     sysbus_init_mmio(dev, &s->iomem);
     sysbus_init_irq(dev, &s->irq[0]);
     sysbus_init_irq(dev, &s->irq[1]);
@@ -295,8 +295,8 @@ f2xx_rtc_init(SysBusDevice *dev)
     s->regs[R_RTC_ISR] = R_RTC_ISR_RESET;
     s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
     s->regs[R_RTC_WUTR] = R_RTC_WUTR_RESET;
-    s->timer = qemu_new_timer_ns(vm_clock, f2xx_timer, s);
-    qemu_mod_timer(s->timer, qemu_get_clock_ns(vm_clock) + f2xx_period(s));
+    s->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, f2xx_timer, s);
+    timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + f2xx_period(s));
     return 0;
 }
 
@@ -310,7 +310,7 @@ f2xx_rtc_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     SysBusDeviceClass *sc = SYS_BUS_DEVICE_CLASS(klass);
     sc->init = f2xx_rtc_init;
-    dc->no_user = 1;
+    //TODO: fix this: dc->no_user = 1;
     dc->props = f2xx_rtc_properties;
 }
 

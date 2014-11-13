@@ -84,7 +84,7 @@ static int f2xx_flash_init(SysBusDevice *dev)
 
 //    memory_region_init_rom_device(&flash->mem, &f2xx_flash_ops, flash, "name",
 //      size);
-    memory_region_init_ram(&flash->mem, "f2xx.flash", size);
+    memory_region_init_ram(&flash->mem, NULL, "f2xx.flash", size);
 
     vmstate_register_ram(&flash->mem, DEVICE(flash));
     //vmstate_register_ram_global(&flash->mem);

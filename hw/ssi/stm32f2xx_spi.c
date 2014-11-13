@@ -174,7 +174,7 @@ stm32f2xx_spi_init(SysBusDevice *dev)
 {
     struct stm32f2xx_spi_s *s = FROM_SYSBUS(struct stm32f2xx_spi_s, dev);
 
-    memory_region_init_io(&s->iomem, &stm32f2xx_spi_ops, s, "spi", 0x3ff);
+    memory_region_init_io(&s->iomem, NULL, &stm32f2xx_spi_ops, s, "spi", 0x3ff);
     sysbus_init_mmio(dev, &s->iomem);
     sysbus_init_irq(dev, &s->irq);
     s->spi = ssi_create_bus(&dev->qdev, "ssi");

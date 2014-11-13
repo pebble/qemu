@@ -210,7 +210,7 @@ stm32f2xx_adc_init(SysBusDevice *dev)
     sysbus_init_irq(dev, &s->irq);
 #endif
 
-    memory_region_init_io(&s->iomem, &stm32f2xx_adc_ops, s, "adc", 0x400);
+    memory_region_init_io(&s->iomem, OBJECT(s), &stm32f2xx_adc_ops, s, "adc", 0x400);
     sysbus_init_mmio(dev, &s->iomem);
 
     return 0;

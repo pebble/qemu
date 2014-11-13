@@ -1,4 +1,4 @@
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 
 enum {
     STM32F2XX_PERIPH_UNDEFINED = -1,

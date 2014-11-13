@@ -29,7 +29,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 //#include "exec-memory.h"
 
 typedef struct {
@@ -68,6 +68,7 @@ static int stm32_flash_init(SysBusDevice *dev)
 
     memory_region_init_io(
             &s->iomem,
+            OBJECT(s),
             &stm32_flash_ops,
             &s,
             "stm32_flash",

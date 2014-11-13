@@ -19,7 +19,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 
 
 
@@ -354,7 +354,7 @@ static int stm32_exti_init(SysBusDevice *dev)
 
     s->stm32_gpio = (stm32f2xx_gpio **)s->stm32_gpio_prop;
 
-    memory_region_init_io(&s->iomem, &stm32_exti_ops, s,
+    memory_region_init_io(&s->iomem, OBJECT(s), &stm32_exti_ops, s,
             "exti", 0x03ff);
     sysbus_init_mmio(dev, &s->iomem);
 

@@ -67,7 +67,7 @@ f2xx_dummy_init(SysBusDevice *dev)
 {
     f2xx_dummy *s = FROM_SYSBUS(f2xx_dummy, dev);
 
-    memory_region_init_io(&s->iomem, &f2xx_dummy_ops, s, "dummy", s->size);
+    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_dummy_ops, s, "dummy", s->size);
     sysbus_init_mmio(dev, &s->iomem);
     return 0;
 }
@@ -84,7 +84,7 @@ f2xx_dummy_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     SysBusDeviceClass *sc = SYS_BUS_DEVICE_CLASS(klass);
     sc->init = f2xx_dummy_init;
-    dc->no_user = 1;
+    // TODO: fix this: dc->no_user = 1;
     dc->props = f2xx_dummy_properties;
 }
 

@@ -24,7 +24,7 @@
  */
 
 #include "hw/sysbus.h"
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 #include "hw/i2c/i2c.h"
 
 #define	R_I2C_CR1      (0x00 / 4)
@@ -43,7 +43,7 @@ typedef struct f2xx_i2c {
     MemoryRegion iomem;
     qemu_irq irq;
 
-    i2c_bus *bus;
+    I2CBus *bus;
 
     stm32_periph_t periph;
 
@@ -134,7 +134,7 @@ f2xx_i2c_init(SysBusDevice *dev)
 {
     struct f2xx_i2c *s = FROM_SYSBUS(struct f2xx_i2c, dev);
 
-    memory_region_init_io(&s->iomem, &f2xx_i2c_ops, s, "i2c", 0x3ff);
+    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_i2c_ops, s, "i2c", 0x3ff);
     sysbus_init_mmio(dev, &s->iomem);
     sysbus_init_irq(dev, &s->irq);
     s->bus = i2c_init_bus(&dev->qdev, "i2c");

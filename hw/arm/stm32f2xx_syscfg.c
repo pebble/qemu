@@ -180,7 +180,7 @@ static uint64_t stm32_syscfg_read(void *opaque, hwaddr offset,
 {
     Stm32Syscfg *s = (Stm32Syscfg *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F2XX_SYSCFG, &s->busdev);
+    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F2XX_SYSCFG);
 
     switch(size) {
         case 4:
@@ -196,7 +196,7 @@ static void stm32_syscfg_write(void *opaque, hwaddr offset,
 {
     Stm32Syscfg *s = (Stm32Syscfg *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F2XX_SYSCFG, &s->busdev);
+    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F2XX_SYSCFG);
 
     switch(size) {
         case 4:
@@ -236,7 +236,7 @@ static int stm32_syscfg_init(SysBusDevice *dev)
     s->stm32_rcc = (Stm32Rcc *)s->stm32_rcc_prop;
     s->stm32_exti = (Stm32Exti *)s->stm32_exti_prop;
 
-    memory_region_init_io(&s->iomem, &stm32_syscfg_ops, s,
+    memory_region_init_io(&s->iomem, OBJECT(s), &stm32_syscfg_ops, s,
                           "syscfg", 0x03ff);
     sysbus_init_mmio(dev, &s->iomem);
 

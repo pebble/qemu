@@ -77,7 +77,7 @@ f2xx_tim_timer(void *arg)
     f2xx_tim *s = arg;
 
     if (s->regs[R_TIM_CR1] & 1) {
-        qemu_mod_timer(s->timer, f2xx_tim_next_transition(s, qemu_get_clock_ns(vm_clock)));
+        timer_mod(s->timer, f2xx_tim_next_transition(s, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL)));
     }
     if (!(s->regs[R_TIM_SR] & 1))
         //printf("f2xx tim timer expired, setting int\n");
@@ -144,9 +144,9 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         }
         if ((s->regs[addr] & 1) == 0 && data & 1) {
             //printf("f2xx tim started\n");
-            qemu_mod_timer(s->timer, f2xx_tim_next_transition(s, qemu_get_clock_ns(vm_clock)));
+            timer_mod(s->timer, f2xx_tim_next_transition(s, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL)));
         } else if (s->regs[addr] & 1 && (data & 1) == 0) {
-            qemu_del_timer(s->timer);
+            timer_del(s->timer);
         }
         s->regs[addr] = data;
         break;
@@ -188,12 +188,12 @@ f2xx_tim_init(SysBusDevice *dev)
 {
     f2xx_tim *s = FROM_SYSBUS(f2xx_tim, dev);
 
-    memory_region_init_io(&s->iomem, &f2xx_tim_ops, s, "tim", 0xa0);
+    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_tim_ops, s, "tim", 0xa0);
     sysbus_init_mmio(dev, &s->iomem);
     //s->regs[R_RTC_ISR] = R_RTC_ISR_RESET;
     ////s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
     //s->regs[R_RTC_WUTR] = R_RTC_WUTR_RESET;
-    s->timer = qemu_new_timer_ns(vm_clock, f2xx_tim_timer, s);
+    s->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, f2xx_tim_timer, s);
     sysbus_init_irq(dev, &s->irq);
     
     return 0;
@@ -209,7 +209,7 @@ f2xx_tim_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     SysBusDeviceClass *sc = SYS_BUS_DEVICE_CLASS(klass);
     sc->init = f2xx_tim_init;
-    dc->no_user = 1;
+    //TODO: fix this: dc->no_user = 1;
     dc->props = f2xx_tim_properties;
 }
 

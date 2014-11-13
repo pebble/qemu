@@ -24,7 +24,7 @@
  */
 
 #include "hw/sysbus.h"
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 
 #define R_GPIO_MODER   (0x00 / 4)
 #define R_GPIO_OTYPER  (0x04 / 4)
@@ -191,7 +191,7 @@ stm32f2xx_gpio_init(SysBusDevice *dev)
 {
     stm32f2xx_gpio *s = FROM_SYSBUS(stm32f2xx_gpio, dev);
 
-    memory_region_init_io(&s->iomem, &stm32f2xx_gpio_ops, s, "gpio", 0x400);
+    memory_region_init_io(&s->iomem, OBJECT(s), &stm32f2xx_gpio_ops, s, "gpio", 0x400);
     sysbus_init_mmio(dev, &s->iomem);
 
     qdev_init_gpio_in(&dev->qdev, f2xx_gpio_set, STM32_GPIO_PIN_COUNT);

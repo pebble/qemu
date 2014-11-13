@@ -46,6 +46,7 @@ struct SysBusDevice {
     DeviceState parent_obj;
     /*< public >*/
 
+    DeviceState qdev;
     int num_irq;
     qemu_irq irqs[QDEV_MAX_IRQ];
     qemu_irq *irqp[QDEV_MAX_IRQ];
@@ -57,6 +58,9 @@ struct SysBusDevice {
     int num_pio;
     pio_addr_t pio[QDEV_MAX_PIO];
 };
+
+/* Macros to compensate for lack of type inheritance in C.  */
+#define FROM_SYSBUS(type, dev) DO_UPCAST(type, busdev, dev)
 
 void sysbus_init_mmio(SysBusDevice *dev, MemoryRegion *memory);
 MemoryRegion *sysbus_mmio_get_region(SysBusDevice *dev, int n);

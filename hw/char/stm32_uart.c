@@ -22,6 +22,7 @@
 
 #include "hw/sysbus.h"
 #include "hw/arm/stm32.h"
+#include "hw/arm/stm32f1xx.h"
 #include "sysemu/char.h"
 #include "qemu/bitops.h"
 
@@ -141,6 +142,85 @@ struct Stm32Uart {
 
 
 
+/* STM32F1XX Specific stuff */
+
+/* Checks the USART transmit pin's GPIO settings.  If the GPIO is not configured
+ * properly, a hardware error is triggered.
+ */
+void stm32_afio_uart_check_tx_pin_callback(Stm32Uart *s)
+{
+    int tx_periph, tx_pin;
+    int config;
+
+    switch(s->periph) {
+        case STM32F1XX_UART1:
+            switch(stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
+                case STM32_USART1_NO_REMAP:
+                    tx_periph = STM32F1XX_GPIOA;
+                    tx_pin = 9;
+                    break;
+                case STM32_USART1_REMAP:
+                    tx_periph = STM32F1XX_GPIOB;
+                    tx_pin = 6;
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+            break;
+        case STM32F1XX_UART2:
+            switch(stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
+                case STM32_USART2_NO_REMAP:
+                    tx_periph = STM32F1XX_GPIOA;
+                    tx_pin = 2;
+                    break;
+                case STM32_USART2_REMAP:
+                    tx_periph = STM32F1XX_GPIOD;
+                    tx_pin = 5;
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+            break;
+        case STM32F1XX_UART3:
+            switch(stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
+                case STM32_USART3_NO_REMAP:
+                    tx_periph = STM32F1XX_GPIOB;
+                    tx_pin = 10;
+                    break;
+                case STM32_USART3_PARTIAL_REMAP:
+                    tx_periph = STM32F1XX_GPIOC;
+                    tx_pin = 10;
+                    break;
+                case STM32_USART3_FULL_REMAP:
+                    tx_periph = STM32F1XX_GPIOD;
+                    tx_pin = 8;
+                    break;
+                default:
+                    assert(false);
+                    break;
+            }
+            break;
+        default:
+            assert(false);
+            break;
+    }
+
+    Stm32Gpio *gpio_dev = s->stm32_gpio[tx_periph - STM32F1XX_GPIOA];
+
+    if(stm32_gpio_get_mode_bits(gpio_dev, tx_pin) == STM32_GPIO_MODE_IN) {
+        hw_error("UART TX pin needs to be configured as output");
+    }
+
+    config = stm32_gpio_get_config_bits(gpio_dev, tx_pin);
+    if((config != STM32_GPIO_OUT_ALT_PUSHPULL) &&
+       (config != STM32_GPIO_OUT_ALT_OPEN)) {
+        hw_error("UART TX pin needs to be configured as "
+                 "alternate function output");
+    }
+}
+
 
 
 /* HELPER FUNCTIONS */
@@ -163,14 +243,15 @@ static void stm32_uart_baud_update(Stm32Uart *s)
     }
 
 #ifdef DEBUG_STM32_UART
+    const char *periph_name = s->busdev.qdev.id;
     DPRINTF("%s clock is set to %lu Hz.\n",
-                stm32_periph_name(s->periph),
+                periph_name,
                 (unsigned long)clk_freq);
     DPRINTF("%s BRR set to %lu.\n",
-                stm32_periph_name(s->periph),
+                periph_name,
                 (unsigned long)s->USART_BRR);
     DPRINTF("%s Baud is set to %lu bits per sec.\n",
-                stm32_periph_name(s->periph),
+                periph_name,
                 (unsigned long)s->bits_per_sec);
 #endif
 }
@@ -575,7 +656,7 @@ static void stm32_uart_USART_CR1_write(Stm32Uart *s, uint32_t new_value,
          * USART.
          */
         if(s->afio_board_map != stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
-            hw_error("Bad AFIO mapping for %s", stm32_periph_name(s->periph));
+            hw_error("Bad AFIO mapping for %s", s->busdev.qdev.id);
         }
     }
 

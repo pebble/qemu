@@ -18,8 +18,11 @@ done
 # lldb --
     #-mtdblock qemu_spi_flash.bin \
 
-$EMULATOR -rtc base=localtime -machine pebble-bb2 -s $flags \
-    -pflash qemu_micro_flash.bin \
+$EMULATOR -rtc base=localtime \
+    -machine pebble-bb2 \
+    -cpu cortex-m3 \
+    -s $flags \
+    -pflash ../test_images/qemu_micro_flash.bin \
     -serial file:uart1.log \
     -serial file:uart2.log \
     -serial tcp::12345,server,nowait \

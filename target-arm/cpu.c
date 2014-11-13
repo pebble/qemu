@@ -137,7 +137,7 @@ static void arm_cpu_reset(CPUState *s)
         env->daif &= ~PSTATE_I;
         rom = rom_ptr(0);
         if (rom) {
-            env->regs[13] = ldl_phys(0);
+            env->regs[13] = ldl_p(0);
             pc = ldl_p(rom + 4);
             env->thumb = pc & 1;
             env->regs[15] = pc & ~1;

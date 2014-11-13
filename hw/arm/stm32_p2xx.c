@@ -85,7 +85,7 @@ static void stm32_p205_key_event(void *opaque, int keycode)
 }
 
 
-static void stm32_p205_init(QEMUMachineInitArgs *args) {
+static void stm32_p205_init(MachineState *machine) {
     
 //    qemu_irq *led_irq;
     Stm32P205 *s;
@@ -97,7 +97,7 @@ static void stm32_p205_init(QEMUMachineInitArgs *args) {
 
     stm32f2xx_init(/*flash_size*/ 1024,
                /*ram_size*/ 128,
-               args->kernel_filename,
+               machine->kernel_filename,
                stm32_gpio,
                stm32_uart,
                8000000,

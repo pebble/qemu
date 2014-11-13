@@ -1,5 +1,5 @@
 #include "hw/sysbus.h"
-#include "../clktree.h"
+#include "hw/arm/stm32_clktree.h"
 #include "stm32f1xx.h"
 
 struct Stm32Rcc {

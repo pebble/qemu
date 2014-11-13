@@ -175,10 +175,11 @@ static void armv7m_reset(void *opaque)
 qemu_irq *armv7m_init(Object *parent, MemoryRegion *address_space_mem,
                       int flash_size, int sram_size,
                       const char *kernel_filename, const char *cpu_model) {
-    return armv7m_translated_init(address_space_mem, flash_size, sram_size, kernel_filename, NULL, NULL, cpu_model);
+    return armv7m_translated_init(parent, address_space_mem, flash_size, sram_size,
+            kernel_filename, NULL, NULL, cpu_model);
 }
 
-qemu_irq *armv7m_translated_init(MemoryRegion *address_space_mem,
+qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem,
                                  int flash_size, int sram_size,
                                  const char *kernel_filename,
                                  uint64_t (*translate_fn)(void *, uint64_t),

@@ -19,7 +19,7 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 #include "stm32f2xx.h"
 #include "exec/address-spaces.h"
 #include "exec/memory.h"
@@ -62,7 +62,18 @@ void stm32f2xx_init(
     qemu_irq *pic;
     int i;
 
-    pic = armv7m_translated_init(address_space_mem, flash_size, ram_size, kernel_filename, kernel_load_translate_fn, NULL, "cortex-m3");
+    Object *stm32_container = container_get(qdev_get_machine(), "/stm32");
+
+    pic = armv7m_translated_init(
+                stm32_container,
+                address_space_mem,
+                flash_size,
+                ram_size,
+                kernel_filename,
+                kernel_load_translate_fn,
+                NULL,
+                "cortex-m3");
+
     dinfo = drive_get(IF_PFLASH, 0, 0);
     if (dinfo) {
         f2xx_flash_register(dinfo->bdrv, 1 * 0x08000000, flash_size * 1024);
@@ -73,7 +84,13 @@ void stm32f2xx_init(
 
     MemoryRegionSection mrs = memory_region_find(address_space_mem, STM32_FLASH_ADDR_START, WORD_ACCESS_SIZE);
     MemoryRegion *flash_alias = g_new(MemoryRegion, 1);
-    memory_region_init_alias(flash_alias, "stm32f2xx.flash.alias", mrs.mr, 0, flash_size * 1024);
+    memory_region_init_alias(
+            flash_alias,
+            NULL,
+            "stm32f2xx.flash.alias",
+            mrs.mr,
+            0,
+            flash_size * 1024);
     memory_region_add_subregion(address_space_mem, 0, flash_alias);
 
     DeviceState *rcc_dev = qdev_create(NULL, "stm32f2xx_rcc");

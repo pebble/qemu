@@ -1,4 +1,4 @@
-#include "stm32.h"
+#include "hw/arm/stm32.h"
 
 enum {
     STM32F1XX_PERIPH_UNDEFINED = -1,
@@ -47,5 +47,7 @@ enum {
     STM32F1XX_FSMC,
     STM32F1XX_PERIPH_COUNT,
 };
+
+const char *stm32f1xx_periph_name(stm32_periph_t periph);
 
 #define STM32F1XX_GPIO_COUNT (STM32F1XX_GPIOG - STM32F1XX_GPIOA + 1)
