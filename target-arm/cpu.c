@@ -132,16 +132,12 @@ static void arm_cpu_reset(CPUState *s)
        clear at reset.  Initial SP and PC are loaded from ROM.  */
     if (IS_M(env)) {
         uint32_t pc;
-        uint8_t *rom;
         env->uncached_cpsr &= ~CPSR_I;
         env->daif &= ~PSTATE_I;
-        rom = rom_ptr(0);
-        if (rom) {
-            env->regs[13] = ldl_p(0);
-            pc = ldl_p(rom + 4);
-            env->thumb = pc & 1;
-            env->regs[15] = pc & ~1;
-        }
+        env->regs[13] = ldl_phys(s->as, 0);
+        pc = ldl_phys(s->as, 4);
+        env->thumb = pc & 1;
+        env->regs[15] = pc & ~1;
     }
 
     if (env->cp15.c1_sys & SCTLR_V) {
