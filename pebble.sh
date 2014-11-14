@@ -2,22 +2,37 @@
 
 EMULATOR=arm-softmmu/qemu-system-arm
 
-while getopts Sd opt; do
+while getopts sSdt opt; do
     case $opt in
+    s)
+        flags="$flags -s"       # start gdb
+        ;;
     S)
-        flags="$flags -S"
+        flags="$flags -S"       # no not start CPU at start, type 'c' in monitor
         ;;
     d)
         # LOG_UNIMP
         # LOG_GUEST_ERROR
-        flags="$flags -d unimp,guest_errors"
+        flags="$flags -d out_asm,in_asm,op,op_opt,int,exec,cpu,pcall,cpu_reset,ioport,unimp,guest_errors"
+        ;;
+    t)
+        flags="$flags -singlestep"
         ;;
     esac
 done
 
-$EMULATOR -rtc base=localtime -M pebble-bb2 -s $flags \
-    -pflash qemu_micro_flash.bin \
-    -mtdblock qemu_spi_flash.bin \
+echo FLAGS are $flags
+
+# lldb --
+
+$EMULATOR -rtc base=localtime \
+    -machine pebble-bb2 \
+    -cpu cortex-m3 \
+    $flags \
+    -pflash ../test_images/qemu_micro_flash.bin \
+    -mtdblock ../test_images/qemu_spi_flash.bin \
     -serial file:uart1.log \
     -serial file:uart2.log \
-    -serial tcp::12345,server,nowait
+    -serial tcp::12345,server,nowait \
+    -monitor stdio  
+    

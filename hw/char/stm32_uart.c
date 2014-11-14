@@ -84,6 +84,14 @@ struct Stm32Uart {
     void *stm32_gpio_prop;
     void *stm32_afio_prop;
 
+    /* Checks the USART transmit pin's GPIO settings.  If the GPIO is not configured
+     * properly, a hardware error is triggered.
+     */
+    union {
+        void *check_tx_pin_prop;
+        void (*check_tx_pin_callback)(Stm32Uart *);
+    };
+
     /* Private */
     MemoryRegion iomem;
 
@@ -138,7 +146,6 @@ struct Stm32Uart {
     qemu_irq irq;
     int curr_irq_level;
 };
-
 
 
 
@@ -220,7 +227,6 @@ void stm32_afio_uart_check_tx_pin_callback(Stm32Uart *s)
                  "alternate function output");
     }
 }
-
 
 
 /* HELPER FUNCTIONS */
@@ -336,84 +342,6 @@ static void stm32_uart_start_tx(Stm32Uart *s, uint32_t value)
     timer_mod(s->tx_timer,  curr_time + s->ns_per_char);
 #endif
 }
-
-/* Checks the USART transmit pin's GPIO settings.  If the GPIO is not configured
- * properly, a hardware error is triggered.
- */
-static void stm32_uart_check_tx_pin(Stm32Uart *s)
-{
-    int tx_periph, tx_pin;
-    int config;
-
-    switch(s->periph) {
-        case STM32_UART1:
-            switch(stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
-                case STM32_USART1_NO_REMAP:
-                    tx_periph = STM32_GPIOA;
-                    tx_pin = 9;
-                    break;
-                case STM32_USART1_REMAP:
-                    tx_periph = STM32_GPIOB;
-                    tx_pin = 6;
-                    break;
-                default:
-                    assert(false);
-                    break;
-            }
-            break;
-        case STM32_UART2:
-            switch(stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
-                case STM32_USART2_NO_REMAP:
-                    tx_periph = STM32_GPIOA;
-                    tx_pin = 2;
-                    break;
-                case STM32_USART2_REMAP:
-                    tx_periph = STM32_GPIOD;
-                    tx_pin = 5;
-                    break;
-                default:
-                    assert(false);
-                    break;
-            }
-            break;
-        case STM32_UART3:
-            switch(stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
-                case STM32_USART3_NO_REMAP:
-                    tx_periph = STM32_GPIOB;
-                    tx_pin = 10;
-                    break;
-                case STM32_USART3_PARTIAL_REMAP:
-                    tx_periph = STM32_GPIOC;
-                    tx_pin = 10;
-                    break;
-                case STM32_USART3_FULL_REMAP:
-                    tx_periph = STM32_GPIOD;
-                    tx_pin = 8;
-                    break;
-                default:
-                    assert(false);
-                    break;
-            }
-            break;
-        default:
-            assert(false);
-            break;
-    }
-
-    Stm32Gpio *gpio_dev = s->stm32_gpio[STM32_GPIO_INDEX_FROM_PERIPH(tx_periph)];
-
-    if(stm32_gpio_get_mode_bits(gpio_dev, tx_pin) == STM32_GPIO_MODE_IN) {
-        hw_error("UART TX pin needs to be configured as output");
-    }
-
-    config = stm32_gpio_get_config_bits(gpio_dev, tx_pin);
-    if((config != STM32_GPIO_OUT_ALT_PUSHPULL) &&
-            (config != STM32_GPIO_OUT_ALT_OPEN)) {
-        hw_error("UART TX pin needs to be configured as "
-                 "alternate function output");
-    }
-}
-
 
 
 
@@ -613,7 +541,9 @@ static void stm32_uart_USART_DR_write(Stm32Uart *s, uint32_t new_value)
                  "was disabled.");
     }
 
-    stm32_uart_check_tx_pin(s);
+    if (s->check_tx_pin_callback) {
+        s->check_tx_pin_callback(s);
+    }
 
     if(s->USART_SR_TC) {
         /* If the Transmission Complete bit is set, it means the USART is not
@@ -651,6 +581,7 @@ static void stm32_uart_USART_CR1_write(Stm32Uart *s, uint32_t new_value,
                                         bool init)
 {
     s->USART_CR1_UE = extract32(new_value, USART_CR1_UE_BIT, 1);
+#if 0 /* XXX Does not work with f2xx yet */
     if(s->USART_CR1_UE) {
         /* Check to make sure the correct mapping is selected when enabling the
          * USART.
@@ -659,6 +590,7 @@ static void stm32_uart_USART_CR1_write(Stm32Uart *s, uint32_t new_value,
             hw_error("Bad AFIO mapping for %s", s->busdev.qdev.id);
         }
     }
+#endif
 
     s->USART_CR1_TXEIE = extract32(new_value, USART_CR1_TXEIE_BIT, 1);
     s->USART_CR1_TCIE = extract32(new_value, USART_CR1_TCIE_BIT, 1);
@@ -853,6 +785,7 @@ static Property stm32_uart_properties[] = {
     DEFINE_PROP_PTR("stm32_rcc", Stm32Uart, stm32_rcc_prop),
     DEFINE_PROP_PTR("stm32_gpio", Stm32Uart, stm32_gpio_prop),
     DEFINE_PROP_PTR("stm32_afio", Stm32Uart, stm32_afio_prop),
+    DEFINE_PROP_PTR("stm32_check_tx_pin_callback", Stm32Uart, check_tx_pin_prop),
     DEFINE_PROP_END_OF_LIST()
 };
 
