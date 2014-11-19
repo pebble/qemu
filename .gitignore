@@ -106,3 +106,5 @@ tags
 TAGS
 *~
 build
+.DS_Store
+

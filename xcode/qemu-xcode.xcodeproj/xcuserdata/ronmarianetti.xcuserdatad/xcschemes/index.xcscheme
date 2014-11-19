@@ -14,9 +14,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0AB8BA6C1A13D98300092455"
-               BuildableName = "qemu_target"
-               BlueprintName = "qemu_target"
+               BlueprintIdentifier = "0A067BC71A1C2049009BB34B"
+               BuildableName = "index"
+               BlueprintName = "index"
                ReferencedContainer = "container:qemu-xcode.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -29,35 +29,34 @@
       buildConfiguration = "Debug">
       <Testables>
       </Testables>
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "0A067BC71A1C2049009BB34B"
+            BuildableName = "index"
+            BlueprintName = "index"
+            ReferencedContainer = "container:qemu-xcode.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
    </TestAction>
    <LaunchAction
-      selectedDebuggerIdentifier = ""
-      selectedLauncherIdentifier = "Xcode.IDEFoundation.Launcher.PosixSpawn"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       launchStyle = "0"
-      useCustomWorkingDirectory = "YES"
-      customWorkingDirectory = "/Users/ronmarianetti/Projects/pebble/qemu/build"
+      useCustomWorkingDirectory = "NO"
       buildConfiguration = "Debug"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       allowLocationSimulation = "YES">
-      <PathRunnable
-         FilePath = "/Users/ronmarianetti/Projects/pebble/qemu/build/arm-softmmu/qemu-system-arm">
-      </PathRunnable>
-      <MacroExpansion>
+      <BuildableProductRunnable>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0AB8BA6C1A13D98300092455"
-            BuildableName = "qemu_target"
-            BlueprintName = "qemu_target"
+            BlueprintIdentifier = "0A067BC71A1C2049009BB34B"
+            BuildableName = "index"
+            BlueprintName = "index"
             ReferencedContainer = "container:qemu-xcode.xcodeproj">
          </BuildableReference>
-      </MacroExpansion>
-      <CommandLineArguments>
-         <CommandLineArgument
-            argument = "-s -rtc base=localtime -machine pebble-bb2  -cpu cortex-m3 -pflash ../test_images/qemu_micro_flash.bin -mtdblock ../test_images/qemu_spi_flash.bin -serial file:uart1.log  -serial file:uart2.log  -serial tcp::12345,server,nowait    -monitor stdio "
-            isEnabled = "YES">
-         </CommandLineArgument>
-      </CommandLineArguments>
+      </BuildableProductRunnable>
       <AdditionalOptions>
       </AdditionalOptions>
    </LaunchAction>
@@ -67,15 +66,15 @@
       useCustomWorkingDirectory = "NO"
       buildConfiguration = "Release"
       debugDocumentVersioning = "YES">
-      <MacroExpansion>
+      <BuildableProductRunnable>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0AB8BA6C1A13D98300092455"
-            BuildableName = "qemu_target"
-            BlueprintName = "qemu_target"
+            BlueprintIdentifier = "0A067BC71A1C2049009BB34B"
+            BuildableName = "index"
+            BlueprintName = "index"
             ReferencedContainer = "container:qemu-xcode.xcodeproj">
          </BuildableReference>
-      </MacroExpansion>
+      </BuildableProductRunnable>
    </ProfileAction>
    <AnalyzeAction
       buildConfiguration = "Debug">
