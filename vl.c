@@ -4199,6 +4199,13 @@ int main(int argc, char **argv, char **envp)
 
     socket_init();
 
+    // NOTE: on Mac OS (noticed on 10.9.5), we get buffer overrun errors if the stdout stream is
+    // line buffered and the underlying stdout file has O_NONBLOCK set. Since opening the monitor
+    // chardev below can set the stout file to O_NONBLOCK (and now changes the stream to be
+    // non-buffered in qemu_chr_open_stdio()), make sure we put the call os_set_line_buffering here
+    // before that so that it can't overwrite the settings modified by the chardev_init_func
+    os_set_line_buffering();
+
     if (qemu_opts_foreach(qemu_find_opts("chardev"), chardev_init_func, NULL, 1) != 0)
         exit(1);
 #ifdef CONFIG_VIRTFS
@@ -4295,8 +4302,6 @@ int main(int argc, char **argv, char **envp)
         fprintf(stderr, "-dtb only allowed with -kernel option\n");
         exit(1);
     }
-
-    os_set_line_buffering();
 
     qemu_init_cpu_loop();
     qemu_mutex_lock_iothread();

@@ -1065,6 +1065,7 @@ static CharDriverState *qemu_chr_open_stdio(ChardevStdio *opts)
     fcntl(0, F_SETFL, O_NONBLOCK);
     atexit(term_exit);
 
+    setvbuf(stdout, NULL, _IONBF, 0);
     chr = qemu_chr_open_fd(0, 1);
     chr->chr_close = qemu_chr_close_stdio;
     chr->chr_set_echo = qemu_chr_set_echo_stdio;

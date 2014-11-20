@@ -1009,47 +1009,6 @@
 		0A06E87E1A1C2462009BB34B /* tftp.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2C41A1C2440009BB34B /* tftp.c */; };
 		0A06E87F1A1C2462009BB34B /* udp.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2C61A1C2440009BB34B /* udp.c */; };
 		0A06E8801A1C2462009BB34B /* spice-qemu-char.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2C91A1C2441009BB34B /* spice-qemu-char.c */; };
-		0A06E8811A1C2462009BB34B /* arch-query-cpu-def.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2CB1A1C2441009BB34B /* arch-query-cpu-def.c */; };
-		0A06E8821A1C2462009BB34B /* bdrv-commit-all.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2CC1A1C2441009BB34B /* bdrv-commit-all.c */; };
-		0A06E8831A1C2462009BB34B /* chr-baum-init.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2CD1A1C2441009BB34B /* chr-baum-init.c */; };
-		0A06E8841A1C2462009BB34B /* chr-msmouse.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2CE1A1C2441009BB34B /* chr-msmouse.c */; };
-		0A06E8851A1C2462009BB34B /* clock-warp.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2CF1A1C2441009BB34B /* clock-warp.c */; };
-		0A06E8861A1C2462009BB34B /* cpu-get-clock.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2D01A1C2441009BB34B /* cpu-get-clock.c */; };
-		0A06E8871A1C2462009BB34B /* cpu-get-icount.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2D11A1C2441009BB34B /* cpu-get-icount.c */; };
-		0A06E8881A1C2462009BB34B /* cpus.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2D21A1C2441009BB34B /* cpus.c */; };
-		0A06E8891A1C2462009BB34B /* dump.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2D31A1C2441009BB34B /* dump.c */; };
-		0A06E88A1A1C2462009BB34B /* fd-register.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2D41A1C2441009BB34B /* fd-register.c */; };
-		0A06E88B1A1C2462009BB34B /* fdset-add-fd.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2D51A1C2441009BB34B /* fdset-add-fd.c */; };
-		0A06E88C1A1C2462009BB34B /* fdset-find-fd.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2D61A1C2441009BB34B /* fdset-find-fd.c */; };
-		0A06E88D1A1C2462009BB34B /* fdset-get-fd.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2D71A1C2441009BB34B /* fdset-get-fd.c */; };
-		0A06E88E1A1C2462009BB34B /* fdset-remove-fd.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2D81A1C2441009BB34B /* fdset-remove-fd.c */; };
-		0A06E88F1A1C2462009BB34B /* gdbstub.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2D91A1C2441009BB34B /* gdbstub.c */; };
-		0A06E8901A1C2462009BB34B /* get-fd.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2DA1A1C2441009BB34B /* get-fd.c */; };
-		0A06E8911A1C2462009BB34B /* get-next-serial.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2DB1A1C2441009BB34B /* get-next-serial.c */; };
-		0A06E8921A1C2462009BB34B /* get-vm-name.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2DC1A1C2441009BB34B /* get-vm-name.c */; };
-		0A06E8931A1C2462009BB34B /* iothread-lock.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2DD1A1C2441009BB34B /* iothread-lock.c */; };
-		0A06E8941A1C2462009BB34B /* is-daemonized.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2DE1A1C2441009BB34B /* is-daemonized.c */; };
-		0A06E8951A1C2462009BB34B /* kvm.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2DF1A1C2441009BB34B /* kvm.c */; };
-		0A06E8961A1C2462009BB34B /* machine-init-done.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2E01A1C2441009BB34B /* machine-init-done.c */; };
-		0A06E8971A1C2462009BB34B /* migr-blocker.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2E21A1C2441009BB34B /* migr-blocker.c */; };
-		0A06E8981A1C2462009BB34B /* mon-is-qmp.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2E31A1C2441009BB34B /* mon-is-qmp.c */; };
-		0A06E8991A1C2462009BB34B /* mon-printf.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2E41A1C2441009BB34B /* mon-printf.c */; };
-		0A06E89A1A1C2462009BB34B /* mon-set-error.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2E51A1C2441009BB34B /* mon-set-error.c */; };
-		0A06E89B1A1C2462009BB34B /* monitor-init.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2E61A1C2441009BB34B /* monitor-init.c */; };
-		0A06E89C1A1C2462009BB34B /* notify-event.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2E71A1C2441009BB34B /* notify-event.c */; };
-		0A06E89D1A1C2462009BB34B /* pci-drive-hot-add.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2E81A1C2441009BB34B /* pci-drive-hot-add.c */; };
-		0A06E89E1A1C2462009BB34B /* qemu-chr-open-spice.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2E91A1C2441009BB34B /* qemu-chr-open-spice.c */; };
-		0A06E89F1A1C2462009BB34B /* qmp_pc_dimm_device_list.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2EA1A1C2441009BB34B /* qmp_pc_dimm_device_list.c */; };
-		0A06E8A01A1C2462009BB34B /* qtest.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2EB1A1C2441009BB34B /* qtest.c */; };
-		0A06E8A11A1C2462009BB34B /* reset.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2EC1A1C2441009BB34B /* reset.c */; };
-		0A06E8A21A1C2462009BB34B /* runstate-check.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2ED1A1C2441009BB34B /* runstate-check.c */; };
-		0A06E8A31A1C2462009BB34B /* set-fd-handler.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2EE1A1C2441009BB34B /* set-fd-handler.c */; };
-		0A06E8A41A1C2462009BB34B /* slirp.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2EF1A1C2441009BB34B /* slirp.c */; };
-		0A06E8A51A1C2462009BB34B /* sysbus.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2F01A1C2441009BB34B /* sysbus.c */; };
-		0A06E8A61A1C2462009BB34B /* uuid.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2F11A1C2441009BB34B /* uuid.c */; };
-		0A06E8A71A1C2462009BB34B /* vc-init.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2F21A1C2441009BB34B /* vc-init.c */; };
-		0A06E8A81A1C2462009BB34B /* vm-stop.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2F31A1C2441009BB34B /* vm-stop.c */; };
-		0A06E8A91A1C2462009BB34B /* vmstate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2F41A1C2441009BB34B /* vmstate.c */; };
 		0A06E8AA1A1C2462009BB34B /* cpu.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2FA1A1C2442009BB34B /* cpu.c */; };
 		0A06E8AB1A1C2462009BB34B /* fpu_helper.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2FC1A1C2442009BB34B /* fpu_helper.c */; };
 		0A06E8AC1A1C2462009BB34B /* gdbstub.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C2FD1A1C2442009BB34B /* gdbstub.c */; };
@@ -1302,7 +1261,6 @@
 		0A06ECF11A1C2466009BB34B /* qemu-progress.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9AA1A1C244E009BB34B /* qemu-progress.c */; };
 		0A06ECF21A1C2466009BB34B /* qemu-sockets.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9AB1A1C244E009BB34B /* qemu-sockets.c */; };
 		0A06ECF31A1C2466009BB34B /* qemu-thread-posix.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9AC1A1C244E009BB34B /* qemu-thread-posix.c */; };
-		0A06ECF41A1C2466009BB34B /* qemu-thread-win32.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9AD1A1C244E009BB34B /* qemu-thread-win32.c */; };
 		0A06ECF51A1C2466009BB34B /* qemu-timer-common.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9AE1A1C244E009BB34B /* qemu-timer-common.c */; };
 		0A06ECF61A1C2466009BB34B /* readline.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9AF1A1C244E009BB34B /* readline.c */; };
 		0A06ECF71A1C2466009BB34B /* rfifolock.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9B01A1C244E009BB34B /* rfifolock.c */; };
@@ -3375,48 +3333,6 @@
 		0A06C2C71A1C2440009BB34B /* udp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = udp.h; sourceTree = "<group>"; };
 		0A06C2C81A1C2440009BB34B /* softmmu_template.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = softmmu_template.h; path = ../softmmu_template.h; sourceTree = "<group>"; };
 		0A06C2C91A1C2441009BB34B /* spice-qemu-char.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = "spice-qemu-char.c"; path = "../spice-qemu-char.c"; sourceTree = "<group>"; };
-		0A06C2CB1A1C2441009BB34B /* arch-query-cpu-def.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "arch-query-cpu-def.c"; sourceTree = "<group>"; };
-		0A06C2CC1A1C2441009BB34B /* bdrv-commit-all.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "bdrv-commit-all.c"; sourceTree = "<group>"; };
-		0A06C2CD1A1C2441009BB34B /* chr-baum-init.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "chr-baum-init.c"; sourceTree = "<group>"; };
-		0A06C2CE1A1C2441009BB34B /* chr-msmouse.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "chr-msmouse.c"; sourceTree = "<group>"; };
-		0A06C2CF1A1C2441009BB34B /* clock-warp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "clock-warp.c"; sourceTree = "<group>"; };
-		0A06C2D01A1C2441009BB34B /* cpu-get-clock.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cpu-get-clock.c"; sourceTree = "<group>"; };
-		0A06C2D11A1C2441009BB34B /* cpu-get-icount.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cpu-get-icount.c"; sourceTree = "<group>"; };
-		0A06C2D21A1C2441009BB34B /* cpus.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cpus.c; sourceTree = "<group>"; };
-		0A06C2D31A1C2441009BB34B /* dump.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = dump.c; sourceTree = "<group>"; };
-		0A06C2D41A1C2441009BB34B /* fd-register.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "fd-register.c"; sourceTree = "<group>"; };
-		0A06C2D51A1C2441009BB34B /* fdset-add-fd.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "fdset-add-fd.c"; sourceTree = "<group>"; };
-		0A06C2D61A1C2441009BB34B /* fdset-find-fd.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "fdset-find-fd.c"; sourceTree = "<group>"; };
-		0A06C2D71A1C2441009BB34B /* fdset-get-fd.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "fdset-get-fd.c"; sourceTree = "<group>"; };
-		0A06C2D81A1C2441009BB34B /* fdset-remove-fd.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "fdset-remove-fd.c"; sourceTree = "<group>"; };
-		0A06C2D91A1C2441009BB34B /* gdbstub.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = gdbstub.c; sourceTree = "<group>"; };
-		0A06C2DA1A1C2441009BB34B /* get-fd.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "get-fd.c"; sourceTree = "<group>"; };
-		0A06C2DB1A1C2441009BB34B /* get-next-serial.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "get-next-serial.c"; sourceTree = "<group>"; };
-		0A06C2DC1A1C2441009BB34B /* get-vm-name.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "get-vm-name.c"; sourceTree = "<group>"; };
-		0A06C2DD1A1C2441009BB34B /* iothread-lock.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "iothread-lock.c"; sourceTree = "<group>"; };
-		0A06C2DE1A1C2441009BB34B /* is-daemonized.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "is-daemonized.c"; sourceTree = "<group>"; };
-		0A06C2DF1A1C2441009BB34B /* kvm.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = kvm.c; sourceTree = "<group>"; };
-		0A06C2E01A1C2441009BB34B /* machine-init-done.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "machine-init-done.c"; sourceTree = "<group>"; };
-		0A06C2E11A1C2441009BB34B /* Makefile.objs */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Makefile.objs; sourceTree = "<group>"; };
-		0A06C2E21A1C2441009BB34B /* migr-blocker.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "migr-blocker.c"; sourceTree = "<group>"; };
-		0A06C2E31A1C2441009BB34B /* mon-is-qmp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "mon-is-qmp.c"; sourceTree = "<group>"; };
-		0A06C2E41A1C2441009BB34B /* mon-printf.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "mon-printf.c"; sourceTree = "<group>"; };
-		0A06C2E51A1C2441009BB34B /* mon-set-error.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "mon-set-error.c"; sourceTree = "<group>"; };
-		0A06C2E61A1C2441009BB34B /* monitor-init.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "monitor-init.c"; sourceTree = "<group>"; };
-		0A06C2E71A1C2441009BB34B /* notify-event.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "notify-event.c"; sourceTree = "<group>"; };
-		0A06C2E81A1C2441009BB34B /* pci-drive-hot-add.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "pci-drive-hot-add.c"; sourceTree = "<group>"; };
-		0A06C2E91A1C2441009BB34B /* qemu-chr-open-spice.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "qemu-chr-open-spice.c"; sourceTree = "<group>"; };
-		0A06C2EA1A1C2441009BB34B /* qmp_pc_dimm_device_list.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = qmp_pc_dimm_device_list.c; sourceTree = "<group>"; };
-		0A06C2EB1A1C2441009BB34B /* qtest.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = qtest.c; sourceTree = "<group>"; };
-		0A06C2EC1A1C2441009BB34B /* reset.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = reset.c; sourceTree = "<group>"; };
-		0A06C2ED1A1C2441009BB34B /* runstate-check.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "runstate-check.c"; sourceTree = "<group>"; };
-		0A06C2EE1A1C2441009BB34B /* set-fd-handler.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "set-fd-handler.c"; sourceTree = "<group>"; };
-		0A06C2EF1A1C2441009BB34B /* slirp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = slirp.c; sourceTree = "<group>"; };
-		0A06C2F01A1C2441009BB34B /* sysbus.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sysbus.c; sourceTree = "<group>"; };
-		0A06C2F11A1C2441009BB34B /* uuid.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = uuid.c; sourceTree = "<group>"; };
-		0A06C2F21A1C2441009BB34B /* vc-init.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "vc-init.c"; sourceTree = "<group>"; };
-		0A06C2F31A1C2441009BB34B /* vm-stop.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "vm-stop.c"; sourceTree = "<group>"; };
-		0A06C2F41A1C2441009BB34B /* vmstate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = vmstate.c; sourceTree = "<group>"; };
 		0A06C2F71A1C2441009BB34B /* target-x86_64.conf */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "target-x86_64.conf"; sourceTree = "<group>"; };
 		0A06C2F91A1C2442009BB34B /* cpu-qom.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "cpu-qom.h"; sourceTree = "<group>"; };
 		0A06C2FA1A1C2442009BB34B /* cpu.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cpu.c; sourceTree = "<group>"; };
@@ -3833,7 +3749,6 @@
 		0A06C9AA1A1C244E009BB34B /* qemu-progress.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "qemu-progress.c"; sourceTree = "<group>"; };
 		0A06C9AB1A1C244E009BB34B /* qemu-sockets.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "qemu-sockets.c"; sourceTree = "<group>"; };
 		0A06C9AC1A1C244E009BB34B /* qemu-thread-posix.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "qemu-thread-posix.c"; sourceTree = "<group>"; };
-		0A06C9AD1A1C244E009BB34B /* qemu-thread-win32.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "qemu-thread-win32.c"; sourceTree = "<group>"; };
 		0A06C9AE1A1C244E009BB34B /* qemu-timer-common.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "qemu-timer-common.c"; sourceTree = "<group>"; };
 		0A06C9AF1A1C244E009BB34B /* readline.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = readline.c; sourceTree = "<group>"; };
 		0A06C9B01A1C244E009BB34B /* rfifolock.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rfifolock.c; sourceTree = "<group>"; };
@@ -7302,56 +7217,6 @@
 			path = ../slirp;
 			sourceTree = "<group>";
 		};
-		0A06C2CA1A1C2441009BB34B /* stubs */ = {
-			isa = PBXGroup;
-			children = (
-				0A06C2CB1A1C2441009BB34B /* arch-query-cpu-def.c */,
-				0A06C2CC1A1C2441009BB34B /* bdrv-commit-all.c */,
-				0A06C2CD1A1C2441009BB34B /* chr-baum-init.c */,
-				0A06C2CE1A1C2441009BB34B /* chr-msmouse.c */,
-				0A06C2CF1A1C2441009BB34B /* clock-warp.c */,
-				0A06C2D01A1C2441009BB34B /* cpu-get-clock.c */,
-				0A06C2D11A1C2441009BB34B /* cpu-get-icount.c */,
-				0A06C2D21A1C2441009BB34B /* cpus.c */,
-				0A06C2D31A1C2441009BB34B /* dump.c */,
-				0A06C2D41A1C2441009BB34B /* fd-register.c */,
-				0A06C2D51A1C2441009BB34B /* fdset-add-fd.c */,
-				0A06C2D61A1C2441009BB34B /* fdset-find-fd.c */,
-				0A06C2D71A1C2441009BB34B /* fdset-get-fd.c */,
-				0A06C2D81A1C2441009BB34B /* fdset-remove-fd.c */,
-				0A06C2D91A1C2441009BB34B /* gdbstub.c */,
-				0A06C2DA1A1C2441009BB34B /* get-fd.c */,
-				0A06C2DB1A1C2441009BB34B /* get-next-serial.c */,
-				0A06C2DC1A1C2441009BB34B /* get-vm-name.c */,
-				0A06C2DD1A1C2441009BB34B /* iothread-lock.c */,
-				0A06C2DE1A1C2441009BB34B /* is-daemonized.c */,
-				0A06C2DF1A1C2441009BB34B /* kvm.c */,
-				0A06C2E01A1C2441009BB34B /* machine-init-done.c */,
-				0A06C2E11A1C2441009BB34B /* Makefile.objs */,
-				0A06C2E21A1C2441009BB34B /* migr-blocker.c */,
-				0A06C2E31A1C2441009BB34B /* mon-is-qmp.c */,
-				0A06C2E41A1C2441009BB34B /* mon-printf.c */,
-				0A06C2E51A1C2441009BB34B /* mon-set-error.c */,
-				0A06C2E61A1C2441009BB34B /* monitor-init.c */,
-				0A06C2E71A1C2441009BB34B /* notify-event.c */,
-				0A06C2E81A1C2441009BB34B /* pci-drive-hot-add.c */,
-				0A06C2E91A1C2441009BB34B /* qemu-chr-open-spice.c */,
-				0A06C2EA1A1C2441009BB34B /* qmp_pc_dimm_device_list.c */,
-				0A06C2EB1A1C2441009BB34B /* qtest.c */,
-				0A06C2EC1A1C2441009BB34B /* reset.c */,
-				0A06C2ED1A1C2441009BB34B /* runstate-check.c */,
-				0A06C2EE1A1C2441009BB34B /* set-fd-handler.c */,
-				0A06C2EF1A1C2441009BB34B /* slirp.c */,
-				0A06C2F01A1C2441009BB34B /* sysbus.c */,
-				0A06C2F11A1C2441009BB34B /* uuid.c */,
-				0A06C2F21A1C2441009BB34B /* vc-init.c */,
-				0A06C2F31A1C2441009BB34B /* vm-stop.c */,
-				0A06C2F41A1C2441009BB34B /* vmstate.c */,
-			);
-			name = stubs;
-			path = ../stubs;
-			sourceTree = "<group>";
-		};
 		0A06C2F51A1C2441009BB34B /* sysconfigs */ = {
 			isa = PBXGroup;
 			children = (
@@ -8026,7 +7891,6 @@
 				0A06C9AA1A1C244E009BB34B /* qemu-progress.c */,
 				0A06C9AB1A1C244E009BB34B /* qemu-sockets.c */,
 				0A06C9AC1A1C244E009BB34B /* qemu-thread-posix.c */,
-				0A06C9AD1A1C244E009BB34B /* qemu-thread-win32.c */,
 				0A06C9AE1A1C244E009BB34B /* qemu-timer-common.c */,
 				0A06C9AF1A1C244E009BB34B /* readline.c */,
 				0A06C9B01A1C244E009BB34B /* rfifolock.c */,
@@ -8160,7 +8024,6 @@
 				0A06C29F1A1C2440009BB34B /* slirp */,
 				0A06C2C81A1C2440009BB34B /* softmmu_template.h */,
 				0A06C2C91A1C2441009BB34B /* spice-qemu-char.c */,
-				0A06C2CA1A1C2441009BB34B /* stubs */,
 				0A06C2F51A1C2441009BB34B /* sysconfigs */,
 				0A06C2F81A1C2441009BB34B /* target-alpha */,
 				0A06C3071A1C2442009BB34B /* target-arm */,
@@ -8333,7 +8196,6 @@
 				0A06CA0F1A1C2450009BB34B /* blockdev.c in Sources */,
 				0A06D0851A1C2451009BB34B /* ptimer.c in Sources */,
 				0A06ECCC1A1C2466009BB34B /* vnc-enc-zrle-template.c in Sources */,
-				0A06ECF41A1C2466009BB34B /* qemu-thread-win32.c in Sources */,
 				0A06CFFA1A1C2451009BB34B /* core.c in Sources */,
 				0A06D27E1A1C2452009BB34B /* tap-linux.c in Sources */,
 				0A06D2131A1C2452009BB34B /* dev-storage.c in Sources */,
@@ -8389,7 +8251,6 @@
 				0A06E90D1A1C2463009BB34B /* sys_helper.c in Sources */,
 				0A06E94D1A1C2463009BB34B /* core-dc233c.c in Sources */,
 				0A06D1BC1A1C2452009BB34B /* s390-virtio-hcall.c in Sources */,
-				0A06E88B1A1C2462009BB34B /* fdset-add-fd.c in Sources */,
 				0A06D0E51A1C2452009BB34B /* macio.c in Sources */,
 				0A06D00C1A1C2451009BB34B /* gumstix.c in Sources */,
 				0A06D03E1A1C2451009BB34B /* cs4231a.c in Sources */,
@@ -8467,7 +8328,6 @@
 				0A06CFAB1A1C2451009BB34B /* srcpos.c in Sources */,
 				0A06CFFF1A1C2451009BB34B /* piix4.c in Sources */,
 				0A06D0BD1A1C2451009BB34B /* omap_gpio.c in Sources */,
-				0A06E8A11A1C2462009BB34B /* reset.c in Sources */,
 				0A06D1A01A1C2452009BB34B /* e500plat.c in Sources */,
 				0A06D0E31A1C2452009BB34B /* ich.c in Sources */,
 				0A06D2361A1C2452009BB34B /* xen_domainbuild.c in Sources */,
@@ -8476,7 +8336,6 @@
 				0A06D2061A1C2452009BB34B /* ccid-card-passthru.c in Sources */,
 				0A06D1481A1C2452009BB34B /* omap_gpmc.c in Sources */,
 				0A06D0F31A1C2452009BB34B /* pxa2xx_keypad.c in Sources */,
-				0A06E88F1A1C2462009BB34B /* gdbstub.c in Sources */,
 				0A06C9FD1A1C2450009BB34B /* raw-win32.c in Sources */,
 				0A06D0A21A1C2451009BB34B /* qxl-render.c in Sources */,
 				0A06D2311A1C2452009BB34B /* xen_backend.c in Sources */,
@@ -8503,7 +8362,6 @@
 				0A06D26B1A1C2452009BB34B /* migration-tcp.c in Sources */,
 				0A06D11F1A1C2452009BB34B /* vt82c686.c in Sources */,
 				0A06D1FD1A1C2452009BB34B /* slavio_timer.c in Sources */,
-				0A06E88E1A1C2462009BB34B /* fdset-remove-fd.c in Sources */,
 				0A06D1D11A1C2452009BB34B /* sd.c in Sources */,
 				0A06D0041A1C2451009BB34B /* armv7m.c in Sources */,
 				0A06D2BA1A1C2452009BB34B /* clip-test.c in Sources */,
@@ -8587,7 +8445,6 @@
 				0A06D2FE1A1C2452009BB34B /* object_interfaces.c in Sources */,
 				0A06E91D1A1C2463009BB34B /* misc_helper.c in Sources */,
 				0A06E93D1A1C2463009BB34B /* int64_helper.c in Sources */,
-				0A06E8A01A1C2462009BB34B /* qtest.c in Sources */,
 				0A06D1531A1C2452009BB34B /* vfio.c in Sources */,
 				0A06D1AD1A1C2452009BB34B /* prep.c in Sources */,
 				0A06E8FA1A1C2463009BB34B /* op_helper.c in Sources */,
@@ -8633,7 +8490,6 @@
 				0A06D21F1A1C2452009BB34B /* host-stub.c in Sources */,
 				0A06D21B1A1C2452009BB34B /* hcd-uhci.c in Sources */,
 				0A06D0C41A1C2451009BB34B /* bitbang_i2c.c in Sources */,
-				0A06E89F1A1C2462009BB34B /* qmp_pc_dimm_device_list.c in Sources */,
 				0A06C9C71A1C2450009BB34B /* dsoundaudio.c in Sources */,
 				0A06E9381A1C2463009BB34B /* cpu.c in Sources */,
 				0A06D1761A1C2452009BB34B /* xilinx_axienet.c in Sources */,
@@ -8697,7 +8553,6 @@
 				0A06CFC01A1C2451009BB34B /* mangle-layout.c in Sources */,
 				0A06D0AC1A1C2451009BB34B /* vga.c in Sources */,
 				0A06D0D81A1C2451009BB34B /* pc_piix.c in Sources */,
-				0A06E8941A1C2462009BB34B /* is-daemonized.c in Sources */,
 				0A06D29C1A1C2452009BB34B /* pixman-arm-simd.c in Sources */,
 				0A06ECE81A1C2466009BB34B /* notify.c in Sources */,
 				0A06D24C1A1C2452009BB34B /* decNumber.c in Sources */,
@@ -8721,7 +8576,6 @@
 				0A06D2EB1A1C2452009BB34B /* install.cpp in Sources */,
 				0A06D1051A1C2452009BB34B /* i8259_common.c in Sources */,
 				0A06D0211A1C2451009BB34B /* stm32_flash.c in Sources */,
-				0A06E88C1A1C2462009BB34B /* fdset-find-fd.c in Sources */,
 				0A06CFCE1A1C2451009BB34B /* path_offset_aliases.c in Sources */,
 				0A06E8D71A1C2463009BB34B /* kvm-stub.c in Sources */,
 				0A06CA181A1C2450009BB34B /* uaccess.c in Sources */,
@@ -8729,7 +8583,6 @@
 				0A06E8BE1A1C2463009BB34B /* kvm32.c in Sources */,
 				0A06D1891A1C2452009BB34B /* pcie_host.c in Sources */,
 				0A06D0CB1A1C2451009BB34B /* smbus_ich9.c in Sources */,
-				0A06E8851A1C2462009BB34B /* clock-warp.c in Sources */,
 				0A06E9191A1C2463009BB34B /* machine.c in Sources */,
 				0A06D0291A1C2451009BB34B /* stm32f2xx_adc.c in Sources */,
 				0A06D0DA1A1C2451009BB34B /* pc_sysfw.c in Sources */,
@@ -8791,7 +8644,6 @@
 				0A06E9351A1C2463009BB34B /* op_helper.c in Sources */,
 				0A06D1011A1C2452009BB34B /* exynos4210_gic.c in Sources */,
 				0A06D00D1A1C2451009BB34B /* highbank.c in Sources */,
-				0A06E8A21A1C2462009BB34B /* runstate-check.c in Sources */,
 				0A06D1631A1C2452009BB34B /* mcf_fec.c in Sources */,
 				0A06C9BF1A1C2450009BB34B /* aio-win32.c in Sources */,
 				0A06D27C1A1C2452009BB34B /* tap-bsd.c in Sources */,
@@ -8827,7 +8679,6 @@
 				0A06D1341A1C2452009BB34B /* a9scu.c in Sources */,
 				0A06E8D91A1C2463009BB34B /* machine.c in Sources */,
 				0A06D1B21A1C2452009BB34B /* spapr_pci.c in Sources */,
-				0A06E8891A1C2462009BB34B /* dump.c in Sources */,
 				0A06ECD41A1C2466009BB34B /* x_keymap.c in Sources */,
 				0A06E94E1A1C2463009BB34B /* core-fsf.c in Sources */,
 				0A06C9D41A1C2450009BB34B /* hostmem-file.c in Sources */,
@@ -8847,7 +8698,6 @@
 				0A06D06E1A1C2451009BB34B /* milkymist-uart.c in Sources */,
 				0A06D26E1A1C2452009BB34B /* module-common.c in Sources */,
 				0A06D2711A1C2452009BB34B /* checksum.c in Sources */,
-				0A06E8961A1C2462009BB34B /* machine-init-done.c in Sources */,
 				0A06D1141A1C2452009BB34B /* xics.c in Sources */,
 				0A06CF891A1C2451009BB34B /* ia64.c in Sources */,
 				0A06D1C11A1C2452009BB34B /* virtio-ccw.c in Sources */,
@@ -8875,7 +8725,6 @@
 				0A06D0641A1C2451009BB34B /* digic-uart.c in Sources */,
 				0A06D1CB1A1C2452009BB34B /* virtio-scsi.c in Sources */,
 				0A06D2F11A1C2452009BB34B /* json-parser.c in Sources */,
-				0A06E88D1A1C2462009BB34B /* fdset-get-fd.c in Sources */,
 				0A06D0F81A1C2452009BB34B /* allwinner-a10-pic.c in Sources */,
 				0A06E8AF1A1C2462009BB34B /* machine.c in Sources */,
 				0A06E8B51A1C2462009BB34B /* cpu64.c in Sources */,
@@ -8888,16 +8737,13 @@
 				0A06D1641A1C2452009BB34B /* milkymist-minimac2.c in Sources */,
 				0A06D1691A1C2452009BB34B /* pcnet-pci.c in Sources */,
 				0A06D0B41A1C2451009BB34B /* pl330.c in Sources */,
-				0A06E89D1A1C2462009BB34B /* pci-drive-hot-add.c in Sources */,
 				0A06ECF71A1C2466009BB34B /* rfifolock.c in Sources */,
 				0A06E8BC1A1C2463009BB34B /* kvm-stub.c in Sources */,
 				0A06CFA51A1C2451009BB34B /* fdt_rw.c in Sources */,
 				0A06D12E1A1C2452009BB34B /* mips_fulong2e.c in Sources */,
 				0A06ECF51A1C2466009BB34B /* qemu-timer-common.c in Sources */,
-				0A06E8931A1C2462009BB34B /* iothread-lock.c in Sources */,
 				0A06ECFC1A1C2466009BB34B /* vmstate.c in Sources */,
 				0A06CA091A1C2450009BB34B /* vpc.c in Sources */,
-				0A06E89A1A1C2462009BB34B /* mon-set-error.c in Sources */,
 				0A06C9CA1A1C2450009BB34B /* mixeng.c in Sources */,
 				0A06E8D31A1C2463009BB34B /* gdbstub.c in Sources */,
 				0A06D0091A1C2451009BB34B /* digic_boards.c in Sources */,
@@ -8942,7 +8788,6 @@
 				0A06D0071A1C2451009BB34B /* cubieboard.c in Sources */,
 				0A06D1431A1C2452009BB34B /* max111x.c in Sources */,
 				0A06C9DF1A1C2450009BB34B /* blkverify.c in Sources */,
-				0A06E8971A1C2462009BB34B /* migr-blocker.c in Sources */,
 				0A06E8741A1C2462009BB34B /* ip_output.c in Sources */,
 				0A06CFA21A1C2451009BB34B /* ftdump.c in Sources */,
 				0A06D0FF1A1C2452009BB34B /* etraxfs_pic.c in Sources */,
@@ -8953,7 +8798,6 @@
 				0A06D0F51A1C2452009BB34B /* tsc2005.c in Sources */,
 				0A06D2DD1A1C2452009BB34B /* qemu-io-cmds.c in Sources */,
 				0A06D2121A1C2452009BB34B /* dev-smartcard-reader.c in Sources */,
-				0A06E89B1A1C2462009BB34B /* monitor-init.c in Sources */,
 				0A06D1EB1A1C2452009BB34B /* exynos4210_pwm.c in Sources */,
 				0A06E8F61A1C2463009BB34B /* helper.c in Sources */,
 				0A06D2691A1C2452009BB34B /* migration-fd.c in Sources */,
@@ -9008,7 +8852,6 @@
 				0A06E9031A1C2463009BB34B /* exception.c in Sources */,
 				0A06E8D81A1C2463009BB34B /* kvm.c in Sources */,
 				0A06CF901A1C2451009BB34B /* microblaze.c in Sources */,
-				0A06E89C1A1C2462009BB34B /* notify-event.c in Sources */,
 				0A06CF831A1C2451009BB34B /* alpha.c in Sources */,
 				0A06D03C1A1C2451009BB34B /* adlib.c in Sources */,
 				0A06D06D1A1C2451009BB34B /* mcf_uart.c in Sources */,
@@ -9063,9 +8906,7 @@
 				0A06D2C11A1C2452009BB34B /* oob-test.c in Sources */,
 				0A06D0FD1A1C2452009BB34B /* arm_gic_kvm.c in Sources */,
 				0A06E9521A1C2463009BB34B /* op_helper.c in Sources */,
-				0A06E8821A1C2462009BB34B /* bdrv-commit-all.c in Sources */,
 				0A06CFB51A1C2451009BB34B /* dtbs_equal_unordered.c in Sources */,
-				0A06E8A51A1C2462009BB34B /* sysbus.c in Sources */,
 				0A06C9E91A1C2450009BB34B /* mirror.c in Sources */,
 				0A06D1DC1A1C2452009BB34B /* omap_spi.c in Sources */,
 				0A06ECE61A1C2466009BB34B /* iov.c in Sources */,
@@ -9073,11 +8914,9 @@
 				0A06ECE41A1C2466009BB34B /* hexdump.c in Sources */,
 				0A06E93E1A1C2463009BB34B /* ldst_helper.c in Sources */,
 				0A06CF9F1A1C2451009BB34B /* dtc.c in Sources */,
-				0A06E8881A1C2462009BB34B /* cpus.c in Sources */,
 				0A06D2421A1C2452009BB34B /* event.c in Sources */,
 				0A06D0AD1A1C2451009BB34B /* vmware_vga.c in Sources */,
 				0A06E87B1A1C2462009BB34B /* tcp_output.c in Sources */,
-				0A06E8A71A1C2462009BB34B /* vc-init.c in Sources */,
 				0A06D2201A1C2452009BB34B /* libhw.c in Sources */,
 				0A06ECCF1A1C2466009BB34B /* vnc-jobs.c in Sources */,
 				0A06D0651A1C2451009BB34B /* escc.c in Sources */,
@@ -9110,12 +8949,10 @@
 				0A06E8FB1A1C2463009BB34B /* translate.c in Sources */,
 				0A06D1F61A1C2452009BB34B /* milkymist-sysctl.c in Sources */,
 				0A06D12C1A1C2452009BB34B /* cputimer.c in Sources */,
-				0A06E8981A1C2462009BB34B /* mon-is-qmp.c in Sources */,
 				0A06D2871A1C2452009BB34B /* os-win32.c in Sources */,
 				0A06D03A1A1C2451009BB34B /* z2.c in Sources */,
 				0A06CA041A1C2450009BB34B /* vdi.c in Sources */,
 				0A06D0A71A1C2451009BB34B /* tc6393xb.c in Sources */,
-				0A06E88A1A1C2462009BB34B /* fd-register.c in Sources */,
 				0A06D0A81A1C2451009BB34B /* tcx.c in Sources */,
 				0A06ECB81A1C2466009BB34B /* curses.c in Sources */,
 				0A06D03F1A1C2451009BB34B /* es1370.c in Sources */,
@@ -9123,7 +8960,6 @@
 				0A06D16E1A1C2452009BB34B /* stellaris_enet.c in Sources */,
 				0A06E8DE1A1C2463009BB34B /* svm_helper.c in Sources */,
 				0A06D0A51A1C2451009BB34B /* ssd0303.c in Sources */,
-				0A06E8811A1C2462009BB34B /* arch-query-cpu-def.c in Sources */,
 				0A06E8BA1A1C2463009BB34B /* helper.c in Sources */,
 				0A06D2241A1C2452009BB34B /* vhost-backend.c in Sources */,
 				0A06ECBE1A1C2466009BB34B /* input.c in Sources */,
@@ -9146,8 +8982,6 @@
 				0A06ED011A1C2466009BB34B /* xen-hvm.c in Sources */,
 				0A06D1981A1C2452009BB34B /* ppce500.c in Sources */,
 				0A06D0881A1C2451009BB34B /* qdev.c in Sources */,
-				0A06E8A61A1C2462009BB34B /* uuid.c in Sources */,
-				0A06E8921A1C2462009BB34B /* get-vm-name.c in Sources */,
 				0A06D2E71A1C2452009BB34B /* commands.c in Sources */,
 				0A06D0D11A1C2451009BB34B /* i8254.c in Sources */,
 				0A06CFDE1A1C2451009BB34B /* value-labels.c in Sources */,
@@ -9185,7 +9019,6 @@
 				0A06E92B1A1C2463009BB34B /* int_helper.c in Sources */,
 				0A06D1CA1A1C2452009BB34B /* vhost-scsi.c in Sources */,
 				0A06D0E91A1C2452009BB34B /* piix.c in Sources */,
-				0A06E8831A1C2462009BB34B /* chr-baum-init.c in Sources */,
 				0A06CA071A1C2450009BB34B /* vhdx.c in Sources */,
 				0A06D1921A1C2452009BB34B /* xio3130_upstream.c in Sources */,
 				0A06D0371A1C2451009BB34B /* vexpress.c in Sources */,
@@ -9219,12 +9052,10 @@
 				0A06D2161A1C2452009BB34B /* hcd-ehci-pci.c in Sources */,
 				0A06CFBE1A1C2451009BB34B /* getprop.c in Sources */,
 				0A06D05D1A1C2451009BB34B /* hci-csr.c in Sources */,
-				0A06E8861A1C2462009BB34B /* cpu-get-clock.c in Sources */,
 				0A06ECBD1A1C2466009BB34B /* input-legacy.c in Sources */,
 				0A06D1831A1C2452009BB34B /* pci-stub.c in Sources */,
 				0A06CF841A1C2451009BB34B /* arm-a64.cc in Sources */,
 				0A06D26A1A1C2452009BB34B /* migration-rdma.c in Sources */,
-				0A06E8A31A1C2462009BB34B /* set-fd-handler.c in Sources */,
 				0A06ECE01A1C2466009BB34B /* event_notifier-win32.c in Sources */,
 				0A06D2DB1A1C2452009BB34B /* qemu-file.c in Sources */,
 				0A06D2781A1C2452009BB34B /* queue.c in Sources */,
@@ -9268,9 +9099,7 @@
 				0A06D1BB1A1C2452009BB34B /* s390-virtio-ccw.c in Sources */,
 				0A06C9C01A1C2450009BB34B /* arch_init.c in Sources */,
 				0A06D0B71A1C2451009BB34B /* rc4030.c in Sources */,
-				0A06E8901A1C2462009BB34B /* get-fd.c in Sources */,
 				0A06D1F01A1C2452009BB34B /* i8254_common.c in Sources */,
-				0A06E8871A1C2462009BB34B /* cpu-get-icount.c in Sources */,
 				0A06D1B71A1C2452009BB34B /* css.c in Sources */,
 				0A06CA0E1A1C2450009BB34B /* blockdev-nbd.c in Sources */,
 				0A06E8C71A1C2463009BB34B /* helper.c in Sources */,
@@ -9447,7 +9276,6 @@
 				0A06D01D1A1C2451009BB34B /* stellaris.c in Sources */,
 				0A06E9531A1C2463009BB34B /* translate.c in Sources */,
 				0A06C9F61A1C2450009BB34B /* qed-cluster.c in Sources */,
-				0A06E8A91A1C2462009BB34B /* vmstate.c in Sources */,
 				0A06E91E1A1C2463009BB34B /* mmu-hash32.c in Sources */,
 				0A06E8B01A1C2462009BB34B /* mem_helper.c in Sources */,
 				0A06CFAE1A1C2451009BB34B /* base01.asm in Sources */,
@@ -9492,7 +9320,6 @@
 				0A06E94C1A1C2463009BB34B /* gdb-config.c in Sources */,
 				0A06E9211A1C2463009BB34B /* timebase_helper.c in Sources */,
 				0A06D0471A1C2451009BB34B /* marvell_88w8618.c in Sources */,
-				0A06E8911A1C2462009BB34B /* get-next-serial.c in Sources */,
 				0A06D0481A1C2451009BB34B /* milkymist-ac97.c in Sources */,
 				0A06D0BB1A1C2451009BB34B /* xilinx_axidma.c in Sources */,
 				0A06D1021A1C2452009BB34B /* grlib_irqmp.c in Sources */,
@@ -9522,7 +9349,6 @@
 				0A06D15F1A1C2452009BB34B /* registers.c in Sources */,
 				0A06D2381A1C2452009BB34B /* pic_cpu.c in Sources */,
 				0A06D1E21A1C2452009BB34B /* a9gtimer.c in Sources */,
-				0A06E8A41A1C2462009BB34B /* slirp.c in Sources */,
 				0A06D02B1A1C2451009BB34B /* stm32f2xx_dma.c in Sources */,
 				0A06D0301A1C2451009BB34B /* stm32f2xx_rcc.c in Sources */,
 				0A06D2611A1C2452009BB34B /* uaccess.c in Sources */,
@@ -9544,7 +9370,6 @@
 				0A06CA121A1C2450009BB34B /* elfload.c in Sources */,
 				0A06D1B01A1C2452009BB34B /* spapr_hcall.c in Sources */,
 				0A06D0D51A1C2451009BB34B /* kvmvapic.c in Sources */,
-				0A06E89E1A1C2462009BB34B /* qemu-chr-open-spice.c in Sources */,
 				0A06D1451A1C2452009BB34B /* milkymist-pfpu.c in Sources */,
 				0A06D07A1A1C2451009BB34B /* virtio-console.c in Sources */,
 				0A06D1361A1C2452009BB34B /* arm11scu.c in Sources */,
@@ -9582,12 +9407,8 @@
 				0A06D1561A1C2452009BB34B /* moxiesim.c in Sources */,
 				0A06ECC71A1C2466009BB34B /* vnc-auth-sasl.c in Sources */,
 				0A06D2041A1C2452009BB34B /* bus.c in Sources */,
-				0A06E8951A1C2462009BB34B /* kvm.c in Sources */,
 				0A06D0971A1C2451009BB34B /* framebuffer.c in Sources */,
 				0A06D2CC1A1C2452009BB34B /* qapi-visit-core.c in Sources */,
-				0A06E8A81A1C2462009BB34B /* vm-stop.c in Sources */,
-				0A06E8991A1C2462009BB34B /* mon-printf.c in Sources */,
-				0A06E8841A1C2462009BB34B /* chr-msmouse.c in Sources */,
 				0A06D2141A1C2452009BB34B /* dev-uas.c in Sources */,
 				0A06D0DE1A1C2452009BB34B /* xen_pvdevice.c in Sources */,
 				0A06D2A91A1C2452009BB34B /* pixman-mmx.c in Sources */,
@@ -9746,6 +9567,7 @@
 				0A067BCE1A1C204A009BB34B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		0AB8BA5D1A13D90800092455 /* Build configuration list for PBXProject "qemu-xcode" */ = {
 			isa = XCConfigurationList;
