@@ -722,11 +722,11 @@ static QemuCond qemu_work_cond;
 void qemu_init_cpu_loop(void)
 {
     qemu_init_sigbus();
-    qemu_cond_init(&qemu_cpu_cond);
-    qemu_cond_init(&qemu_pause_cond);
-    qemu_cond_init(&qemu_work_cond);
-    qemu_cond_init(&qemu_io_proceeded_cond);
-    qemu_mutex_init(&qemu_global_mutex);
+    qemu_cond_init_named(&qemu_cpu_cond, "cpu");
+    qemu_cond_init_named(&qemu_pause_cond, "pause");
+    qemu_cond_init_named(&qemu_work_cond, "work");
+    qemu_cond_init_named(&qemu_io_proceeded_cond, "io_proceeded");
+    qemu_mutex_init_named(&qemu_global_mutex, "global");
 
     qemu_thread_get_self(&io_thread);
 }
@@ -1130,7 +1130,7 @@ static void qemu_tcg_init_vcpu(CPUState *cpu)
     if (!tcg_cpu_thread) {
         cpu->thread = g_malloc0(sizeof(QemuThread));
         cpu->halt_cond = g_malloc0(sizeof(QemuCond));
-        qemu_cond_init(cpu->halt_cond);
+        qemu_cond_init_named(cpu->halt_cond, "cpu_halt");
         tcg_halt_cond = cpu->halt_cond;
         snprintf(thread_name, VCPU_THREAD_NAME_SIZE, "CPU %d/TCG",
                  cpu->cpu_index);

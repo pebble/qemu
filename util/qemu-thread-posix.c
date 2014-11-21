@@ -29,6 +29,14 @@
 
 static bool name_threads;
 
+#define DEBUG_PRINT 0
+
+static void prv_assert(bool cond) {
+  if (!cond) {
+    abort();
+  }
+}
+
 void qemu_thread_naming(bool enable)
 {
     name_threads = enable;
@@ -43,14 +51,29 @@ void qemu_thread_naming(bool enable)
 
 static void error_exit(int err, const char *msg)
 {
+    fflush(stdout);
     fprintf(stderr, "qemu: %s: %s\n", msg, strerror(err));
     abort();
 }
 
 void qemu_mutex_init(QemuMutex *mutex)
 {
+    char name[32];
+    sprintf(name, "%p", mutex);
+    qemu_mutex_init_named(mutex, name);
+}
+
+QemuMutex *g_global_mutex;
+void qemu_mutex_init_named(QemuMutex *mutex, const char *name)
+{
     int err;
     pthread_mutexattr_t mutexattr;
+
+    mutex->owner = 0;
+    strncpy(mutex->name, name, sizeof(mutex->name));
+    if (!strcmp(name, "global")) {
+        g_global_mutex = mutex;
+    }
 
     pthread_mutexattr_init(&mutexattr);
     pthread_mutexattr_settype(&mutexattr, PTHREAD_MUTEX_ERRORCHECK);
@@ -58,6 +81,10 @@ void qemu_mutex_init(QemuMutex *mutex)
     pthread_mutexattr_destroy(&mutexattr);
     if (err)
         error_exit(err, __func__);
+
+#if DEBUG_PRINT
+    printf("Created mutex %s from thread %p\n", mutex->name, pthread_self());
+#endif
 }
 
 void qemu_mutex_destroy(QemuMutex *mutex)
@@ -73,32 +100,74 @@ void qemu_mutex_lock(QemuMutex *mutex)
 {
     int err;
 
+#if DEBUG_PRINT
+    char *name = mutex->name;
+    void *thread_p = pthread_self();
+    fprintf(stderr, "trying to lock %s from %p\n", name, thread_p);
+    fflush(stderr);
+#endif
+
+    if (mutex == g_global_mutex) {
+      err = 0;
+    }
+
     err = pthread_mutex_lock(&mutex->lock);
     if (err)
         error_exit(err, __func__);
+
+    mutex->owner = pthread_self();
+#if DEBUG_PRINT
+    fprintf(stderr, "locked '%s' from %p\n", name, thread_p);
+    fflush(stderr);
+#endif
 }
 
 int qemu_mutex_trylock(QemuMutex *mutex)
 {
-    return pthread_mutex_trylock(&mutex->lock);
+    int result = pthread_mutex_trylock(&mutex->lock);
+    if (!result) {
+      mutex->owner = pthread_self();
+#if DEBUG_PRINT
+      fprintf(stderr, "locked '%s from %p\n", mutex->name, pthread_self());
+      fflush(stderr);
+#endif
+    }
+    return result;
 }
 
 void qemu_mutex_unlock(QemuMutex *mutex)
 {
     int err;
 
+    if (!mutex->owner) {
+      error_exit(-1, __func__);
+    }
+    mutex->owner = 0;
     err = pthread_mutex_unlock(&mutex->lock);
+#if DEBUG_PRINT
+    fprintf(stderr, "unlocked '%s' from %p\n", mutex->name, pthread_self());
+    fflush(stderr);
+#endif
     if (err)
         error_exit(err, __func__);
 }
 
 void qemu_cond_init(QemuCond *cond)
 {
+    char name[32];
+    sprintf(name, "%p", cond);
+    qemu_cond_init_named(cond, name);
+}
+
+void qemu_cond_init_named(QemuCond *cond, const char *name)
+{
     int err;
 
     err = pthread_cond_init(&cond->cond, NULL);
     if (err)
         error_exit(err, __func__);
+
+    strncpy(cond->name, name, sizeof(cond->name));
 }
 
 void qemu_cond_destroy(QemuCond *cond)
@@ -114,6 +183,11 @@ void qemu_cond_signal(QemuCond *cond)
 {
     int err;
 
+#if DEBUG_PRINT
+    fprintf(stderr, "cond signal: '%s' from %p", cond->name, pthread_self());
+    fflush(stderr);
+#endif
+
     err = pthread_cond_signal(&cond->cond);
     if (err)
         error_exit(err, __func__);
@@ -122,6 +196,11 @@ void qemu_cond_signal(QemuCond *cond)
 void qemu_cond_broadcast(QemuCond *cond)
 {
     int err;
+
+#if DEBUG_PRINT
+    fprintf(stderr, "cond broadcast: '%s' from %p", cond->name, pthread_self());
+    fflush(stderr);
+#endif
 
     err = pthread_cond_broadcast(&cond->cond);
     if (err)
@@ -132,7 +211,27 @@ void qemu_cond_wait(QemuCond *cond, QemuMutex *mutex)
 {
     int err;
 
+    prv_assert(mutex->owner && mutex->owner == pthread_self());
+#if DEBUG_PRINT
+    if (cond->name[0] == '0') {
+        abort();
+    }
+    fprintf(stderr, "cond '%s' wait on '%s' owned by %p from %p\n", cond->name, mutex->name, mutex->owner,
+                      pthread_self());
+    fflush(stderr);
+#endif
     err = pthread_cond_wait(&cond->cond, &mutex->lock);
+    mutex->owner = pthread_self();
+#if DEBUG_PRINT
+    fprintf(stderr, "cond '%s' wait on '%s' exit owned by %p from %p\n", cond->name, mutex->name, mutex->owner,
+        pthread_self());
+    fflush(stderr);
+#endif
+
+    if (!strcmp(cond->name, "cpu_halt")) {
+        printf("cpu_halt");
+    }
+
     if (err)
         error_exit(err, __func__);
 }

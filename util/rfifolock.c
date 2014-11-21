@@ -19,7 +19,7 @@ void rfifolock_init(RFifoLock *r, void (*cb)(void *), void *opaque)
     qemu_mutex_init(&r->lock);
     r->head = 0;
     r->tail = 0;
-    qemu_cond_init(&r->cond);
+    qemu_cond_init_named(&r->cond, "rfifo");
     r->nesting = 0;
     r->cb = cb;
     r->cb_opaque = opaque;

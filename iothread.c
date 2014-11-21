@@ -70,7 +70,7 @@ static void iothread_complete(UserCreatable *obj, Error **errp)
     iothread->thread_id = -1;
 
     qemu_mutex_init(&iothread->init_done_lock);
-    qemu_cond_init(&iothread->init_done_cond);
+    qemu_cond_init_named(&iothread->init_done_cond, "iothread");
 
     /* This assumes we are called from a thread with useful CPU affinity for us
      * to inherit.

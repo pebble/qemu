@@ -300,8 +300,8 @@ static void thread_pool_init_one(ThreadPool *pool, AioContext *ctx)
     pool->ctx = ctx;
     pool->completion_bh = aio_bh_new(ctx, thread_pool_completion_bh, pool);
     qemu_mutex_init(&pool->lock);
-    qemu_cond_init(&pool->check_cancel);
-    qemu_cond_init(&pool->worker_stopped);
+    qemu_cond_init_named(&pool->check_cancel, "thread_cancel");
+    qemu_cond_init_named(&pool->worker_stopped, "worker_stopped");
     qemu_sem_init(&pool->sem, 0);
     pool->max_threads = 64;
     pool->new_thread_bh = aio_bh_new(ctx, spawn_thread_bh_fn, pool);

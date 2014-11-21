@@ -488,7 +488,7 @@ static int emulated_initfn(CCIDCardState *base)
     qemu_mutex_init(&card->event_list_mutex);
     qemu_mutex_init(&card->vreader_mutex);
     qemu_mutex_init(&card->handle_apdu_mutex);
-    qemu_cond_init(&card->handle_apdu_cond);
+    qemu_cond_init_named(&card->handle_apdu_cond, "usb");
     card->reader = NULL;
     card->quit_apdu_thread = 0;
     if (init_event_notifier(card) < 0) {

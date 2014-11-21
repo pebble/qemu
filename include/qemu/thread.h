@@ -19,6 +19,7 @@ typedef struct QemuThread QemuThread;
 #define QEMU_THREAD_JOINABLE 0
 #define QEMU_THREAD_DETACHED 1
 
+void qemu_mutex_init_named(QemuMutex *mutex, const char *name);
 void qemu_mutex_init(QemuMutex *mutex);
 void qemu_mutex_destroy(QemuMutex *mutex);
 void qemu_mutex_lock(QemuMutex *mutex);
@@ -28,6 +29,7 @@ void qemu_mutex_unlock(QemuMutex *mutex);
 #define rcu_read_lock() do { } while (0)
 #define rcu_read_unlock() do { } while (0)
 
+void qemu_cond_init_named(QemuCond *cond, const char *name);
 void qemu_cond_init(QemuCond *cond);
 void qemu_cond_destroy(QemuCond *cond);
 

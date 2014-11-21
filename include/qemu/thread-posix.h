@@ -5,10 +5,13 @@
 
 struct QemuMutex {
     pthread_mutex_t lock;
+    pthread_t owner;
+    char name[32];
 };
 
 struct QemuCond {
     pthread_cond_t cond;
+    char name[32];
 };
 
 struct QemuSemaphore {
