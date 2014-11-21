@@ -30,6 +30,7 @@
 #define R_RTC_CR     (0x08 / 4)
 #define R_RTC_ISR    (0x0c / 4)
 #define R_RTC_ISR_RESET 0x00000007
+#define R_RTC_ISR_RSF 0x00000020
 #define R_RTC_PRER   (0x10 / 4)
 #define R_RTC_PRER_PREDIV_A_MASK 0x7f
 #define R_RTC_PRER_PREDIV_A_SHIFT 16
@@ -167,7 +168,11 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
           (unsigned int)addr << 2);
         return 0;
     }
-    r = (s->regs[addr] >> offset * 8) & ((1ull << (8 * size)) - 1);
+    uint32_t value = s->regs[addr];
+    if (addr == R_RTC_ISR) {
+        value |= R_RTC_ISR_RSF;
+    }
+    r = (value >> offset * 8) & ((1ull << (8 * size)) - 1);
 //    if (addr < R_RTC_BKPxR) {
 //        printf("%s: reg 0x%x offset %x ret 0x%x\n", __func__, (int)addr << 2, offset, r);
 //    }

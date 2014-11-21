@@ -283,6 +283,11 @@ int cpu_exec(CPUArchState *env)
 #endif
     cpu->exception_index = -1;
 
+    /* This sets the max number of TranslationBlocks that we will execute before giving some
+     * time to the other threads, like the io thread. Without this, if we get stuck in a code
+     * loop, we would not be able to connect to the gdb server (which runs from the io thread) */
+    int num_tbs_left = 100;
+
     /* prepare setjmp context for exception handling */
     for(;;) {
         if (sigsetjmp(cpu->jmp_env, 0) == 0) {
@@ -635,6 +640,14 @@ int cpu_exec(CPUArchState *env)
                    infinite loop and becomes env->current_tb. Avoid
                    starting execution if there is a pending interrupt. */
                 cpu->current_tb = tb;
+
+                /* Avoid infinite loops in the instruction executer that can starve the io thread
+                 * and prevent connections to the gdb server.
+                 */
+                num_tbs_left--;
+                if (num_tbs_left < 0) {
+                    cpu->exit_request = true;
+                }
                 barrier();
                 if (likely(!cpu->exit_request)) {
                     tc_ptr = tb->tc_ptr;

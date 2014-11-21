@@ -1065,7 +1065,14 @@ static CharDriverState *qemu_chr_open_stdio(ChardevStdio *opts)
     fcntl(0, F_SETFL, O_NONBLOCK);
     atexit(term_exit);
 
+    /* NOTE: on Mac OS (noticed on 10.9.5), we get buffer overruns if the stdout stream is
+     * line buffered and the underlying stdout file has O_NONBLOCK set. When the stream reaches
+     * the end of the buffer allocated to it by setvbuf, instead of wrapping to the beginning of
+     * the buffer again, it just starts trashing memory after the buffer.  We can avoid this issue
+     * by changing the stream to be non-buffered.
+     */
     setvbuf(stdout, NULL, _IONBF, 0);
+    
     chr = qemu_chr_open_fd(0, 1);
     chr->chr_close = qemu_chr_close_stdio;
     chr->chr_set_echo = qemu_chr_set_echo_stdio;

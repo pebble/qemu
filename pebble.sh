@@ -4,9 +4,6 @@ EMULATOR=arm-softmmu/qemu-system-arm
 
 while getopts sSdt opt; do
     case $opt in
-    s)
-        flags="$flags -s"       # start gdb
-        ;;
     S)
         flags="$flags -S"       # no not start CPU at start, type 'c' in monitor
         ;;
@@ -26,6 +23,7 @@ echo FLAGS are $flags
 # lldb --
 
 $EMULATOR -rtc base=localtime \
+    -s \
     -machine pebble-bb2 \
     -cpu cortex-m3 \
     $flags \
