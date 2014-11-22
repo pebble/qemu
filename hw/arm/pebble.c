@@ -53,12 +53,12 @@ struct button_state {
 static void
 pebble_key_handler(void *arg, int keycode)
 {
+    static int prev_keycode;
     int pressed = (keycode & 0x80) == 0;
-    int button_id;
+    int button_id = -1;
     struct button_state *bs = arg;
 
-    keycode &= 0x7f;
-    switch (keycode) {
+    switch (keycode & 0x7F) {
     case 16: /* Q */
         button_id = 0;
         break;
@@ -71,11 +71,32 @@ pebble_key_handler(void *arg, int keycode)
     case 45: /* X */
         button_id = 3;
         break;
+    case 72: /* up arrow */
+        if (prev_keycode == 224) {
+            button_id = 1;
+        }
+        break;
+    case 80: /* down arrow */
+        if (prev_keycode == 224) {
+            button_id = 3;
+        }
+        break;
+    case 75: /* left arrow */
+        if (prev_keycode == 224) {
+            button_id = 0;
+        }
+        break;
+    case 77: /* right arrow */
+        if (prev_keycode == 224) {
+            button_id = 2;
+        }
+        break;
     default:
-        return;
+        break;
     }
 
-    if (bs[button_id].pressed == pressed) {
+    prev_keycode = keycode;
+    if (button_id == -1 || bs[button_id].pressed == pressed) {
         return;
     }
     bs[button_id].pressed = pressed;
