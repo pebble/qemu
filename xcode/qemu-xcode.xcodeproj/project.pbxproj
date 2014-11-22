@@ -3765,6 +3765,8 @@
 		0A06C9BB1A1C244F009BB34B /* xen-hvm-stub.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = "xen-hvm-stub.c"; path = "../xen-hvm-stub.c"; sourceTree = "<group>"; };
 		0A06C9BC1A1C2450009BB34B /* xen-hvm.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = "xen-hvm.c"; path = "../xen-hvm.c"; sourceTree = "<group>"; };
 		0A06C9BD1A1C2450009BB34B /* xen-mapcache.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = "xen-mapcache.c"; path = "../xen-mapcache.c"; sourceTree = "<group>"; };
+		0A06ED031A1FACA8009BB34B /* README */ = {isa = PBXFileReference; lastKnownFileType = text; name = README; path = ../README; sourceTree = "<group>"; };
+		0A06ED041A1FACA8009BB34B /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = README.md; path = ../README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -7905,6 +7907,8 @@
 		0AB8BA591A13D90800092455 = {
 			isa = PBXGroup;
 			children = (
+				0A06ED031A1FACA8009BB34B /* README */,
+				0A06ED041A1FACA8009BB34B /* README.md */,
 				0A0682D21A1C2410009BB34B /* aio-posix.c */,
 				0A0682D31A1C2410009BB34B /* aio-win32.c */,
 				0A0682D41A1C2410009BB34B /* arch_init.c */,

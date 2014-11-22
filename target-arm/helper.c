@@ -4310,7 +4310,7 @@ void HELPER(v7m_msr)(CPUARMState *env, uint32_t reg, uint32_t val)
         break;
     case 20: /* CONTROL */
         env->v7m.control = val & 3;
-        switch_v7m_sp(env, (val & 2) != 0);
+        switch_v7m_sp(env, (env->v7m.exception == 0) && ((val & 2) != 0));
         break;
     default:
         /* ??? For debugging only.  */

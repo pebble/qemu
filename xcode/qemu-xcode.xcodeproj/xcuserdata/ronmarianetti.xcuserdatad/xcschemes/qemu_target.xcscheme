@@ -83,35 +83,15 @@
          <EnvironmentVariable
             key = "MallocCheckHeapStart"
             value = "1"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "MallocCheckHeapEach"
             value = "1"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </EnvironmentVariable>
       </EnvironmentVariables>
       <AdditionalOptions>
-         <AdditionalOption
-            key = "DYLD_INSERT_LIBRARIES"
-            value = "/usr/lib/libgmalloc.dylib"
-            isEnabled = "YES">
-         </AdditionalOption>
-         <AdditionalOption
-            key = "NSZombieEnabled"
-            value = "YES"
-            isEnabled = "YES">
-         </AdditionalOption>
-         <AdditionalOption
-            key = "MallocGuardEdges"
-            value = ""
-            isEnabled = "YES">
-         </AdditionalOption>
-         <AdditionalOption
-            key = "MallocScribble"
-            value = ""
-            isEnabled = "YES">
-         </AdditionalOption>
       </AdditionalOptions>
    </LaunchAction>
    <ProfileAction
