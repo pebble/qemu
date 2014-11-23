@@ -50,10 +50,34 @@ struct button_state {
     int pressed;
 };
 
-static void
-pebble_key_handler(void *arg, int keycode)
+static bool s_waiting_key_up = false;
+static int  s_button_id;
+static QEMUTimer *s_button_timer;
+
+
+static void prv_send_key_up(void *opaque)
+{
+    struct button_state *bs = opaque;
+    if (!s_waiting_key_up) {
+        /* Should never happen */
+        return;
+    }
+
+    printf("button %d released\n", s_button_id);
+    qemu_set_irq(bs[s_button_id].irq, true);
+    s_waiting_key_up = false;
+}
+
+
+static void pebble_key_handler(void *arg, int keycode)
 {
     static int prev_keycode;
+
+    if (s_waiting_key_up) {
+        /* Ignore presses while we are waiting to send the key up */
+        return;
+    }
+
     int pressed = (keycode & 0x80) == 0;
     int button_id = -1;
     struct button_state *bs = arg;
@@ -96,13 +120,21 @@ pebble_key_handler(void *arg, int keycode)
     }
 
     prev_keycode = keycode;
-    if (button_id == -1 || bs[button_id].pressed == pressed) {
+    if (button_id == -1 || !pressed) {
+        /* Ignore button releases */
         return;
     }
-    bs[button_id].pressed = pressed;
+    s_waiting_key_up = true;
+    s_button_id = button_id;
 
-    printf("button %d %s\n", button_id, pressed ? "pressed" : "released");
-    qemu_set_irq(bs[button_id].irq, !pressed);
+    printf("button %d pressed\n", button_id);
+    qemu_set_irq(bs[button_id].irq, false);   // Pressed
+
+    /* Set a timer to release the key */
+    if (!s_button_timer) {
+        s_button_timer = timer_new_ms(QEMU_CLOCK_VIRTUAL, prv_send_key_up, bs);
+    }
+    timer_mod(s_button_timer, qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + 250);
 }
 
 static void pebble_init(MachineState *machine, struct button_map *map) {
