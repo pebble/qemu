@@ -30,7 +30,7 @@ $EMULATOR -rtc base=localtime \
     -pflash ../test_images/qemu_micro_flash.bin \
     -mtdblock ../test_images/qemu_spi_flash.bin \
     -serial file:uart1.log \
-    -serial file:uart2.log \
+    -serial tcp::12344,server,nowait \
     -serial tcp::12345,server,nowait \
     -monitor stdio  
     

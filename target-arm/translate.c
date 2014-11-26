@@ -10696,7 +10696,11 @@ static void disas_thumb_insn(CPUARMState *env, DisasContext *s)
         {
             int imm8 = extract32(insn, 0, 8);
             ARCH(5);
-            gen_exception_insn(s, 2, EXCP_BKPT, syn_aa32_bkpt(imm8, true));
+            /* trigger a transfer of control to the debugger. 
+             * NOTE: This used to be:
+             *      gen_exception_insn(s, 2, EXCP_BKPT, syn_aa32_bkpt(imm8, true));
+             */
+            gen_exception_internal_insn(s, 0, EXCP_DEBUG);
             break;
         }
 
