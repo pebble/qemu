@@ -249,7 +249,7 @@ static void stm32_uart_baud_update(Stm32Uart *s)
     }
 
 #ifdef DEBUG_STM32_UART
-    const char *periph_name = s->busdev.qdev.id;
+    const char *periph_name = s->busdev.parent_obj.id;
     DPRINTF("%s clock is set to %lu Hz.\n",
                 periph_name,
                 (unsigned long)clk_freq);
@@ -425,6 +425,7 @@ static void stm32_uart_receive(void *opaque, const uint8_t *buf, int size)
          * set the overflow flag.
          */
         if(s->USART_SR_RXNE) {
+            DPRINTF("stm32_uart_receive: overrun error\n");
             s->USART_SR_ORE = 1;
             s->sr_read_since_ore_set = false;
             stm32_uart_update_irq(s);
@@ -587,7 +588,7 @@ static void stm32_uart_USART_CR1_write(Stm32Uart *s, uint32_t new_value,
          * USART.
          */
         if(s->afio_board_map != stm32_afio_get_periph_map(s->stm32_afio, s->periph)) {
-            hw_error("Bad AFIO mapping for %s", s->busdev.qdev.id);
+            hw_error("Bad AFIO mapping for %s", s->busdev.parent_obj.id);
         }
     }
 #endif
