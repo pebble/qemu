@@ -25,6 +25,7 @@ typedef struct {
         int64_t tick;
         QEMUTimer *timer;
     } systick;
+    uint16_t aircr_reg;     /* low word of Application Interrupt and Reset Control Register */
     MemoryRegion sysregmem;
     MemoryRegion gic_iomem_alias;
     MemoryRegion container;
@@ -106,6 +107,21 @@ static void systick_reset(nvic_state *s)
     s->systick.reload = 0;
     s->systick.tick = 0;
     timer_del(s->systick.timer);
+}
+
+/* Set the base priority */
+void armv7m_nvic_set_base_priority(void *opaque, unsigned int priority)
+{
+    nvic_state *s = (nvic_state *)opaque;
+    if (priority == 0) {
+        s->gic.priority_mask[0] = 0x100;
+    } else {
+        /* Pay only attention to the priority group when masking interrupts */
+        uint32_t group_setting = (s->aircr_reg >> 8) & 0x03;
+        uint32_t group_mask = (0x0FF << (group_setting + 1)) & 0x0FF;
+        s->gic.priority_mask[0] = priority & group_mask;    /* TODO: Make this more general */
+    }
+    gic_update(&s->gic);
 }
 
 /* The external routines use the hardware vector numbering, ie. the first
@@ -213,7 +229,7 @@ static uint32_t nvic_readl(nvic_state *s, uint32_t offset)
         cpu = ARM_CPU(current_cpu);
         return cpu->env.v7m.vecbase;
     case 0xd0c: /* Application Interrupt/Reset Control.  */
-        return 0xfa050000;
+        return 0xfa050000 | s->aircr_reg;
     case 0xd10: /* System Control.  */
         /* TODO: Implement SLEEPONEXIT.  */
         return 0;
@@ -348,9 +364,7 @@ static void nvic_writel(nvic_state *s, uint32_t offset, uint32_t value)
             if (value & 5) {
                 qemu_system_reset_request();
             }
-            if (value & 0x700) {
-                qemu_log_mask(LOG_UNIMP, "PRIGROUP unimplemented\n");
-            }
+            s->aircr_reg = value & 0x00700;    /* keep only the bits we suport */
         }
         break;
     case 0xd10: /* System Control.  */
