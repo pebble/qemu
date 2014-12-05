@@ -73,6 +73,7 @@
 
 #define USART_GTPR_OFFSET 0x18
 
+#define USART_RCV_BUF_LEN 256
 
 struct Stm32Uart {
     /* Inherited */
@@ -145,6 +146,13 @@ struct Stm32Uart {
 
     qemu_irq irq;
     int curr_irq_level;
+
+    /* We buffer the characters we receive from our qemu_chr receive handler in here
+     * to increase our overall throughput. This allows us to tell the target that
+     * another character is ready immediately after it does a read.
+     */
+    uint8_t rcv_char_buf[USART_RCV_BUF_LEN];
+    uint32_t rcv_char_bytes;    /* number of bytes avaialable in rcv_char_buf */
 };
 
 
@@ -319,7 +327,6 @@ static void stm32_uart_tx_complete(Stm32Uart *s)
 /* Start transmitting a character. */
 static void stm32_uart_start_tx(Stm32Uart *s, uint32_t value)
 {
-    uint64_t curr_time = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
     uint8_t ch = value; //This will truncate the ninth bit
 
     /* Reset the Transmission Complete flag to indicate a transmit is in
@@ -335,14 +342,58 @@ static void stm32_uart_start_tx(Stm32Uart *s, uint32_t value)
     /* If BAUD delays are not being simulated, then immediately mark the
      * transmission as complete.
      */
-    curr_time = curr_time; //Avoid "variable unused" compiler error
     stm32_uart_tx_complete(s);
 #else
     /* Otherwise, start the transmit delay timer. */
-    timer_mod(s->tx_timer,  curr_time + s->ns_per_char);
+    timer_mod(s->tx_timer,  qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + s->ns_per_char);
 #endif
 }
 
+
+/* Put byte into the receive data register, if we have one and the target is 
+ * ready for it. */
+static void stm32_uart_fill_receive_data_register(Stm32Uart *s)
+{
+    bool enabled = (s->USART_CR1_UE && s->USART_CR1_RE);
+
+    /* If we have no more data, or we are emulating baud delay and it's not 
+     * time yet for the next byte, return without filling the RDR */
+    if (!s->rcv_char_bytes || s->receiving) {
+        return;
+    }
+
+#ifndef STM32_UART_ENABLE_OVERRUN
+    /* If overrun is not enabled, don't overwrite the current byte in the RDR */
+    if (enabled && s->USART_SR_RXNE) {
+        return;
+    }
+#endif
+
+    /* Pull the byte out of our buffer */
+    uint8_t byte = s->rcv_char_buf[0];
+    memcpy(&s->rcv_char_buf[0], &s->rcv_char_buf[1], --(s->rcv_char_bytes));
+
+    /* Only handle the received character if the module is enabled, */
+    if (enabled) {
+        if(s->USART_SR_RXNE) {
+            DPRINTF("stm32_uart_receive: overrun error\n");
+            s->USART_SR_ORE = 1;
+            s->sr_read_since_ore_set = false;
+            stm32_uart_update_irq(s);
+        }
+
+        /* Receive the character and mark the buffer as not empty. */
+        s->USART_RDR = byte;
+        s->USART_SR_RXNE = 1;
+        stm32_uart_update_irq(s);
+    }
+
+#ifndef STM32_UART_NO_BAUD_DELAY
+    /* Indicate the module is receiving and start the delay. */
+    s->receiving = true;
+    timer_mod(s->rx_timer,  qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + s->ns_per_char);
+#endif
+}
 
 
 
@@ -355,6 +406,9 @@ static void stm32_uart_rx_timer_expire(void *opaque) {
     Stm32Uart *s = (Stm32Uart *)opaque;
 
     s->receiving = false;
+
+    /* Put next byte into the receive data register, if we have one ready */
+    stm32_uart_fill_receive_data_register(s);
 }
 
 /* When the transmit delay is complete, mark the transmit as complete
@@ -375,36 +429,8 @@ static int stm32_uart_can_receive(void *opaque)
 {
     Stm32Uart *s = (Stm32Uart *)opaque;
 
-    if(s->USART_CR1_UE && s->USART_CR1_RE) {
-        /* The USART can only receive if it is enabled. */
-        if(s->receiving) {
-            /* If the USART is already receiving, then it cannot receive another
-             * character yet.
-             */
-            return 0;
-        } else {
-#ifdef STM32_UART_ENABLE_OVERRUN
-            /* If overrun is enabled, then always allow the next character to be
-             * received even if the buffer already has a value.  This is how
-             * real hardware behaves.*/
-            return 1;
-#else
-            /* Otherwise, do not allow the next character to be received until
-             * software has read the previous one.
-             */
-            if(s->USART_SR_RXNE) {
-                return 0;
-            } else {
-                return 1;
-            }
-#endif
-        }
-    } else {
-        /* Always allow a character to be received if the module is disabled.
-         * However, the character will just be ignored (just like on real
-         * hardware). */
-        return 1;
-    }
+    /* How much space do we have in our buffer? */
+    return (USART_RCV_BUF_LEN - s->rcv_char_bytes);
 }
 
 static void stm32_uart_event(void *opaque, int event)
@@ -415,37 +441,16 @@ static void stm32_uart_event(void *opaque, int event)
 static void stm32_uart_receive(void *opaque, const uint8_t *buf, int size)
 {
     Stm32Uart *s = (Stm32Uart *)opaque;
-    uint64_t curr_time = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
 
     assert(size > 0);
 
-    /* Only handle the received character if the module is enabled, */
-    if(s->USART_CR1_UE && s->USART_CR1_RE) {
-        /* If there is already a character in the receive buffer, then
-         * set the overflow flag.
-         */
-        if(s->USART_SR_RXNE) {
-            DPRINTF("stm32_uart_receive: overrun error\n");
-            s->USART_SR_ORE = 1;
-            s->sr_read_since_ore_set = false;
-            stm32_uart_update_irq(s);
-        }
+    /* Copy the characters into our buffer first */
+    assert (size <= USART_RCV_BUF_LEN - s->rcv_char_bytes);
+    memcpy(s->rcv_char_buf + s->rcv_char_bytes, buf, size);
+    s->rcv_char_bytes += size;
 
-        /* Receive the character and mark the buffer as not empty. */
-        s->USART_RDR = *buf;
-        s->USART_SR_RXNE = 1;
-        stm32_uart_update_irq(s);
-    }
-
-#ifdef STM32_UART_NO_BAUD_DELAY
-    /* Do nothing - there is no delay before the module reports it can receive
-     * the next character. */
-    curr_time = curr_time; //Avoid "variable unused" compiler error
-#else
-    /* Indicate the module is receiving and start the delay. */
-    s->receiving = true;
-    timer_mod(s->rx_timer,  curr_time + s->ns_per_char);
-#endif
+    /* Put next byte into RDR if the target is ready for it */
+    stm32_uart_fill_receive_data_register(s);
 }
 
 
@@ -521,6 +526,9 @@ static void stm32_uart_USART_DR_read(Stm32Uart *s, uint32_t *read_value)
          */
         (*read_value) = s->USART_RDR;
         s->USART_SR_RXNE = 0;
+
+        /* Put next character into the RDR if we have one */
+        stm32_uart_fill_receive_data_register(s);
     } else {
         hw_error("Read value from USART_DR while it was empty.");
     }
@@ -775,6 +783,8 @@ static int stm32_uart_init(SysBusDevice *dev)
     clk_irq =
           qemu_allocate_irqs(stm32_uart_clk_irq_handler, (void *)s, 1);
     stm32_rcc_set_periph_clk_irq(s->stm32_rcc, s->periph, clk_irq[0]);
+
+    s->rcv_char_bytes = 0;
 
     stm32_uart_reset((DeviceState *)s);
 
