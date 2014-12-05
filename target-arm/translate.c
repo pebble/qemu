@@ -11221,7 +11221,22 @@ void arm_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
                         i * 2 + 1, (uint32_t)(v >> 32),
                         i, v);
         }
-        cpu_fprintf(f, "FPSCR: %08x\n", (int)env->vfp.xregs[ARM_VFP_FPSCR]);
+        cpu_fprintf(f, "FPSCR:     %08x\n", (int)env->vfp.xregs[ARM_VFP_FPSCR]);
+    }
+
+    /* When doing the 'mon info registers' command, we get passed the CPU_DUMP_FPU flag. 
+     * There is not flag for supervisor registers, but include those if asked for the FPU
+     * registers */
+    if (flags & CPU_DUMP_FPU) {
+        cpu_fprintf(f, "xPSR:      %08x\n", xpsr_read(env));
+        cpu_fprintf(f, "MSP:       %08x\n",
+                  env->v7m.current_sp ? env->v7m.other_sp : env->regs[13]);
+        cpu_fprintf(f, "PSP:       %08x\n",
+                  env->v7m.current_sp ? env->regs[13] : env->v7m.other_sp);
+        cpu_fprintf(f, "PRIMASK:   %08x\n", (env->daif & PSTATE_I) != 0);
+        cpu_fprintf(f, "BASEPRI:   %08x\n", env->v7m.basepri);
+        cpu_fprintf(f, "FAULTMASK: %08x\n", (env->daif & PSTATE_F) != 0);
+        cpu_fprintf(f, "CONTROL:   %08x\n", env->v7m.control);
     }
 }
 

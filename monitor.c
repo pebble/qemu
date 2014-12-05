@@ -3323,6 +3323,27 @@ static const MonitorDef monitor_defs[] = {
     { "cleanwin", offsetof(CPUSPARCState, cleanwin) },
     { "fprs", offsetof(CPUSPARCState, fprs) },
 #endif
+#elif defined(TARGET_ARM)
+    { "r0", offsetof(CPUARMState, regs[0]) },
+    { "r1", offsetof(CPUARMState, regs[1]) },
+    { "r2", offsetof(CPUARMState, regs[2]) },
+    { "r3", offsetof(CPUARMState, regs[3]) },
+    { "r4", offsetof(CPUARMState, regs[4]) },
+    { "r5", offsetof(CPUARMState, regs[5]) },
+    { "r6", offsetof(CPUARMState, regs[6]) },
+    { "r7", offsetof(CPUARMState, regs[7]) },
+    { "r8", offsetof(CPUARMState, regs[8]) },
+    { "r9", offsetof(CPUARMState, regs[9]) },
+    { "r10", offsetof(CPUARMState, regs[10]) },
+    { "r11", offsetof(CPUARMState, regs[11]) },
+    { "r12", offsetof(CPUARMState, regs[12]) },
+    { "r13", offsetof(CPUARMState, regs[13]) },
+    { "sp", offsetof(CPUARMState, regs[13]) },
+    { "r14", offsetof(CPUARMState, regs[14]) },
+    { "lr", offsetof(CPUARMState, regs[14]) },
+    { "r15", offsetof(CPUARMState, regs[15]) },
+    { "pc", offsetof(CPUARMState, regs[15]) },
+    { "control", offsetof(CPUARMState, v7m.control) },
 #endif
     { NULL },
 };
