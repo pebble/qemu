@@ -75,8 +75,8 @@ void gic_update(GICState *s)
             }
         }
         level = 0;
-        /* NOTE: SVC exceptions are always taken, regardless of priority */
-        if (best_prio < s->priority_mask[cpu] || best_irq == ARMV7M_EXCP_SVC) {
+        /* NOTE: synchronous exceptions (<= SVCall) are always taken, regardless of priority */
+        if (best_prio < s->priority_mask[cpu] || best_irq <= ARMV7M_EXCP_SVC) {
             s->current_pending[cpu] = best_irq;
             if (best_prio < s->running_priority[cpu]) {
                 DPRINTF("Raised pending IRQ %d (cpu %d)\n", best_irq, cpu);
