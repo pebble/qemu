@@ -36,6 +36,7 @@ static const uint8_t gic_id[] = {
 };
 
 #define NUM_CPU(s) ((s)->num_cpu)
+#define ARMV7M_EXCP_SVC     11
 
 static inline int gic_get_current_cpu(GICState *s)
 {
@@ -74,7 +75,8 @@ void gic_update(GICState *s)
             }
         }
         level = 0;
-        if (best_prio < s->priority_mask[cpu]) {
+        /* NOTE: SVC exceptions are always taken, regardless of priority */
+        if (best_prio < s->priority_mask[cpu] || best_irq == ARMV7M_EXCP_SVC) {
             s->current_pending[cpu] = best_irq;
             if (best_prio < s->running_priority[cpu]) {
                 DPRINTF("Raised pending IRQ %d (cpu %d)\n", best_irq, cpu);
