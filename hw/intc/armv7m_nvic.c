@@ -486,11 +486,16 @@ static void armv7m_nvic_reset(DeviceState *dev)
     nc->parent_reset(dev);
     /* Common GIC reset resets to disabled; the NVIC doesn't have
      * per-CPU interfaces so mark our non-existent CPU interface
-     * as enabled by default, and with a priority mask which allows
-     * all interrupts through.
+     * as enabled by default, with a priority mask which allows
+     * all interrupts through, and reset all priorities. 
      */
     s->gic.cpu_enabled[0] = true;
     s->gic.priority_mask[0] = 0x100;
+    for (int i=0; i<GIC_INTERNAL; i++) {
+        s->gic.priority1[i][0] = 0;
+    }
+    memset(s->gic.priority2, 0, sizeof(s->gic.priority2));
+
     /* The NVIC as a whole is always enabled. */
     s->gic.enabled = true;
     systick_reset(s);
