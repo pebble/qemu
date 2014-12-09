@@ -21,9 +21,12 @@
  */
 
 #include "stm32f2xx.h"
+#include "stm32f4xx.h"
 #include "hw/ssi.h"
-#include "sysemu/sysemu.h"
 #include "hw/boards.h"
+#include "hw/block/flash.h"
+#include "sysemu/sysemu.h"
+#include "sysemu/blockdev.h"
 #include "ui/console.h"
 
 struct button_map {
@@ -32,10 +35,10 @@ struct button_map {
 };
 
 struct button_map button_map_bb2_ev1_ev2[] = {
-    {STM32_GPIOC_INDEX, 3},
-    {STM32_GPIOA_INDEX, 2},
-    {STM32_GPIOC_INDEX, 6},
-    {STM32_GPIOA_INDEX, 1},
+    {STM32_GPIOC_INDEX, 3},   /* back */
+    {STM32_GPIOA_INDEX, 2},   /* up */
+    {STM32_GPIOC_INDEX, 6},   /* select */
+    {STM32_GPIOA_INDEX, 1},   /* down */
 };
 
 struct button_map button_map_bigboard[] = {
@@ -43,6 +46,13 @@ struct button_map button_map_bigboard[] = {
     {STM32_GPIOA_INDEX, 1},
     {STM32_GPIOA_INDEX, 3},
     {STM32_GPIOC_INDEX, 9}
+};
+
+struct button_map button_map_snowy_bb[] = {
+    {STM32_GPIOG_INDEX, 4},
+    {STM32_GPIOG_INDEX, 3},
+    {STM32_GPIOG_INDEX, 1},
+    {STM32_GPIOG_INDEX, 2},
 };
 
 struct button_state {
@@ -137,9 +147,9 @@ static void pebble_key_handler(void *arg, int keycode)
     timer_mod(s_button_timer, qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + 250);
 }
 
-static void pebble_init(MachineState *machine, struct button_map *map) {
+static void pebble_32f2_init(MachineState *machine, struct button_map *map) {
     Stm32Gpio *gpio[STM32F2XX_GPIO_COUNT];
-    Stm32Uart *uart[STM32_UART_COUNT];
+    Stm32Uart *uart[STM32F2XX_UART_COUNT];
     DeviceState *spi_flash;
     SSIBus *spi;
     struct stm32f2xx stm;
@@ -162,9 +172,64 @@ static void pebble_init(MachineState *machine, struct button_map *map) {
     qdev_init_nofail(display_dev);
 
     /* UARTs */
-    stm32_uart_connect(uart[0], serial_hds[0], 0);
-    stm32_uart_connect(uart[1], serial_hds[1], 0);
-    stm32_uart_connect(uart[2], serial_hds[2], 0); /* Debug */
+    stm32_uart_connect(uart[0], serial_hds[0], 0); /* UART1: not used */
+    stm32_uart_connect(uart[1], serial_hds[1], 0); /* UART2: Pebble protocol */
+    stm32_uart_connect(uart[2], serial_hds[2], 0); /* UART3: console */
+
+    /* Buttons */
+    static struct button_state bs[4];
+    int i;
+    for (i = 0; i < 4; i++) {
+        bs[i].pressed = 0;
+        bs[i].irq = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
+    }
+    qemu_add_kbd_event_handler(pebble_key_handler, bs);
+}
+
+static void pebble_32f4_init(MachineState *machine, struct button_map *map) {
+    Stm32Gpio *gpio[STM32F4XX_GPIO_COUNT];
+    Stm32Uart *uart[STM32F4XX_UART_COUNT];
+    DeviceState *spi_flash;
+    SSIBus *spi;
+    struct stm32f4xx stm;
+
+    stm32f4xx_init(1024 /*flash_size in KBytes */, 256 /*ram_size on KBytes*/,
+        machine->kernel_filename, gpio, uart, 8000000 /*osc_freq*/,
+        32768 /*osc2_freq*/, &stm);
+
+
+    /* Storage flash (NOR-flash on Snowy) */
+    const uint32_t flash_size_bytes = 16 * 1024 * 1024;  /* 16 MBytes */
+    const uint32_t flash_sector_size_bytes = 128 * 1024; /* 128 KBytes */
+    DriveInfo *dinfo = drive_get(IF_PFLASH, 0, 1);   /* Use the 2nd -pflash drive */
+    if (dinfo) {
+        pflash_cfi02_register(
+            0x60000000,               /* flash_base*/
+            NULL,                     /* qdev, not used */
+            "mx29vs128fb",            /* name */
+            flash_size_bytes,         /* size */
+            dinfo->bdrv,              /* driver state */
+            flash_sector_size_bytes,  /* sector size */
+            flash_size_bytes / flash_sector_size_bytes, /* number of sectors */
+            1,                        /* number of mappings */
+            2,                        /* width in bytes */
+            0x00c2, 0x007e, 0x0065, 0x0001, /* id: 0, 1, 2, 3 */
+            0x555,                    /* unlock address 0 */
+            0x2aa,                    /* unlock address 1 */
+            0                         /* big endian */
+        );
+    }
+
+
+    /* Display */
+    spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[1], "ssi");
+    DeviceState *display_dev = ssi_create_slave_no_init(spi, "sm-lcd");
+    qdev_init_nofail(display_dev);
+
+    /* UARTs */
+    stm32_uart_connect(uart[0], serial_hds[0], 0); /* UART1: not used */
+    stm32_uart_connect(uart[1], serial_hds[1], 0); /* UART2: Pebble protocol */
+    stm32_uart_connect(uart[2], serial_hds[2], 0); /* UART3: console */
 
     /* Buttons */
     static struct button_state bs[4];
@@ -178,8 +243,20 @@ static void pebble_init(MachineState *machine, struct button_map *map) {
 
 static void
 pebble_bb2_init(MachineState *machine) {
-    pebble_init(machine, button_map_bb2_ev1_ev2);
+    pebble_32f2_init(machine, button_map_bb2_ev1_ev2);
 }
+
+static void
+pebble_bb_init(MachineState *machine) {
+    pebble_32f2_init(machine, button_map_bigboard);
+}
+
+static void
+pebble_snowy_init(MachineState *machine) {
+    pebble_32f4_init(machine, button_map_snowy_bb);
+}
+
+
 
 static QEMUMachine pebble_bb2_machine = {
     .name = "pebble-bb2",
@@ -187,21 +264,24 @@ static QEMUMachine pebble_bb2_machine = {
     .init = pebble_bb2_init
 };
 
-static void
-pebble_bb_init(MachineState *machine) {
-    pebble_init(machine, button_map_bigboard);
-}
-
 static QEMUMachine pebble_bb_machine = {
-    .name = "pebble",
+    .name = "pebble-bb",
     .desc = "Pebble smartwatch (bb)",
     .init = pebble_bb_init
 };
+
+static QEMUMachine pebble_snowy_bb_machine = {
+    .name = "pebble-snowy-bb",
+    .desc = "Pebble smartwatch (snowy)",
+    .init = pebble_snowy_init
+};
+
 
 static void pebble_machine_init(void)
 {
     qemu_register_machine(&pebble_bb2_machine);
     qemu_register_machine(&pebble_bb_machine);
+    qemu_register_machine(&pebble_snowy_bb_machine);
 }
 
 machine_init(pebble_machine_init);

@@ -1275,6 +1275,7 @@
 		0A06ED001A1C2466009BB34B /* xen-hvm-stub.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9BB1A1C244F009BB34B /* xen-hvm-stub.c */; };
 		0A06ED011A1C2466009BB34B /* xen-hvm.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9BC1A1C2450009BB34B /* xen-hvm.c */; };
 		0A06ED021A1C2466009BB34B /* xen-mapcache.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9BD1A1C2450009BB34B /* xen-mapcache.c */; };
+		0A0FD5D61A3658E6007F431A /* stm32f4xx.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A0FD5D41A3658E6007F431A /* stm32f4xx.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -3051,7 +3052,6 @@
 		0A0690B81A1C241A009BB34B /* os-win32.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = "os-win32.c"; path = "../os-win32.c"; sourceTree = "<group>"; };
 		0A0690B91A1C241A009BB34B /* page_cache.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = page_cache.c; path = ../page_cache.c; sourceTree = "<group>"; };
 		0A0691261A1C241A009BB34B /* pebble_dbgserial.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; name = pebble_dbgserial.sh; path = ../pebble_dbgserial.sh; sourceTree = "<group>"; };
-		0A0691271A1C241A009BB34B /* pebble.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; name = pebble.sh; path = ../pebble.sh; sourceTree = "<group>"; };
 		0A0691291A1C241A009BB34B /* .gitignore */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = .gitignore; sourceTree = "<group>"; };
 		0A06912A1A1C241A009BB34B /* AUTHORS */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = AUTHORS; sourceTree = "<group>"; };
 		0A06912B1A1C241A009BB34B /* autogen.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = autogen.sh; sourceTree = "<group>"; };
@@ -3767,6 +3767,9 @@
 		0A06C9BD1A1C2450009BB34B /* xen-mapcache.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = "xen-mapcache.c"; path = "../xen-mapcache.c"; sourceTree = "<group>"; };
 		0A06ED031A1FACA8009BB34B /* README */ = {isa = PBXFileReference; lastKnownFileType = text; name = README; path = ../README; sourceTree = "<group>"; };
 		0A06ED041A1FACA8009BB34B /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; name = README.md; path = ../README.md; sourceTree = "<group>"; };
+		0A0FD5D31A364FC1007F431A /* pebble.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = pebble.py; path = ../pebble.py; sourceTree = "<group>"; };
+		0A0FD5D41A3658E6007F431A /* stm32f4xx.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stm32f4xx.c; sourceTree = "<group>"; };
+		0A0FD5D51A3658E6007F431A /* stm32f4xx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = stm32f4xx.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -4543,6 +4546,8 @@
 				0A068B411A1C2416009BB34B /* stm32f2xx_rtc.c */,
 				0A068B421A1C2416009BB34B /* stm32f2xx_syscfg.c */,
 				0A068B431A1C2416009BB34B /* stm32f2xx_tim.c */,
+				0A0FD5D41A3658E6007F431A /* stm32f4xx.c */,
+				0A0FD5D51A3658E6007F431A /* stm32f4xx.h */,
 				0A068B441A1C2416009BB34B /* strongarm.c */,
 				0A068B451A1C2416009BB34B /* strongarm.h */,
 				0A068B461A1C2416009BB34B /* tosa.c */,
@@ -7987,7 +7992,7 @@
 				0A0690B81A1C241A009BB34B /* os-win32.c */,
 				0A0690B91A1C241A009BB34B /* page_cache.c */,
 				0A0691261A1C241A009BB34B /* pebble_dbgserial.sh */,
-				0A0691271A1C241A009BB34B /* pebble.sh */,
+				0A0FD5D31A364FC1007F431A /* pebble.py */,
 				0A0691281A1C241A009BB34B /* pixman */,
 				0A06918A1A1C241B009BB34B /* qapi */,
 				0A06919A1A1C241B009BB34B /* qapi-schema.json */,
@@ -8307,6 +8312,7 @@
 				0A06D0381A1C2451009BB34B /* virt.c in Sources */,
 				0A06E9371A1C2463009BB34B /* cc_helper.c in Sources */,
 				0A06ECEE1A1C2466009BB34B /* qemu-error.c in Sources */,
+				0A0FD5D61A3658E6007F431A /* stm32f4xx.c in Sources */,
 				0A06D16A1A1C2452009BB34B /* pcnet.c in Sources */,
 				0A06D2EC1A1C2452009BB34B /* provider.cpp in Sources */,
 				0A06E9001A1C2463009BB34B /* mmu.c in Sources */,

@@ -180,7 +180,7 @@ static uint64_t stm32_syscfg_read(void *opaque, hwaddr offset,
 {
     Stm32Syscfg *s = (Stm32Syscfg *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F2XX_SYSCFG);
+    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32_SYSCFG);
 
     switch(size) {
         case 4:
@@ -196,7 +196,7 @@ static void stm32_syscfg_write(void *opaque, hwaddr offset,
 {
     Stm32Syscfg *s = (Stm32Syscfg *)opaque;
 
-    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32F2XX_SYSCFG);
+    stm32_rcc_check_periph_clk((Stm32Rcc *)s->stm32_rcc, STM32_SYSCFG);
 
     switch(size) {
         case 4:

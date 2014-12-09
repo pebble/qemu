@@ -94,51 +94,68 @@ typedef int32_t stm32_periph_t;
 #define DEFINE_PROP_PERIPH_T DEFINE_PROP_INT32
 #define QDEV_PROP_SET_PERIPH_T qdev_prop_set_int32
 
-#define STM32_PERIPH_UNDEFINED -1
-#define STM32_RCC_PERIPH 0
-#define STM32_GPIOA 1
-#define STM32_GPIOB 2
-#define STM32_GPIOC 3
-#define STM32_GPIOD 4
-#define STM32_GPIOE 5
-#define STM32_GPIOF 6
-#define STM32_GPIOG 7
-#define STM32_AFIO_PERIPH 8
-#define STM32_UART1 9
-#define STM32_UART2 10
-#define STM32_UART3 11
-#define STM32_UART4 12
-#define STM32_UART5 13
-#define STM32_ADC1 14
-#define STM32_ADC2 15
-#define STM32_ADC3 16
-#define STM32_DAC 17
-#define STM32_TIM1 18
-#define STM32_TIM2 19
-#define STM32_TIM3 20
-#define STM32_TIM4 21
-#define STM32_TIM5 22
-#define STM32_TIM6 23
-#define STM32_TIM7 24
-#define STM32_TIM8 25
-#define STM32_BKP 26
-#define STM32_PWR 27
-#define STM32_I2C1 28
-#define STM32_I2C2 29
-#define STM32_I2S2 30
-#define STM32_I2S3 31
-#define STM32_WWDG 32
-#define STM32_CAN1 33
-#define STM32_CAN2 34
-#define STM32_CAN 35
-#define STM32_USB 36
-#define STM32_SPI1 37
-#define STM32_SPI2 38
-#define STM32_SPI3 39
-#define STM32_EXTI_PERIPH 40
-#define STM32_SDIO 41
-#define STM32_FSMC 42
-#define STM32_PERIPH_COUNT 43
+enum {
+    STM32_PERIPH_UNDEFINED = -1,
+    STM32_RCC_PERIPH = 0,
+    STM32_GPIOA,
+    STM32_GPIOB,
+    STM32_GPIOC,
+    STM32_GPIOD,
+    STM32_GPIOE,
+    STM32_GPIOF,
+    STM32_GPIOG,
+    STM32_GPIOH,
+    STM32_GPIOI,
+    STM32_GPIOJ,
+    STM32_GPIOK,
+    STM32_SYSCFG,
+    STM32_AFIO_PERIPH,
+    STM32_UART1,
+    STM32_UART2,
+    STM32_UART3,
+    STM32_UART4,
+    STM32_UART5,
+    STM32_UART6,
+    STM32_UART7,
+    STM32_UART8,
+    STM32_ADC1,
+    STM32_ADC2,
+    STM32_ADC3,
+    STM32_DAC,
+    STM32_TIM1,
+    STM32_TIM2,
+    STM32_TIM3,
+    STM32_TIM4,
+    STM32_TIM5,
+    STM32_TIM6,
+    STM32_TIM7,
+    STM32_TIM8,
+    STM32_TIM9,
+    STM32_TIM10,
+    STM32_TIM11,
+    STM32_BKP,
+    STM32_PWR,
+    STM32_I2C1,
+    STM32_I2C2,
+    STM32_I2S2,
+    STM32_I2S3,
+    STM32_WWDG,
+    STM32_CAN1,
+    STM32_CAN2,
+    STM32_CAN,
+    STM32_USB,
+    STM32_SPI1,
+    STM32_SPI2,
+    STM32_SPI3,
+    STM32_EXTI_PERIPH,
+    STM32_SDIO,
+    STM32_FSMC,
+    STM32_RTC,
+    STM32_CRC,
+    STM32_DMA1,
+    STM32_DMA2,
+    STM32_PERIPH_COUNT,
+};
 
 const char *stm32_periph_name(stm32_periph_t periph);
 
@@ -181,28 +198,18 @@ const char *stm32_periph_name(stm32_periph_t periph);
 
 
 /* IRQs */
+#define STM32_PVD_IRQ 1
+#define STM32_TAMP_STAMP_IRQ 2
+#define STM32_RTC_WKUP_IRQ 3
 #define STM32_RCC_IRQ 5
-#define STM32_DMA1_STREAM4_IRQ 15
-
-#define STM32_UART1_IRQ 37
-#define STM32_UART2_IRQ 38
-#define STM32_UART3_IRQ 39
-#define STM32_UART4_IRQ 52
-#define STM32_UART5_IRQ 53
-#define STM32_UART6_IRQ 71
-
 #define STM32_EXTI0_IRQ 6
 #define STM32_EXTI1_IRQ 7
 #define STM32_EXTI2_IRQ 8
 #define STM32_EXTI3_IRQ 9
 #define STM32_EXTI4_IRQ 10
-#define STM32_EXTI9_5_IRQ 23
-#define STM32_EXTI15_10_IRQ 40
-#define STM32_PVD_IRQ 1
-#define STM32_RTCAlarm_IRQ 41
-#define STM32_OTG_FS_WKUP_IRQ 42
-#define STM32_ETH_WKUP_IRQ 62
+#define STM32_DMA1_STREAM4_IRQ 15
 
+#define STM32_EXTI9_5_IRQ 23
 #define STM32_TIM1_BRK_TIM9_IRQ 24
 #define STM32_TIM1_UP_TIM10_IRQ 25
 #define STM32_TIM1_TRG_COM_TIM11_IRQ 26
@@ -211,7 +218,25 @@ const char *stm32_periph_name(stm32_periph_t periph);
 #define STM32_TIM3_IRQ 29
 #define STM32_TIM4_IRQ 30
 
+#define STM32_SPI1_IRQ 35
+#define STM32_SPI2_IRQ 36
 
+#define STM32_UART1_IRQ 37
+#define STM32_UART2_IRQ 38
+#define STM32_UART3_IRQ 39
+#define STM32_EXTI15_10_IRQ 40
+#define STM32_RTCAlarm_IRQ 41
+#define STM32_OTG_FS_WKUP_IRQ 42
+
+#define STM32_SPI3_IRQ 51
+#define STM32_UART4_IRQ 52
+#define STM32_UART5_IRQ 53
+
+#define STM32_ETH_WKUP_IRQ 62
+
+#define STM32_UART6_IRQ 71
+
+#define STM32_MAX_IRQ  81
 
 
 
@@ -385,4 +410,16 @@ void stm32f2xx_init(
                     uint32_t osc_freq,
                     uint32_t osc32_freq,
                     struct stm32f2xx *stm);
+
+struct stm32f4xx;
+void stm32f4xx_init(
+                    ram_addr_t flash_size,
+                    ram_addr_t ram_size,
+                    const char *kernel_filename,
+                    Stm32Gpio **stm32_gpio,
+                    Stm32Uart **stm32_uart,
+                    uint32_t osc_freq,
+                    uint32_t osc32_freq,
+                    struct stm32f4xx *stm);
+
 #endif /* STM32_H */

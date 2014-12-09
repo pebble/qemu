@@ -20,6 +20,7 @@
  */
 
 #include "hw/arm/stm32.h"
+#include "hw/arm/stm32f4xx.h"
 #include "qemu/bitops.h"
 
 
@@ -43,8 +44,8 @@
  * doesn't hurt to handle the maximum possible. */
 #define EXTI_LINE_COUNT 20
 
-/* The number of IRQ connections to the NVIC */
-#define EXTI_IRQ_COUNT 10
+/* The number of IRQ sources from the EXTI controller */
+#define EXTI_IRQ_COUNT 14
 
 
 struct Stm32Exti {

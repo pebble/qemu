@@ -9,6 +9,7 @@
 
 #include "hw/sysbus.h"
 #include "hw/arm/arm.h"
+#include "hw/arm/stm32.h"
 #include "hw/loader.h"
 #include "elf.h"
 #include "sysemu/qtest.h"
@@ -190,7 +191,7 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
     CPUARMState *env;
     DeviceState *nvic;
     /* FIXME: make this local state.  */
-    static qemu_irq pic[64];
+    static qemu_irq pic[STM32_MAX_IRQ + 1];    /* Enough for STM32F4xx */
     int image_size;
     uint64_t entry;
     uint64_t lowaddr;
@@ -208,7 +209,7 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
     sram_size *= 1024;
 
     if (cpu_model == NULL) {
-	cpu_model = "cortex-m3";
+        cpu_model = "cortex-m3";
     }
     cpu = cpu_arm_init(cpu_model);
     if (cpu == NULL) {

@@ -22,7 +22,7 @@ typedef struct Stm32f2xxRcc {
     };
     
     /* Peripheral clocks */
-    Clk PERIPHCLK[STM32F2XX_PERIPH_COUNT], // MUST be first field after `inherited`, because Stm32Rcc's last field aliases this array
+    Clk PERIPHCLK[STM32_PERIPH_COUNT], // MUST be first field after `inherited`, because Stm32Rcc's last field aliases this array
     HSICLK,
     HSECLK,
     LSECLK,

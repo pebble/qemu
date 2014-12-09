@@ -54,7 +54,15 @@
       </MacroExpansion>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = " -s -rtc base=localtime -machine pebble-bb2  -cpu cortex-m3 -pflash ../test_images/qemu_micro_flash.bin -mtdblock ../test_images/qemu_spi_flash.bin -serial file:uart1.log  -serial tcp::12344,server,nowait  -serial tcp::12345,server,nowait    -monitor stdio "
+            argument = " -s -rtc base=localtime  -serial file:uart1.log  -serial tcp::12344,server,nowait  -serial tcp::12345,server,nowait    -monitor stdio "
+            isEnabled = "YES">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-machine pebble-bb2  -cpu cortex-m3 -pflash ../test_images/qemu_micro_flash.bin -mtdblock ../test_images/qemu_spi_flash.bin"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-machine pebble-snowy-bb  -cpu cortex-m4 -pflash ../test_images/qemu_micro_flash.bin -pflash ../test_images/qemu_spi_flash.bin"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
@@ -63,7 +71,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-d out_asm,in_asm,op,op_opt,int,exec,cpu,pcall,cpu_reset,ioport,unimp,guest_errors"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-S"
