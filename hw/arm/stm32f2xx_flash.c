@@ -26,9 +26,12 @@
 #include "block/block.h"
 #include "hw/sysbus.h"
 
+
 struct f2xx_flash {
     SysBusDevice busdev;
     BlockDriverState *bdrv;
+    hwaddr base_address;
+    uint32_t size;
 
     MemoryRegion mem;
     void *data;
@@ -42,6 +45,8 @@ f2xx_flash_t *f2xx_flash_register(BlockDriverState *bdrv, hwaddr base,
     //SysBusDevice *busdev = SYS_BUS_DEVICE(dev);
     f2xx_flash_t *flash = (f2xx_flash_t *)object_dynamic_cast(OBJECT(dev),
                                                               "f2xx.flash");
+    qdev_prop_set_uint32(dev, "size", size);
+    qdev_prop_set_uint64(dev, "base_address", base);
     if (bdrv) {
         if (qdev_prop_set_drive(dev, "drive", bdrv)) {
             printf("%s, have no drive???\n", __func__);
@@ -80,23 +85,22 @@ MemoryRegion *get_system_memory(void); /* XXX */
 static int f2xx_flash_init(SysBusDevice *dev)
 {
     f2xx_flash_t *flash = FROM_SYSBUS(typeof(*flash), dev);
-    uint64_t size = 512 * 1024; /* XXX */
 
 //    memory_region_init_rom_device(&flash->mem, &f2xx_flash_ops, flash, "name",
 //      size);
-    memory_region_init_ram(&flash->mem, NULL, "f2xx.flash", size);
+    memory_region_init_ram(&flash->mem, NULL, "f2xx.flash", flash->size);
 
     vmstate_register_ram(&flash->mem, DEVICE(flash));
     //vmstate_register_ram_global(&flash->mem);
     memory_region_set_readonly(&flash->mem, true);
-    memory_region_add_subregion(get_system_memory(), 0x8000000, &flash->mem);
+    memory_region_add_subregion(get_system_memory(), flash->base_address, &flash->mem);
 //    sysbus_init_mmio(dev, &flash->mem);
 
     flash->data = memory_region_get_ram_ptr(&flash->mem);
-    memset(flash->data, 0xff, size);
+    memset(flash->data, 0xff, flash->size);
     if (flash->bdrv) {
         int r;
-        r = bdrv_read(flash->bdrv, 0, flash->data, size >> 9);
+        r = bdrv_read(flash->bdrv, 0, flash->data, flash->size >> 9);
         if (r < 0) {
             vmstate_unregister_ram(&flash->mem, DEVICE(flash));
             memory_region_destroy(&flash->mem);
@@ -109,7 +113,8 @@ static int f2xx_flash_init(SysBusDevice *dev)
 
 static Property f2xx_flash_properties[] = {
     DEFINE_PROP_DRIVE("drive", struct f2xx_flash, bdrv),
-
+    DEFINE_PROP_UINT32("size", struct f2xx_flash, size, 512*1024),
+    DEFINE_PROP_UINT64("base_address", struct f2xx_flash, base_address, 0x08000000),
 };
 
 static void f2xx_flash_class_init(ObjectClass *klass, void *data)

@@ -25,8 +25,8 @@
 #include "qemu-common.h"
 
 #define CLKTREE_MAX_IRQ 16
-#define CLKTREE_MAX_OUTPUT 16
-#define CLKTREE_MAX_INPUT 16
+#define CLKTREE_MAX_OUTPUT 24
+#define CLKTREE_MAX_INPUT 24
 
 /* Use this when calling clktree_create_clk and clktree_set_selected_input */
 #define CLKTREE_NO_INPUT -1

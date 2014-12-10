@@ -189,7 +189,6 @@ static void pebble_32f2_init(MachineState *machine, struct button_map *map) {
 static void pebble_32f4_init(MachineState *machine, struct button_map *map) {
     Stm32Gpio *gpio[STM32F4XX_GPIO_COUNT];
     Stm32Uart *uart[STM32F4XX_UART_COUNT];
-    DeviceState *spi_flash;
     SSIBus *spi;
     struct stm32f4xx stm;
 

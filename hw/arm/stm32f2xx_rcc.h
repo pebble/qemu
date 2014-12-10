@@ -30,10 +30,14 @@ typedef struct Stm32f2xxRcc {
     SYSCLK,
     IWDGCLK,
     RTCCLK,
-    PLLM, /* Applies "M" division and "N" multiplication factors. When adding support for PLLI2S, this will need to be separated. */
+
+    PLLM, /* Applies "M" division and "N" multiplication factors for PLL */
     PLLCLK,
     PLL48CLK,
-    PLLI2S,
+
+    PLLI2SM, /* Applies "M" division and "N" multiplication factors for PLLI2S */
+    PLLI2SCLK,
+    
     HCLK, /* Output from AHB Prescaler */
     PCLK1, /* Output from APB1 Prescaler */
     PCLK2; /* Output from APB2 Prescaler */
@@ -50,7 +54,11 @@ typedef struct Stm32f2xxRcc {
     RCC_CFGR_PPRE2,
     RCC_CFGR_HPRE,
     RCC_AHB1ENR,
-    RCC_CFGR_SW;
+    RCC_AHB2ENR,
+    RCC_AHB3ENR,
+    RCC_CFGR_SW,
+    RCC_PLLCFGR,
+    RCC_PLLI2SCFGR;
 
     uint8_t
     RCC_PLLCFGR_PLLM,
@@ -59,5 +67,12 @@ typedef struct Stm32f2xxRcc {
 
     uint16_t
     RCC_PLLCFGR_PLLN;
+
+    uint8_t
+    RCC_PLLI2SCFGR_PLLR,
+    RCC_PLLI2SCFGR_PLLQ;
+
+    uint16_t
+    RCC_PLLI2SCFGR_PLLN;
 
 } Stm32f2xxRcc;
