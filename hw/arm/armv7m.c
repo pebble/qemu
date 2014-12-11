@@ -251,7 +251,7 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
     qdev_init_nofail(nvic);
     sysbus_connect_irq(SYS_BUS_DEVICE(nvic), 0,
                        qdev_get_gpio_in(DEVICE(cpu), ARM_CPU_IRQ));
-    for (i = 0; i < 64; i++) {
+    for (i = 0; i < STM32_MAX_IRQ; i++) {
         pic[i] = qdev_get_gpio_in(nvic, i);
     }
 
