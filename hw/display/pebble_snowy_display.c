@@ -22,7 +22,7 @@
 
 /*
  * 8-bit color display connected through SPI bus. The 8 bits are organized as (starting from MSB):
- *  2 bits red, 2 bits green, 2 bits blue, 2 bits dont' care.
+ *  2 bits red, 2 bits green, 2 bits blue, 2 bits of 0.
  *
  * This display is used in the Pebble Snowy platform and actually represents an FPGA connected
  * to a LPM012A220A display. The FPGA implements the SPI interface.
@@ -40,9 +40,9 @@
  *
  * This display expects 206 bytes to be sent per line (column). Organized as follows:
  *  uint8_t column_index
- *  uint8_t padding[17]
+ *  uint8_t padding[16]    // SNOWY_ROWS_SKIPPED_AT_BOTTOM
  *  uint8_t column_data[172]
- *  uint8_t padding[16]
+ *  uint8_t padding[17]    // SNOWY_ROWS_SKIPPED_AT_TOP
  */
 
 /*
@@ -75,10 +75,44 @@
 #define SNOWY_LINE_DATA_LEN   (SNOWY_ROWS_SKIPPED_AT_TOP + SNOWY_NUM_ROWS \
                                + SNOWY_ROWS_SKIPPED_AT_BOTTOM)
 
+#define SNOWY_COLOR_BLACK     0
+#define SNOWY_COLOR_WHITE     0xFC
+#define SNOWY_COLOR_RED       0xC0
+#define SNOWY_COLOR_GREEN     0x30
+#define SNOWY_COLOR_BLUE      0x0C
+
+
+/* Various states the Display can be in */
 typedef enum {
-    LINENO,
-    DATA,
-} XferState;
+    PSDISPLAYSTATE_PROGRAMMING,
+    PSDISPLAYSTATE_ACCEPTING_CMD,
+    PSDISPLAYSTATE_ACCEPTING_PARAM,
+    PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE,
+
+    PSDISPLAYSTATE_ACCEPTING_LINENO,
+    PSDISPLAYSTATE_ACCEPTING_DATA,
+
+} PSDisplayState;
+
+
+/* Commands we accept in PSDISPLAYSTATE_ACCEPTING_CMD state */
+typedef enum {
+    PSDISPLAYCMD_NULL = 0,
+    PSDISPLAYCMD_SET_PARAMETER = 1,
+    PSDISPLAYCMD_DISPLAY_OFF = 2,
+    PSDISPLAYCMD_DISPLAY_ON = 3,
+    PSDISPLAYCMD_DRAW_SCENE = 4
+} PDisplayCmd;
+
+
+// Scene numbers put into cmd_parameter and used by the PSDISPLAYCMD_DRAW_SCENE command.
+typedef enum {
+    PSDISPLAYSCENE_BLACK = 0,
+    PSDISPLAYSCENE_SPLASH = 1,    // splash screen
+    PSDISPLAYSCENE_UPDATE = 2,    // firmware update
+    PSDISPLAYSCENE_ERROR = 3      // display error code
+} PDisplayScene;
+
 
 typedef struct {
     SSISlave ssidev;
@@ -93,47 +127,220 @@ typedef struct {
         qemu_irq intn_output;
     };
 
-    QemuConsole *con;
-    bool redraw;
-    uint8_t framebuffer[SNOWY_NUM_ROWS * SNOWY_BYTES_PER_ROW];
-    int col_index;
-    int row_index;
-    XferState state;
+    QemuConsole   *con;
+    bool          redraw;
+    uint8_t       framebuffer[SNOWY_NUM_ROWS * SNOWY_BYTES_PER_ROW];
+    int           col_index;
+    int           row_index;
 
-    uint32_t  sclk_count;
-} PSDisplayState;
+    /* State variables */
+    PSDisplayState  state;
+    PDisplayCmd     cmd;
+    uint32_t        parameter;
+    uint32_t        parameter_byte_offset;
+    PDisplayScene   scene;
+
+    bool      sclk_value;
+    bool      cs_value;                 // low means asserted
+    uint32_t  sclk_count_with_cs_high;
+
+} PSDisplayGlobals;
 
 
+typedef struct {
+  uint8_t red, green, blue;
+} PSDisplayPixelColor;
+
+
+static uint8_t *ps_display_get_pebble_logo(void);
+
+
+
+// -----------------------------------------------------------------------------
+static void ps_display_set_pixel(PSDisplayGlobals *s, uint32_t x, uint32_t y,
+                            uint8_t pixel_byte) {
+    s->framebuffer[y * SNOWY_BYTES_PER_ROW + x] = pixel_byte;
+}
+
+
+// -----------------------------------------------------------------------------
+static void ps_display_draw_bitmap(PSDisplayGlobals *s, uint8_t *bits,
+                      uint32_t x_offset, uint32_t y_offset, uint32_t width, uint32_t height) {
+  uint32_t pixels = width * height;
+
+  for (int i = 0; i < pixels; ++i) {
+      bool value = bits[i / 8] & (1 << (i % 8));
+      uint8_t x = x_offset + (i % width);
+      uint8_t y = y_offset + (i / width);
+      if (value) {
+          ps_display_set_pixel(s, x, y, 0xC0 /* red */);
+      } else {
+          ps_display_set_pixel(s, x, y, 0x00 /* black */);
+      }
+  }
+}
+
+
+// -----------------------------------------------------------------------------
+static void
+ps_display_reset_state(PSDisplayGlobals *s) {
+    DPRINTF("Resetting state to accept command\n");
+    s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
+    s->parameter_byte_offset = 0;
+}
+
+// -----------------------------------------------------------------------------
+static void
+ps_display_execute_current_cmd(PSDisplayGlobals *s) {
+    PDisplayScene scene;
+
+    switch (s->cmd) {
+    case PSDISPLAYCMD_NULL:
+        DPRINTF("Executing command: NULL\n");
+        break;
+
+    case PSDISPLAYCMD_SET_PARAMETER:
+        DPRINTF("Executing command: SET_PARAMETER\n");
+        s->state = PSDISPLAYSTATE_ACCEPTING_PARAM;
+        s->parameter_byte_offset = 0;
+        break;
+
+    case PSDISPLAYCMD_DISPLAY_OFF:
+        DPRINTF("Executing command: DISPLAY_OFF\n");
+        ps_display_reset_state(s);
+        break;
+
+    case PSDISPLAYCMD_DISPLAY_ON:
+        DPRINTF("Executing command: DISPLAY_ON\n");
+        ps_display_reset_state(s);
+        break;
+
+    case PSDISPLAYCMD_DRAW_SCENE:
+        if (s->state == PSDISPLAYSTATE_ACCEPTING_CMD) {
+            s->state = PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE;
+        } else if (s->state == PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE) {
+            DPRINTF("Executing command: DRAW_SCENE: %d\n", s->scene);
+            switch (s->scene) {
+            case PSDISPLAYSCENE_BLACK:
+                memset(s->framebuffer, SNOWY_COLOR_BLACK, sizeof(s->framebuffer));
+                break;
+            case PSDISPLAYSCENE_SPLASH:
+                ps_display_draw_bitmap(s, ps_display_get_pebble_logo(), 8, 68, 128, 32);
+                break;
+            case PSDISPLAYSCENE_UPDATE:
+                memset(s->framebuffer, SNOWY_COLOR_GREEN, sizeof(s->framebuffer));
+                break;
+            case PSDISPLAYSCENE_ERROR:
+                memset(s->framebuffer, SNOWY_COLOR_BLUE, sizeof(s->framebuffer));
+                break;
+            default:
+                fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported scene: %d\n", scene);
+                break;
+            }
+            ps_display_reset_state(s);
+            s->redraw = true;
+        } else {
+            fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Tried to execute draw scene in "
+                      "wrong state: %d\n", s->state);
+        }
+        break;
+
+    default:
+        fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported cmd: %d\n", s->cmd);
+        ps_display_reset_state(s);
+        break;
+    }
+}
+
+
+// ----------------------------------------------------------------------------- 
 static uint32_t
 ps_display_transfer(SSISlave *dev, uint32_t data)
 {
-    PSDisplayState *s = FROM_SSI_SLAVE(PSDisplayState, dev);
+    PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, dev);
+    uint32_t data_byte = data & 0x00FF;
 
-    //DPRINTF("rcv byte: 0x%02x\n", data);
+    //DPRINTF("rcv byte: 0x%02x\n", data_byte);
+    //DPRINTF("Got %d sclocks\n", s->sclk_count_with_cs_high);
+
+    /* Ignore incoming data if our chip select is not asserted */
+    if (s->cs_value) {
+        if (s->state != PSDISPLAYSTATE_PROGRAMMING) {
+            fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: received data without CS asserted");
+        }
+        return 0;
+    }
 
     switch(s->state) {
-    case LINENO:
+    case PSDISPLAYSTATE_PROGRAMMING:
+        /* Ignore programming bytes */
+        break;
+
+    case PSDISPLAYSTATE_ACCEPTING_CMD:
+        s->cmd = data_byte;
+        DPRINTF("received command %d\n", s->cmd);
+        ps_display_execute_current_cmd(s);
+        break;
+
+    case PSDISPLAYSTATE_ACCEPTING_PARAM:
+
+        DPRINTF("received param byte %d\n", data_byte);
+        /* Params are sent low byte first */
+        if (s->parameter_byte_offset == 0) {
+            s->parameter = (s->parameter & 0xFFFFFF00) | data_byte;
+        } else if (s->parameter_byte_offset == 1) {
+            s->parameter = (s->parameter & 0xFFFF00FF) | (data_byte << 8);
+        } else if (s->parameter_byte_offset == 2) {
+            s->parameter = (s->parameter & 0xFF00FFFF) | (data_byte << 16);
+        } else if (s->parameter_byte_offset == 3) {
+            s->parameter = (s->parameter & 0x00FFFFFF) | (data_byte << 24);
+        } else {
+            fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: received more than 4 bytes of parameter");
+        }
+
+        s->parameter_byte_offset++;
+        if (s->parameter_byte_offset >= 4) {
+            DPRINTF("assembled complete param value of %d\n", s->parameter);
+            ps_display_reset_state(s);
+        }
+        break;
+
+    case PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE:
+        s->scene = data_byte;
+        DPRINTF("received scene ID: %d\n", s->scene);
+        ps_display_execute_current_cmd(s);
+        break;
+
+    case PSDISPLAYSTATE_ACCEPTING_LINENO:
+        /* Check for invalid column index */
+        if (data >= SNOWY_NUM_COLS) {
+            fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Invalid column index %d received", data);
+            data = 0;
+        }
         s->col_index = data;
+
         /* The column data is sent from the bottom up */
         s->row_index = SNOWY_NUM_ROWS + SNOWY_ROWS_SKIPPED_AT_BOTTOM - 1;
-        s->state = DATA;
+        s->state = PSDISPLAYSTATE_ACCEPTING_DATA;
         DPRINTF("  new column no: %d\n", data);
         break;
-    case DATA:
-        //DPRINTF("  pixel value 0x%02X for row %d\n", data, s->row_index);
+
+    case PSDISPLAYSTATE_ACCEPTING_DATA:
+        DPRINTF("  pixel value 0x%02X for row %d\n", data, s->row_index);
         if (s->row_index >= SNOWY_NUM_ROWS) {
           /* If this row index is in the bottom padding area, ignore it */
           s->row_index--;
-        } else if (s->row_index >= SNOWY_ROWS_SKIPPED_AT_TOP) {
+        } else if (s->row_index >= 0) {
           /* If this row index is in the viewable area, save to our frame buffer */
           s->framebuffer[s->row_index * SNOWY_BYTES_PER_ROW + s->col_index] = data;
           s->row_index--;
-        } else if (s->row_index > 0) {
+          s->redraw = true;
+        } else if (s->row_index > -SNOWY_ROWS_SKIPPED_AT_TOP) {
           /* If this row index is in the top padding area, ignore it */
           s->row_index--;
         } else {
           /* We just received the last byte in the line, change state */
-          s->state = LINENO;
+          s->state = PSDISPLAYSTATE_ACCEPTING_LINENO;
         }
         break;
     }
@@ -141,33 +348,31 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
 }
 
 
-/* This function maps an 8 bit value from the frame buffer into red, green, and blue
- * components */
-typedef struct {
-  uint8_t red, green, blue;
-} PixelColor;
+// ----------------------------------------------------------------------------- 
+// This function maps an 8 bit value from the frame buffer into red, green, and blue
+// components
+static PSDisplayPixelColor ps_display_get_rgb(uint8_t pixel_value) {
 
-static PixelColor ps_display_get_rgb(uint8_t pixel_value) {
-
-  PixelColor c;
+  PSDisplayPixelColor c;
   c.red = ((pixel_value & 0xC0) >> 6) * 255 / 3;
   c.green = ((pixel_value & 0x30) >> 4) * 255 / 3;
-  c.red = ((pixel_value & 0x0C) >> 2) * 255 / 3;
+  c.blue = ((pixel_value & 0x0C) >> 2) * 255 / 3;
   return c;
 
   /*
-  static PixelColors[256] = {
+  static PSDisplayPixelColors[256] = {
     {0, 0, 0 },
   };
 
-  return PixelColors[pixel_value];
+  return PSDisplayPixelColors[pixel_value];
   */
 }
 
 
+// ----------------------------------------------------------------------------- 
 static void ps_display_update_display(void *arg)
 {
-    PSDisplayState *s = arg;
+    PSDisplayGlobals *s = arg;
     DisplaySurface *surface = qemu_console_surface(s->con);
 
     uint8_t *d;
@@ -183,31 +388,32 @@ static void ps_display_update_display(void *arg)
     for (y = 0; y < SNOWY_NUM_ROWS; y++) {
         for (x = 0; x < SNOWY_NUM_COLS; x++) {
             uint8_t pixel = s->framebuffer[y * SNOWY_BYTES_PER_ROW + x];
-            PixelColor color = ps_display_get_rgb(pixel);
+
+            PSDisplayPixelColor color = ps_display_get_rgb(pixel);
 
             switch(bpp) {
-                case 8:
-                    *((uint8_t *)d) = rgb_to_pixel8(color.red, color.green, color.blue);
-                    d++;
-                    break;
-                case 15:
-                    *((uint16_t *)d) = rgb_to_pixel15(color.red, color.green, color.blue);;
-                    d += 2;
-                    break;
-                case 16:
-                    *((uint16_t *)d) = rgb_to_pixel16(color.red, color.green, color.blue);;
-                    d += 2;
-                    break;
-                case 24:
-                    rgb_value = rgb_to_pixel24(color.red, color.green, color.blue);
-                    *d++ = (rgb_value & 0x00FF0000) >> 16;
-                    *d++ = (rgb_value & 0x0000FF00) >> 8;
-                    *d++ = (rgb_value & 0x000000FF);
-                    break;
-                case 32:
-                    *((uint32_t *)d) = rgb_to_pixel32(color.red, color.green, color.blue);;
-                    d += 4;
-                    break;
+            case 8:
+                *((uint8_t *)d) = rgb_to_pixel8(color.red, color.green, color.blue);
+                d++;
+                break;
+            case 15:
+                *((uint16_t *)d) = rgb_to_pixel15(color.red, color.green, color.blue);;
+                d += 2;
+                break;
+            case 16:
+                *((uint16_t *)d) = rgb_to_pixel16(color.red, color.green, color.blue);;
+                d += 2;
+                break;
+            case 24:
+                rgb_value = rgb_to_pixel24(color.red, color.green, color.blue);
+                *d++ = (rgb_value & 0x00FF0000) >> 16;
+                *d++ = (rgb_value & 0x0000FF00) >> 8;
+                *d++ = (rgb_value & 0x000000FF);
+                break;
+            case 32:
+                *((uint32_t *)d) = rgb_to_pixel32(color.red, color.green, color.blue);;
+                d += 4;
+                break;
             }
         }
     }
@@ -216,15 +422,21 @@ static void ps_display_update_display(void *arg)
     s->redraw = false;
 }
 
+// ----------------------------------------------------------------------------- 
 static int ps_display_set_cs(SSISlave *dev, bool value)
 {
+    PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, dev);
+
     DPRINTF("CS changed to %d\n", value);
+    s->cs_value = value;
+
     return 0;
 }
 
+// ----------------------------------------------------------------------------- 
 static void ps_display_set_reset_pin_cb(void *opaque, int n, int level)
 {
-    PSDisplayState *s = FROM_SSI_SLAVE(PSDisplayState, opaque);
+    PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, opaque);
     bool value = !!level;
     assert(n == 0);
 
@@ -232,39 +444,58 @@ static void ps_display_set_reset_pin_cb(void *opaque, int n, int level)
     qemu_set_irq(s->done_output, false);
     qemu_set_irq(s->intn_output, false);
     if (!value) {
-        s->sclk_count = 0;
+        s->sclk_count_with_cs_high = 0;
     }
 }
 
+// ----------------------------------------------------------------------------- 
 static void ps_display_set_sclk_pin_cb(void *opaque, int n, int level)
 {
-    PSDisplayState *s = FROM_SSI_SLAVE(PSDisplayState, opaque);
+    PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, opaque);
     assert(n == 0);
 
-    s->sclk_count++;
+    bool new_value = !!level;
 
-    /* After a few cycles of sclck, say we are done */
-    if (s->sclk_count > 10) {
-      DPRINTF("Got %d sclocks\n", s->sclk_count);
-      qemu_set_irq(s->done_output, true);
+    /* Count number of clocks received when CS is held high, this tells us when we are
+     * done receiving programming */
+    if (s->cs_value) {
+        if (new_value && new_value != s->sclk_value) {
+            s->sclk_count_with_cs_high++;
+        }
+
+        /* After enough cycles of sclck, say we are done with programming mode */
+        if (s->sclk_count_with_cs_high > 50) {
+            qemu_set_irq(s->done_output, true);
+            if (s->state == PSDISPLAYSTATE_PROGRAMMING) {
+                DPRINTF("Got %d sclocks, exiting programming mode\n",
+                              s->sclk_count_with_cs_high);
+                s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
+            }
+        }
     }
+
+    /* Save new value */
+    s->sclk_value = new_value;
 }
 
 
+// ----------------------------------------------------------------------------- 
 static void ps_display_invalidate_display(void *arg)
 {
-    PSDisplayState *s = arg;
+    PSDisplayGlobals *s = arg;
     s->redraw = true;
 }
 
+// ----------------------------------------------------------------------------- 
 static const GraphicHwOps ps_display_ops = {
     .gfx_update = ps_display_update_display,
     .invalidate = ps_display_invalidate_display,
 };
 
+// ----------------------------------------------------------------------------- 
 static int ps_display_init(SSISlave *dev)
 {
-    PSDisplayState *s = FROM_SSI_SLAVE(PSDisplayState, dev);
+    PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, dev);
 
     s->con = graphic_console_init(DEVICE(dev), 0, &ps_display_ops, s);
     qemu_console_resize(s->con, SNOWY_NUM_COLS, SNOWY_NUM_ROWS);
@@ -280,13 +511,15 @@ static int ps_display_init(SSISlave *dev)
     return 0;
 }
 
+// ----------------------------------------------------------------------------- 
 static Property ps_display_init_properties[] = {
-    DEFINE_PROP_PTR("done_output", PSDisplayState, vdone_output),
-    DEFINE_PROP_PTR("intn_output", PSDisplayState, vintn_output),
+    DEFINE_PROP_PTR("done_output", PSDisplayGlobals, vdone_output),
+    DEFINE_PROP_PTR("intn_output", PSDisplayGlobals, vintn_output),
     DEFINE_PROP_END_OF_LIST()
 };
 
 
+// ----------------------------------------------------------------------------- 
 static void ps_display_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
@@ -299,16 +532,62 @@ static void ps_display_class_init(ObjectClass *klass, void *data)
     k->set_cs = ps_display_set_cs;
 }
 
+// ----------------------------------------------------------------------------- 
 static const TypeInfo ps_display_info = {
     .name          = "pebble-snowy-display",
     .parent        = TYPE_SSI_SLAVE,
-    .instance_size = sizeof(PSDisplayState),
+    .instance_size = sizeof(PSDisplayGlobals),
     .class_init    = ps_display_class_init,
 };
 
+// ----------------------------------------------------------------------------- 
 static void ps_display_register(void)
 {
     type_register_static(&ps_display_info);
 }
 
+// ----------------------------------------------------------------------------- 
 type_init(ps_display_register);
+
+
+
+static uint8_t *ps_display_get_pebble_logo(void) {
+
+    static uint8_t logo[512] = {
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, /* bytes 0 - 16 */
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, /* bytes 16 - 32 */
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, /* bytes 32 - 48 */
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, /* bytes 48 - 64 */
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, /* bytes 64 - 80 */
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, /* bytes 80 - 96 */
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38, 0x00, 0x00, 0x1c, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x00, /* bytes 96 - 112 */
+      0x00, 0x00, 0x07, 0x00, 0xe0, 0x01, 0x38, 0x70, 0x00, 0x1c, 0x38, 0x00, 0x0e, 0xc0, 0x03, 0x00, /* bytes 112 - 128 */
+      0x80, 0xe3, 0x3f, 0x00, 0xfc, 0x0f, 0x38, 0xfe, 0x03, 0x1c, 0xff, 0x01, 0x0e, 0xf8, 0x1f, 0x00, /* bytes 128 - 144 */
+      0x80, 0xf3, 0x7f, 0x00, 0xfe, 0x1f, 0x38, 0xff, 0x0f, 0x9c, 0xff, 0x07, 0x0e, 0xfc, 0x3f, 0x00, /* bytes 144 - 160 */
+      0x80, 0x3b, 0xf0, 0x00, 0x0f, 0x3c, 0xb8, 0x03, 0x1f, 0xdc, 0x81, 0x0f, 0x0e, 0x1e, 0x78, 0x00, /* bytes 160 - 176 */
+      0x80, 0x0f, 0xe0, 0x81, 0x03, 0x78, 0xf8, 0x01, 0x1c, 0xfc, 0x00, 0x0e, 0x0e, 0x07, 0xf0, 0x00, /* bytes 176 - 192 */
+      0x80, 0x0f, 0xc0, 0x83, 0x03, 0x70, 0xf8, 0x00, 0x3c, 0x7c, 0x00, 0x1e, 0x0e, 0x07, 0xe0, 0x00, /* bytes 192 - 208 */
+      0x80, 0x07, 0x80, 0xc3, 0x01, 0x70, 0x78, 0x00, 0x38, 0x3c, 0x00, 0x1c, 0x8e, 0x03, 0xe0, 0x00, /* bytes 208 - 224 */
+      0x80, 0x03, 0x80, 0xc3, 0x01, 0x7e, 0x38, 0x00, 0x30, 0x1c, 0x00, 0x18, 0x8e, 0x03, 0xfc, 0x00, /* bytes 224 - 240 */
+      0x80, 0x03, 0x00, 0xc7, 0xc1, 0x1f, 0x38, 0x00, 0x70, 0x1c, 0x00, 0x38, 0x8e, 0x83, 0x3f, 0x00, /* bytes 240 - 256 */
+      0x80, 0x03, 0x00, 0xc7, 0xf9, 0x03, 0x38, 0x00, 0x70, 0x1c, 0x00, 0x38, 0x8e, 0xf3, 0x07, 0x00, /* bytes 256 - 272 */
+      0x80, 0x03, 0x00, 0xc7, 0x7f, 0x00, 0x38, 0x00, 0x70, 0x1c, 0x00, 0x38, 0x8e, 0xff, 0x00, 0x00, /* bytes 272 - 288 */
+      0x80, 0x03, 0x00, 0xc7, 0x0f, 0x00, 0x38, 0x00, 0x70, 0x1c, 0x00, 0x38, 0x8e, 0x1f, 0x00, 0x00, /* bytes 288 - 304 */
+      0x80, 0x03, 0x80, 0xc3, 0x01, 0x00, 0x38, 0x00, 0x30, 0x1c, 0x00, 0x18, 0x8e, 0x03, 0x00, 0x00, /* bytes 304 - 320 */
+      0x80, 0x07, 0x80, 0xc3, 0x01, 0x00, 0x78, 0x00, 0x38, 0x3c, 0x00, 0x1c, 0x8e, 0x03, 0x00, 0x00, /* bytes 320 - 336 */
+      0x80, 0x0f, 0xc0, 0x83, 0x03, 0x00, 0xf8, 0x00, 0x38, 0x7c, 0x00, 0x1c, 0x0e, 0x07, 0x00, 0x00, /* bytes 336 - 352 */
+      0x80, 0x0f, 0xc0, 0x81, 0x07, 0x70, 0xf8, 0x01, 0x1c, 0xfc, 0x00, 0x0e, 0x0e, 0x0f, 0xe0, 0x00, /* bytes 352 - 368 */
+      0x80, 0x3f, 0xf0, 0x00, 0x0f, 0x78, 0xb8, 0x03, 0x1f, 0xdc, 0x81, 0x0f, 0x0e, 0x1e, 0xf0, 0x00, /* bytes 368 - 384 */
+      0x80, 0xf3, 0x7f, 0x00, 0xfe, 0x3f, 0x38, 0xff, 0x07, 0x9c, 0xff, 0x03, 0x0e, 0xfc, 0x7f, 0x00, /* bytes 384 - 400 */
+      0x80, 0xe3, 0x3f, 0x00, 0xf8, 0x0f, 0x38, 0xfe, 0x03, 0x1c, 0xff, 0x01, 0x0e, 0xf0, 0x1f, 0x00, /* bytes 400 - 416 */
+      0x80, 0x03, 0x07, 0x00, 0xc0, 0x01, 0x00, 0x70, 0x00, 0x00, 0x38, 0x00, 0x00, 0x80, 0x03, 0x00, /* bytes 416 - 432 */
+      0x80, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* bytes 432 - 448 */
+      0x80, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* bytes 448 - 464 */
+      0x80, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* bytes 464 - 480 */
+      0x80, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* bytes 480 - 496 */
+      0x80, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+    return logo;
+}
+
+

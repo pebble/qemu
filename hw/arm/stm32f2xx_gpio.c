@@ -28,7 +28,7 @@
 
 #ifdef DEBUG_STM32_GPIO
 #define DPRINTF(fmt, ...)                                       \
-    do { printf("STM32_UART: " fmt , ## __VA_ARGS__); } while (0)
+    do { printf("STM32F2XX_GPIO: " fmt , ## __VA_ARGS__); } while (0)
 #else
 #define DPRINTF(fmt, ...)
 #endif
@@ -185,14 +185,14 @@ f2xx_gpio_set(void *arg, int pin, int level)
     /* Inform EXTI module of pin state */
     qemu_set_irq(s->exti[pin], level);
 
-    printf("GPIO %d set pin %d level %d\n", s->periph, pin, level);
+    DPRINTF("GPIO %d set pin %d level %d\n", s->periph, pin, level);
 }
 
 void
 f2xx_exti_set(stm32f2xx_gpio *s, unsigned pin, qemu_irq irq)
 {
     s->exti[pin] = irq;
-    printf("GPIO %d set exti %d irq %p\n", s->periph, pin, irq);
+    DPRINTF("GPIO %d set exti %d irq %p\n", s->periph, pin, irq);
 }
 
 static int

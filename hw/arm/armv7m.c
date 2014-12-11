@@ -244,6 +244,9 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
     armv7m_bitband_init(parent);
 
     nvic = qdev_create(NULL, "armv7m_nvic");
+    /* The NVIC must be configured with a multiple of 32 IRQs */
+    uint32_t num_irqs = ((STM32_MAX_IRQ + 31) / 32) * 32;
+    qdev_prop_set_uint32(nvic, "num-irq", num_irqs);
     env->nvic = nvic;
     if(parent) {
         object_property_add_child(parent, "nvic", OBJECT(nvic), NULL);
