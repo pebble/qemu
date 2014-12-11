@@ -220,10 +220,31 @@ static void pebble_32f4_init(MachineState *machine, struct button_map *map) {
     }
 
 
-    /* Display */
-    spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[1], "ssi");
-    DeviceState *display_dev = ssi_create_slave_no_init(spi, "sm-lcd");
+    /* --- Display ------------------------------------------------  */
+    spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[5], "ssi");
+    DeviceState *display_dev = ssi_create_slave_no_init(spi, "pebble-snowy-display");
+
+    /* Create the outputs that the display will drive and associate them with the correct
+     * GPIO input pins on the MCU */
+    qemu_irq display_done_irq = qdev_get_gpio_in((DeviceState *)gpio[STM32_GPIOG_INDEX], 9);
+    qdev_prop_set_ptr(display_dev, "done_output", display_done_irq);
+    qemu_irq display_intn_irq = qdev_get_gpio_in((DeviceState *)gpio[STM32_GPIOG_INDEX], 10);
+    qdev_prop_set_ptr(display_dev, "intn_output", display_intn_irq);
     qdev_init_nofail(display_dev);
+
+    /* Connect the correct MCU GPIO outputs to the inputs on the display */
+    qemu_irq display_cs;
+    display_cs = qdev_get_gpio_in_named(display_dev, SSI_GPIO_CS, 0);
+    qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOG_INDEX], 8, display_cs);
+
+    qemu_irq display_reset;
+    display_reset = qdev_get_gpio_in_named(display_dev, "pebble-snowy-display-reset", 0);
+    qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOG_INDEX], 15, display_reset);
+
+    qemu_irq display_sclk;
+    display_sclk = qdev_get_gpio_in_named(display_dev, "pebble-snowy-display-sclk", 0);
+    qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOG_INDEX], 13, display_sclk);
+
 
     /* UARTs */
     stm32_uart_connect(uart[0], serial_hds[0], 0); /* UART1: not used */

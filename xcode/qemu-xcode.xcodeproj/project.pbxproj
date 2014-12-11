@@ -1276,6 +1276,7 @@
 		0A06ED011A1C2466009BB34B /* xen-hvm.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9BC1A1C2450009BB34B /* xen-hvm.c */; };
 		0A06ED021A1C2466009BB34B /* xen-mapcache.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9BD1A1C2450009BB34B /* xen-mapcache.c */; };
 		0A0FD5D61A3658E6007F431A /* stm32f4xx.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A0FD5D41A3658E6007F431A /* stm32f4xx.c */; };
+		0A0FD6211A390F1F007F431A /* pebble_snowy_display.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A0FD6201A390F1F007F431A /* pebble_snowy_display.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -3770,6 +3771,69 @@
 		0A0FD5D31A364FC1007F431A /* pebble.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; name = pebble.py; path = ../pebble.py; sourceTree = "<group>"; };
 		0A0FD5D41A3658E6007F431A /* stm32f4xx.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stm32f4xx.c; sourceTree = "<group>"; };
 		0A0FD5D51A3658E6007F431A /* stm32f4xx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = stm32f4xx.h; sourceTree = "<group>"; };
+		0A0FD5E01A38DF59007F431A /* aarch64-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "aarch64-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5E11A38DF59007F431A /* aarch64-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "aarch64-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5E21A38DF59007F431A /* alpha-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "alpha-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5E31A38DF59007F431A /* alpha-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "alpha-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5E41A38DF59007F431A /* arm-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "arm-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5E51A38DF59007F431A /* arm-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "arm-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5E61A38DF59007F431A /* armeb-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "armeb-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5E71A38DF59007F431A /* cris-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "cris-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5E81A38DF59007F431A /* cris-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "cris-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5E91A38DF59007F431A /* i386-bsd-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "i386-bsd-user.mak"; sourceTree = "<group>"; };
+		0A0FD5EA1A38DF59007F431A /* i386-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "i386-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5EB1A38DF59007F431A /* i386-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "i386-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5EC1A38DF59007F431A /* lm32-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "lm32-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5ED1A38DF59007F431A /* m68k-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "m68k-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5EE1A38DF59007F431A /* m68k-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "m68k-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5EF1A38DF59007F431A /* microblaze-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "microblaze-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5F01A38DF59007F431A /* microblaze-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "microblaze-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5F11A38DF59007F431A /* microblazeel-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "microblazeel-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5F21A38DF59007F431A /* microblazeel-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "microblazeel-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5F31A38DF59007F431A /* mips-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "mips-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5F41A38DF59007F431A /* mips-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "mips-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5F51A38DF59007F431A /* mips64-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "mips64-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5F61A38DF59007F431A /* mips64-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "mips64-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5F71A38DF59007F431A /* mips64el-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "mips64el-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5F81A38DF59007F431A /* mips64el-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "mips64el-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5F91A38DF59007F431A /* mipsel-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "mipsel-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5FA1A38DF59007F431A /* mipsel-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "mipsel-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5FB1A38DF59007F431A /* mipsn32-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "mipsn32-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5FC1A38DF59007F431A /* mipsn32el-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "mipsn32el-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5FD1A38DF59007F431A /* moxie-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "moxie-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD5FE1A38DF59007F431A /* or32-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "or32-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD5FF1A38DF59007F431A /* or32-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "or32-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD6001A38DF59007F431A /* pci.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = pci.mak; sourceTree = "<group>"; };
+		0A0FD6011A38DF59007F431A /* ppc-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "ppc-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD6021A38DF59007F431A /* ppc-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "ppc-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD6031A38DF59007F431A /* ppc64-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "ppc64-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD6041A38DF59007F431A /* ppc64-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "ppc64-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD6051A38DF59007F431A /* ppc64abi32-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "ppc64abi32-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD6061A38DF59007F431A /* ppc64le-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "ppc64le-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD6071A38DF59007F431A /* ppcemb-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "ppcemb-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD6081A38DF59007F431A /* s390x-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "s390x-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD6091A38DF5A007F431A /* s390x-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "s390x-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD60A1A38DF5A007F431A /* sh4-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sh4-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD60B1A38DF5A007F431A /* sh4-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sh4-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD60C1A38DF5A007F431A /* sh4eb-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sh4eb-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD60D1A38DF5A007F431A /* sh4eb-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sh4eb-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD60E1A38DF5A007F431A /* sound.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = sound.mak; sourceTree = "<group>"; };
+		0A0FD60F1A38DF5A007F431A /* sparc-bsd-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sparc-bsd-user.mak"; sourceTree = "<group>"; };
+		0A0FD6101A38DF5A007F431A /* sparc-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sparc-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD6111A38DF5A007F431A /* sparc-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sparc-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD6121A38DF5A007F431A /* sparc32plus-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sparc32plus-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD6131A38DF5A007F431A /* sparc64-bsd-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sparc64-bsd-user.mak"; sourceTree = "<group>"; };
+		0A0FD6141A38DF5A007F431A /* sparc64-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sparc64-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD6151A38DF5A007F431A /* sparc64-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "sparc64-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD6161A38DF5A007F431A /* unicore32-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "unicore32-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD6171A38DF5A007F431A /* unicore32-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "unicore32-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD6181A38DF5A007F431A /* usb.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = usb.mak; sourceTree = "<group>"; };
+		0A0FD6191A38DF5A007F431A /* x86_64-bsd-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "x86_64-bsd-user.mak"; sourceTree = "<group>"; };
+		0A0FD61A1A38DF5A007F431A /* x86_64-linux-user.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "x86_64-linux-user.mak"; sourceTree = "<group>"; };
+		0A0FD61B1A38DF5A007F431A /* x86_64-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "x86_64-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD61C1A38DF5A007F431A /* xtensa-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "xtensa-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD61D1A38DF5A007F431A /* xtensaeb-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "xtensaeb-softmmu.mak"; sourceTree = "<group>"; };
+		0A0FD6201A390F1F007F431A /* pebble_snowy_display.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pebble_snowy_display.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -4729,6 +4793,7 @@
 		0A068BC11A1C2416009BB34B /* display */ = {
 			isa = PBXGroup;
 			children = (
+				0A0FD6201A390F1F007F431A /* pebble_snowy_display.c */,
 				0A068BC21A1C2416009BB34B /* ads7846.c */,
 				0A068BC31A1C2416009BB34B /* blizzard.c */,
 				0A068BC41A1C2416009BB34B /* blizzard_template.h */,
@@ -7909,6 +7974,76 @@
 			path = ../util;
 			sourceTree = "<group>";
 		};
+		0A0FD5DF1A38DF59007F431A /* default-configs */ = {
+			isa = PBXGroup;
+			children = (
+				0A0FD5E01A38DF59007F431A /* aarch64-linux-user.mak */,
+				0A0FD5E11A38DF59007F431A /* aarch64-softmmu.mak */,
+				0A0FD5E21A38DF59007F431A /* alpha-linux-user.mak */,
+				0A0FD5E31A38DF59007F431A /* alpha-softmmu.mak */,
+				0A0FD5E41A38DF59007F431A /* arm-linux-user.mak */,
+				0A0FD5E51A38DF59007F431A /* arm-softmmu.mak */,
+				0A0FD5E61A38DF59007F431A /* armeb-linux-user.mak */,
+				0A0FD5E71A38DF59007F431A /* cris-linux-user.mak */,
+				0A0FD5E81A38DF59007F431A /* cris-softmmu.mak */,
+				0A0FD5E91A38DF59007F431A /* i386-bsd-user.mak */,
+				0A0FD5EA1A38DF59007F431A /* i386-linux-user.mak */,
+				0A0FD5EB1A38DF59007F431A /* i386-softmmu.mak */,
+				0A0FD5EC1A38DF59007F431A /* lm32-softmmu.mak */,
+				0A0FD5ED1A38DF59007F431A /* m68k-linux-user.mak */,
+				0A0FD5EE1A38DF59007F431A /* m68k-softmmu.mak */,
+				0A0FD5EF1A38DF59007F431A /* microblaze-linux-user.mak */,
+				0A0FD5F01A38DF59007F431A /* microblaze-softmmu.mak */,
+				0A0FD5F11A38DF59007F431A /* microblazeel-linux-user.mak */,
+				0A0FD5F21A38DF59007F431A /* microblazeel-softmmu.mak */,
+				0A0FD5F31A38DF59007F431A /* mips-linux-user.mak */,
+				0A0FD5F41A38DF59007F431A /* mips-softmmu.mak */,
+				0A0FD5F51A38DF59007F431A /* mips64-linux-user.mak */,
+				0A0FD5F61A38DF59007F431A /* mips64-softmmu.mak */,
+				0A0FD5F71A38DF59007F431A /* mips64el-linux-user.mak */,
+				0A0FD5F81A38DF59007F431A /* mips64el-softmmu.mak */,
+				0A0FD5F91A38DF59007F431A /* mipsel-linux-user.mak */,
+				0A0FD5FA1A38DF59007F431A /* mipsel-softmmu.mak */,
+				0A0FD5FB1A38DF59007F431A /* mipsn32-linux-user.mak */,
+				0A0FD5FC1A38DF59007F431A /* mipsn32el-linux-user.mak */,
+				0A0FD5FD1A38DF59007F431A /* moxie-softmmu.mak */,
+				0A0FD5FE1A38DF59007F431A /* or32-linux-user.mak */,
+				0A0FD5FF1A38DF59007F431A /* or32-softmmu.mak */,
+				0A0FD6001A38DF59007F431A /* pci.mak */,
+				0A0FD6011A38DF59007F431A /* ppc-linux-user.mak */,
+				0A0FD6021A38DF59007F431A /* ppc-softmmu.mak */,
+				0A0FD6031A38DF59007F431A /* ppc64-linux-user.mak */,
+				0A0FD6041A38DF59007F431A /* ppc64-softmmu.mak */,
+				0A0FD6051A38DF59007F431A /* ppc64abi32-linux-user.mak */,
+				0A0FD6061A38DF59007F431A /* ppc64le-linux-user.mak */,
+				0A0FD6071A38DF59007F431A /* ppcemb-softmmu.mak */,
+				0A0FD6081A38DF59007F431A /* s390x-linux-user.mak */,
+				0A0FD6091A38DF5A007F431A /* s390x-softmmu.mak */,
+				0A0FD60A1A38DF5A007F431A /* sh4-linux-user.mak */,
+				0A0FD60B1A38DF5A007F431A /* sh4-softmmu.mak */,
+				0A0FD60C1A38DF5A007F431A /* sh4eb-linux-user.mak */,
+				0A0FD60D1A38DF5A007F431A /* sh4eb-softmmu.mak */,
+				0A0FD60E1A38DF5A007F431A /* sound.mak */,
+				0A0FD60F1A38DF5A007F431A /* sparc-bsd-user.mak */,
+				0A0FD6101A38DF5A007F431A /* sparc-linux-user.mak */,
+				0A0FD6111A38DF5A007F431A /* sparc-softmmu.mak */,
+				0A0FD6121A38DF5A007F431A /* sparc32plus-linux-user.mak */,
+				0A0FD6131A38DF5A007F431A /* sparc64-bsd-user.mak */,
+				0A0FD6141A38DF5A007F431A /* sparc64-linux-user.mak */,
+				0A0FD6151A38DF5A007F431A /* sparc64-softmmu.mak */,
+				0A0FD6161A38DF5A007F431A /* unicore32-linux-user.mak */,
+				0A0FD6171A38DF5A007F431A /* unicore32-softmmu.mak */,
+				0A0FD6181A38DF5A007F431A /* usb.mak */,
+				0A0FD6191A38DF5A007F431A /* x86_64-bsd-user.mak */,
+				0A0FD61A1A38DF5A007F431A /* x86_64-linux-user.mak */,
+				0A0FD61B1A38DF5A007F431A /* x86_64-softmmu.mak */,
+				0A0FD61C1A38DF5A007F431A /* xtensa-softmmu.mak */,
+				0A0FD61D1A38DF5A007F431A /* xtensaeb-softmmu.mak */,
+			);
+			name = "default-configs";
+			path = "../default-configs";
+			sourceTree = "<group>";
+		};
 		0AB8BA591A13D90800092455 = {
 			isa = PBXGroup;
 			children = (
@@ -7941,6 +8076,7 @@
 				0A06897A1A1C2415009BB34B /* cpu-exec.c */,
 				0A06897B1A1C2415009BB34B /* cpus.c */,
 				0A06897C1A1C2415009BB34B /* cputlb.c */,
+				0A0FD5DF1A38DF59007F431A /* default-configs */,
 				0A0689BC1A1C2415009BB34B /* device_tree.c */,
 				0A0689BD1A1C2415009BB34B /* device-hotplug.c */,
 				0A0689BE1A1C2415009BB34B /* disas */,
@@ -8350,6 +8486,7 @@
 				0A06D0A21A1C2451009BB34B /* qxl-render.c in Sources */,
 				0A06D2311A1C2452009BB34B /* xen_backend.c in Sources */,
 				0A06D0441A1C2451009BB34B /* hda-codec.c in Sources */,
+				0A0FD6211A390F1F007F431A /* pebble_snowy_display.c in Sources */,
 				0A06D22E1A1C2452009BB34B /* wdt_i6300esb.c in Sources */,
 				0A06D0551A1C2451009BB34B /* nvme.c in Sources */,
 				0A06D2E41A1C2452009BB34B /* channel-win32.c in Sources */,

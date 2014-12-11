@@ -26,6 +26,14 @@
 #include "hw/sysbus.h"
 #include "hw/arm/stm32.h"
 
+#ifdef DEBUG_STM32_GPIO
+#define DPRINTF(fmt, ...)                                       \
+    do { printf("STM32_UART: " fmt , ## __VA_ARGS__); } while (0)
+#else
+#define DPRINTF(fmt, ...)
+#endif
+
+
 #define R_GPIO_MODER   (0x00 / 4)
 #define R_GPIO_OTYPER  (0x04 / 4)
 #define R_GPIO_OSPEEDR (0x08 / 4)
@@ -73,7 +81,8 @@ f2xx_update_odr(stm32f2xx_gpio *s, uint16_t val)
     {
         if ((changed & 1<<i) == 0)
             continue;
- 
+
+        DPRINTF("%s changing bit %i to %d\n", s->busdev.parent_obj.id, i, !!(val & 1<<i));
         //printf("gpio %u pin %u = %c\n", s->periph, i, val & 1<<i ? 'H' : 'l');
         qemu_set_irq(s->pin[i], !!(val & 1<<i));
     }

@@ -41,6 +41,18 @@ static const char *stm32f4xx_periph_name_arr[] = {
     ENUM_STRING(STM32_SPI2),
     ENUM_STRING(STM32_SPI3),
 
+    ENUM_STRING(STM32_GPIOA),
+    ENUM_STRING(STM32_GPIOB),
+    ENUM_STRING(STM32_GPIOC),
+    ENUM_STRING(STM32_GPIOD),
+    ENUM_STRING(STM32_GPIOE),
+    ENUM_STRING(STM32_GPIOF),
+    ENUM_STRING(STM32_GPIOG),
+    ENUM_STRING(STM32_GPIOH),
+    ENUM_STRING(STM32_GPIOI),
+    ENUM_STRING(STM32_GPIOJ),
+    ENUM_STRING(STM32_GPIOK),
+
     ENUM_STRING(STM32_PERIPH_COUNT)
 };
 
@@ -119,6 +131,7 @@ void stm32f4xx_init(
     for(i = 0; i < STM32F4XX_GPIO_COUNT; i++) {
         stm32_periph_t periph = STM32_GPIOA + i;
         gpio_dev[i] = qdev_create(NULL, "stm32f2xx_gpio");
+        gpio_dev[i]->id = stm32f4xx_periph_name_arr[periph];
         qdev_prop_set_int32(gpio_dev[i], "periph", periph);
         // qdev_prop_set_ptr(gpio_dev[i], "stm32_rcc", rcc_dev);
         stm32_init_periph(gpio_dev[i], periph, 0x40020000 + (i * 0x400), NULL /*irq*/);
@@ -205,6 +218,9 @@ void stm32f4xx_init(
         {0x40013000, STM32_SPI1_IRQ},
         {0x40003800, STM32_SPI2_IRQ},
         {0x40003CD0, STM32_SPI3_IRQ},
+        {0x40013400, STM32_SPI4_IRQ},
+        {0x40015000, STM32_SPI5_IRQ},
+        {0x40015400, STM32_SPI6_IRQ},
     };
     for (i = 0; i < ARRAY_LENGTH(spi_desc); ++i) {
         assert(i < STM32F4XX_SPI_COUNT);
@@ -214,7 +230,6 @@ void stm32f4xx_init(
         qdev_prop_set_int32(stm->spi_dev[i], "periph", periph);
         stm32_init_periph(stm->spi_dev[i], periph, spi_desc[i].addr,
           pic[spi_desc[i].irq_idx]);
-
     }
 
 
