@@ -199,10 +199,10 @@ static void pebble_32f4_init(MachineState *machine, struct button_map *map) {
 
     /* Storage flash (NOR-flash on Snowy) */
     const uint32_t flash_size_bytes = 16 * 1024 * 1024;  /* 16 MBytes */
-    const uint32_t flash_sector_size_bytes = 128 * 1024; /* 128 KBytes */
+    const uint32_t flash_sector_size_bytes = 32 * 1024;  /* 32 KBytes */
     DriveInfo *dinfo = drive_get(IF_PFLASH, 0, 1);   /* Use the 2nd -pflash drive */
     if (dinfo) {
-        pflash_cfi02_register(
+        pflash_jedec_424_register(
             0x60000000,               /* flash_base*/
             NULL,                     /* qdev, not used */
             "mx29vs128fb",            /* name */
@@ -210,11 +210,8 @@ static void pebble_32f4_init(MachineState *machine, struct button_map *map) {
             dinfo->bdrv,              /* driver state */
             flash_sector_size_bytes,  /* sector size */
             flash_size_bytes / flash_sector_size_bytes, /* number of sectors */
-            1,                        /* number of mappings */
             2,                        /* width in bytes */
             0x00c2, 0x007e, 0x0065, 0x0001, /* id: 0, 1, 2, 3 */
-            0x555,                    /* unlock address 0 */
-            0x2aa,                    /* unlock address 1 */
             0                         /* big endian */
         );
     }

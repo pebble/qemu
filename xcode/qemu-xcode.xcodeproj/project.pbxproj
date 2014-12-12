@@ -1277,6 +1277,7 @@
 		0A06ED021A1C2466009BB34B /* xen-mapcache.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A06C9BD1A1C2450009BB34B /* xen-mapcache.c */; };
 		0A0FD5D61A3658E6007F431A /* stm32f4xx.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A0FD5D41A3658E6007F431A /* stm32f4xx.c */; };
 		0A0FD6211A390F1F007F431A /* pebble_snowy_display.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A0FD6201A390F1F007F431A /* pebble_snowy_display.c */; };
+		0A16AF711A3A5B8E0002272F /* pflash_jedec_424.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A16AF701A3A5B8E0002272F /* pflash_jedec_424.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -3834,6 +3835,7 @@
 		0A0FD61C1A38DF5A007F431A /* xtensa-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "xtensa-softmmu.mak"; sourceTree = "<group>"; };
 		0A0FD61D1A38DF5A007F431A /* xtensaeb-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "xtensaeb-softmmu.mak"; sourceTree = "<group>"; };
 		0A0FD6201A390F1F007F431A /* pebble_snowy_display.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pebble_snowy_display.c; sourceTree = "<group>"; };
+		0A16AF701A3A5B8E0002272F /* pflash_jedec_424.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pflash_jedec_424.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -4676,6 +4678,7 @@
 				0A068B781A1C2416009BB34B /* onenand.c */,
 				0A068B791A1C2416009BB34B /* pflash_cfi01.c */,
 				0A068B7A1A1C2416009BB34B /* pflash_cfi02.c */,
+				0A16AF701A3A5B8E0002272F /* pflash_jedec_424.c */,
 				0A068B7B1A1C2416009BB34B /* tc58128.c */,
 				0A068B7C1A1C2416009BB34B /* virtio-blk.c */,
 				0A068B7D1A1C2416009BB34B /* xen_blkif.h */,
@@ -8634,6 +8637,7 @@
 				0A06E8F21A1C2463009BB34B /* translate.c in Sources */,
 				0A06CFAC1A1C2451009BB34B /* add_subnode_with_nops.c in Sources */,
 				0A06CFC91A1C2451009BB34B /* notfound.c in Sources */,
+				0A16AF711A3A5B8E0002272F /* pflash_jedec_424.c in Sources */,
 				0A06D21F1A1C2452009BB34B /* host-stub.c in Sources */,
 				0A06D21B1A1C2452009BB34B /* hcd-uhci.c in Sources */,
 				0A06D0C41A1C2451009BB34B /* bitbang_i2c.c in Sources */,

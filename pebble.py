@@ -12,8 +12,10 @@ if __name__ == '__main__':
             default='bb2', help="Which machine to emulate ")
     parser.add_argument('-S', '--start_in_monitor', action='store_true',
             help="Start in the monitor. Enter 'cont' in the monitor to start emulation")
-    parser.add_argument('-d', '--debug', action='store_true',
-            help="Turn on extensive debug logging")
+    parser.add_argument('-d', '--debug',
+            help=("Turn on extensive debug logging. Available ones are:"
+                  "out_asm,in_asm,op,op_opt,int,exec,cpu,pcall,cpu_reset,ioport,unimp,"
+                  "guest_errors. Enter one or more comma separated."))
     args = parser.parse_args()
 
 
@@ -39,8 +41,7 @@ if __name__ == '__main__':
     if args.start_in_monitor:
         cmd_line += "-S "
     if args.debug:
-        cmd_line += ("-d out_asm,in_asm,op,op_opt,int,exec,cpu,pcall,cpu_reset,ioport,unimp,"
-                     "guest_errors")
+        cmd_line += ("-d " + args.debug)
 
     print "Executing command line: \n   ", cmd_line
     os.system(cmd_line)
