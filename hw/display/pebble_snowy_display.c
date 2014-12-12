@@ -58,9 +58,14 @@
 #include "ui/pixel_ops.h"
 #include "hw/ssi.h"
 
+//#define DEBUG_PEBBLE_SNOWY_DISPLAY    // DEBUG!!
+
 #ifdef DEBUG_PEBBLE_SNOWY_DISPLAY
+// NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
 #define DPRINTF(fmt, ...)                                       \
-    do { fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: " fmt , ## __VA_ARGS__); } while (0)
+    do { printf("PEBBLE_SNOWY_DISPLAY: " fmt , ## __VA_ARGS__); \
+         usleep(1000); \
+    } while (0)
 #else
 #define DPRINTF(fmt, ...)
 #endif
@@ -95,17 +100,37 @@ typedef enum {
 } PSDisplayState;
 
 
-/* Commands we accept in PSDISPLAYSTATE_ACCEPTING_CMD state */
+// Which command set the FPGA is implementing
 typedef enum {
-    PSDISPLAYCMD_NULL = 0,
-    PSDISPLAYCMD_SET_PARAMETER = 1,
-    PSDISPLAYCMD_DISPLAY_OFF = 2,
-    PSDISPLAYCMD_DISPLAY_ON = 3,
-    PSDISPLAYCMD_DRAW_SCENE = 4
-} PDisplayCmd;
+    PSDISPLAY_CMD_SET_UNKNOWN,
+    PSDISPLAY_CMD_SET_0,   // Boot ROM built on Dec 10, 2014
+    PSDISPLAY_CMD_SET_1,   // FW ROM built on Sep 12, 2014
+} PDisplayCmdSet;
 
 
-// Scene numbers put into cmd_parameter and used by the PSDISPLAYCMD_DRAW_SCENE command.
+/* Commands for PSDISPLAY_CMD_SET_0. We accept these while in the 
+ * PSDISPLAYSTATE_ACCEPTING_CMD state. These are implemented in the first boot
+ * ROM built Dec 2014 */
+typedef enum {
+    PSDISPLAYCMD0_NULL = 0,
+    PSDISPLAYCMD0_SET_PARAMETER = 1,
+    PSDISPLAYCMD0_DISPLAY_OFF = 2,
+    PSDISPLAYCMD0_DISPLAY_ON = 3,
+    PSDISPLAYCMD0_DRAW_SCENE = 4
+} PDisplayCmd0;
+
+
+/* Commands for PSDISPLAY_CMD_SET_1. We accept these while in the
+ * PSDISPLAYSTATE_ACCEPTING_CMD state. These are implemented in the early firmware
+ * ROM buit Sep 2014 */
+typedef enum {
+    PSDISPLAYCMD1_FRAME_BEGIN = 0,
+    PSDISPLAYCMD1_FRAME_DATA = 1,
+    PSDISPLAYCMD1_FRAME_END = 2
+} PDisplayCmd1;
+
+
+// Scene numbers put into cmd_parameter and used by the PSDISPLAYCMD0_DRAW_SCENE command.
 typedef enum {
     PSDISPLAYSCENE_BLACK = 0,
     PSDISPLAYSCENE_SPLASH = 1,    // splash screen
@@ -122,6 +147,9 @@ typedef struct {
         void *vdone_output;
         qemu_irq done_output;
     };
+
+    // This output line gets asserted (low) when we are done processing a drawing command.
+    // It is generally to an IRQ
     union {
         void *vintn_output;
         qemu_irq intn_output;
@@ -135,7 +163,7 @@ typedef struct {
 
     /* State variables */
     PSDisplayState  state;
-    PDisplayCmd     cmd;
+    uint8_t         cmd;
     uint32_t        parameter;
     uint32_t        parameter_byte_offset;
     PDisplayScene   scene;
@@ -143,6 +171,14 @@ typedef struct {
     bool      sclk_value;
     bool      cs_value;                 // low means asserted
     uint32_t  sclk_count_with_cs_high;
+
+    /* We capture the first 256 bytes of the programming and inspect it to try and figure 
+     * out which command set to expect */
+    uint8_t       prog_header[256];
+    uint32_t      prog_byte_offset;
+
+    // Which command set we are emulating
+    PDisplayCmdSet cmd_set;
 
 } PSDisplayGlobals;
 
@@ -181,41 +217,117 @@ static void ps_display_draw_bitmap(PSDisplayGlobals *s, uint8_t *bits,
 }
 
 
+/* -----------------------------------------------------------------------------
+ Scan through the first part of the programming data and try and determine which
+ command set the FPGA is implementing. Here is an example of the data comprising
+ the programming for PSDISPLAY_CMD_SET_BOOT_0:
+
+  39F0:       FF 00 4C 61 74 74 69 63 65 00 69 43 45 63      pG..Lattice.iCEc
+  3A00: 75 62 65 32 20 32 30 31 34 2E 30 38 2E 32 36 37      ube2 2014.08.267
+  3A10: 32 33 00 50 61 72 74 3A 20 69 43 45 34 30 4C 50      23.Part: iCE40LP
+  3A20: 31 4B 2D 43 4D 33 36 00 44 61 74 65 3A 20 44 65      1K-CM36.Date: De
+  3A30: 63 20 31 30 20 32 30 31 34 20 30 38 3A 33 30 3A      c 10 2014 08:30:
+  3A40: 00 FF 31 38 00 7E AA 99 7E 51 00 01 05 92 00 20      ..18.~..~Q.....
+  3A50: 62 01 4B 72 00 90 82 00 00 11 00 01 01 00 00 00      b.Kr...........  */
+static void ps_display_determine_command_set(PSDisplayGlobals *s) {
+    // Table of programming header dates and command sets
+    typedef struct {
+        const char *date_str;
+        PDisplayCmdSet cmd_set;
+    } CommandSetInfo;
+    static const CommandSetInfo cmd_sets[] = {
+      {"Date: Dec 10 2014 08:30", PSDISPLAY_CMD_SET_0},
+      {"Date: Sep 12 2014 16:56:21", PSDISPLAY_CMD_SET_1},
+    };
+
+
+    // Make sure prog_header is null terminated
+    if (s->prog_byte_offset >= sizeof(s->prog_header)) {
+        s->prog_byte_offset = sizeof(s->prog_header) - 1;
+    }
+    s->prog_header[s->prog_byte_offset] = 0;
+
+    // Default one to use
+    s->cmd_set = PSDISPLAY_CMD_SET_1;
+
+    // Skip first two bytes which contain 0xFF 00
+    for (int i=2; i<s->prog_byte_offset; i++) {
+        const char *str_p = (const char *)s->prog_header + i;
+
+        DPRINTF("%s: found '%s' string in programming header\n", __func__, str_p);
+
+        // Look for a string that starts with "Date:"
+        if (!strncmp(str_p, "Date:", 5)) {
+            int n_cmd_sets = sizeof(cmd_sets) / sizeof(cmd_sets[0]);
+            for (int n=0; n<n_cmd_sets; n++) {
+                if (!strncmp(str_p, cmd_sets[n].date_str, strlen(cmd_sets[n].date_str))) {
+                    s->cmd_set = cmd_sets[n].cmd_set;
+                    DPRINTF("%s: determined command set as %d\n", __func__, s->cmd_set);
+                    return;
+                }
+            }
+
+            // We didn't find the command set, bail
+            fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unknown FPGA programming with a date"
+                    " stamp of '%s'. Defaulting to command set %d\n", str_p, s->cmd_set);
+            return;
+        } else {
+            // Skip this string
+            i += strlen(str_p);
+        }
+
+    }
+
+    // Couldn't find the "Date:" string
+    fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Error parsing FPGA programming data to"
+            " determine command set. Defaulting to command set %d\n", s->cmd_set);
+    return;
+}
+
+
 // -----------------------------------------------------------------------------
 static void
-ps_display_reset_state(PSDisplayGlobals *s) {
+ps_display_reset_state(PSDisplayGlobals *s, bool assert_done) {
+
+    // If we are resetting because we done with the previous command, assert done
+    if (assert_done) {
+        DPRINTF("Asserting done interrupt\n");
+        qemu_set_irq(s->intn_output, false);
+    }
+
     DPRINTF("Resetting state to accept command\n");
     s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
     s->parameter_byte_offset = 0;
 }
 
-// -----------------------------------------------------------------------------
-static void
-ps_display_execute_current_cmd(PSDisplayGlobals *s) {
-    PDisplayScene scene;
 
+// -----------------------------------------------------------------------------
+// Implements command PSDISPLAY_CMD_SET_0, used in the first boot ROM, built Dec 2014
+static void
+ps_display_execute_current_cmd_set0(PSDisplayGlobals *s) {
     switch (s->cmd) {
-    case PSDISPLAYCMD_NULL:
+    case PSDISPLAYCMD0_NULL:
         DPRINTF("Executing command: NULL\n");
+        ps_display_reset_state(s, true /*assert_done*/);
         break;
 
-    case PSDISPLAYCMD_SET_PARAMETER:
+    case PSDISPLAYCMD0_SET_PARAMETER:
         DPRINTF("Executing command: SET_PARAMETER\n");
         s->state = PSDISPLAYSTATE_ACCEPTING_PARAM;
         s->parameter_byte_offset = 0;
         break;
 
-    case PSDISPLAYCMD_DISPLAY_OFF:
+    case PSDISPLAYCMD0_DISPLAY_OFF:
         DPRINTF("Executing command: DISPLAY_OFF\n");
-        ps_display_reset_state(s);
+        ps_display_reset_state(s, true /*assert_done*/);
         break;
 
-    case PSDISPLAYCMD_DISPLAY_ON:
+    case PSDISPLAYCMD0_DISPLAY_ON:
         DPRINTF("Executing command: DISPLAY_ON\n");
-        ps_display_reset_state(s);
+        ps_display_reset_state(s, true /*assert_done*/);
         break;
 
-    case PSDISPLAYCMD_DRAW_SCENE:
+    case PSDISPLAYCMD0_DRAW_SCENE:
         if (s->state == PSDISPLAYSTATE_ACCEPTING_CMD) {
             s->state = PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE;
         } else if (s->state == PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE) {
@@ -234,20 +346,51 @@ ps_display_execute_current_cmd(PSDisplayGlobals *s) {
                 memset(s->framebuffer, SNOWY_COLOR_BLUE, sizeof(s->framebuffer));
                 break;
             default:
-                fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported scene: %d\n", scene);
+                fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported scene: %d\n", s->scene);
                 break;
             }
-            ps_display_reset_state(s);
+            ps_display_reset_state(s, true /*assert_done*/);
             s->redraw = true;
         } else {
             fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Tried to execute draw scene in "
                       "wrong state: %d\n", s->state);
+            ps_display_reset_state(s, true /*assert_done*/);
         }
         break;
 
     default:
         fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported cmd: %d\n", s->cmd);
-        ps_display_reset_state(s);
+        ps_display_reset_state(s, true /*assert_done*/);
+        break;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Implements command set PSDISPLAY_CMD_SET_1, used in the development firmware, built Sep 2014
+static void
+ps_display_execute_current_cmd_set1(PSDisplayGlobals *s) {
+
+    switch (s->cmd) {
+    case PSDISPLAYCMD1_FRAME_BEGIN:
+        DPRINTF("Executing command: FRAME_BEGIN\n");
+        // Basically ignore this, wait for the FRAME_DATA command to be sent
+        break;
+
+    case PSDISPLAYCMD1_FRAME_DATA:
+        DPRINTF("Executing command: FRAME_DATA\n");
+        s->state = PSDISPLAYSTATE_ACCEPTING_LINENO;
+        break;
+
+    case PSDISPLAYCMD1_FRAME_END:
+        DPRINTF("Executing command: FRAME_END\n");
+        // Go back to accepting command. This will also assert the done interrupt.
+        s->redraw = true;
+        ps_display_reset_state(s, true /*assert_done*/);
+        break;
+
+    default:
+        fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported cmd: %d\n", s->cmd);
+        ps_display_reset_state(s, true /*assert_done*/);
         break;
     }
 }
@@ -273,13 +416,28 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
 
     switch(s->state) {
     case PSDISPLAYSTATE_PROGRAMMING:
-        /* Ignore programming bytes */
+        // Capture the start of the programming data
+        if (s->prog_byte_offset < sizeof(s->prog_header)) {
+            s->prog_header[s->prog_byte_offset++] = data_byte;
+        }
         break;
 
     case PSDISPLAYSTATE_ACCEPTING_CMD:
         s->cmd = data_byte;
-        DPRINTF("received command %d\n", s->cmd);
-        ps_display_execute_current_cmd(s);
+        DPRINTF("received command %d, deasserting done interrupt\n", s->cmd);
+
+        // Start of a command. Deassert done interrupt, it will get asserted again when
+        // ps_display_reset_state() is called at the end of the command
+        qemu_set_irq(s->intn_output, true);
+
+       if (s->cmd_set == PSDISPLAY_CMD_SET_0) {
+            ps_display_execute_current_cmd_set0(s);
+        } else if (s->cmd_set == PSDISPLAY_CMD_SET_1) {
+            ps_display_execute_current_cmd_set1(s);
+        } else {
+            fprintf(stderr, "Unimplemeneted command set\n");
+            abort();
+        }
         break;
 
     case PSDISPLAYSTATE_ACCEPTING_PARAM:
@@ -301,14 +459,14 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
         s->parameter_byte_offset++;
         if (s->parameter_byte_offset >= 4) {
             DPRINTF("assembled complete param value of %d\n", s->parameter);
-            ps_display_reset_state(s);
+            ps_display_reset_state(s, true /*assert_done*/);
         }
         break;
 
     case PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE:
         s->scene = data_byte;
         DPRINTF("received scene ID: %d\n", s->scene);
-        ps_display_execute_current_cmd(s);
+        ps_display_execute_current_cmd_set0(s);
         break;
 
     case PSDISPLAYSTATE_ACCEPTING_LINENO:
@@ -322,11 +480,11 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
         /* The column data is sent from the bottom up */
         s->row_index = SNOWY_NUM_ROWS + SNOWY_ROWS_SKIPPED_AT_BOTTOM - 1;
         s->state = PSDISPLAYSTATE_ACCEPTING_DATA;
-        DPRINTF("  new column no: %d\n", data);
+        //DPRINTF("  new column no: %d\n", data);
         break;
 
     case PSDISPLAYSTATE_ACCEPTING_DATA:
-        DPRINTF("  pixel value 0x%02X for row %d\n", data, s->row_index);
+        //DPRINTF("0x%02X, row %d\n", data, s->row_index);
         if (s->row_index >= SNOWY_NUM_ROWS) {
           /* If this row index is in the bottom padding area, ignore it */
           s->row_index--;
@@ -334,7 +492,6 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
           /* If this row index is in the viewable area, save to our frame buffer */
           s->framebuffer[s->row_index * SNOWY_BYTES_PER_ROW + s->col_index] = data;
           s->row_index--;
-          s->redraw = true;
         } else if (s->row_index > -SNOWY_ROWS_SKIPPED_AT_TOP) {
           /* If this row index is in the top padding area, ignore it */
           s->row_index--;
@@ -430,6 +587,12 @@ static int ps_display_set_cs(SSISlave *dev, bool value)
     DPRINTF("CS changed to %d\n", value);
     s->cs_value = value;
 
+    // When CS goes up (unasserted), reset our state
+    if (value && s->state != PSDISPLAYSTATE_PROGRAMMING) {
+        DPRINTF("Resetting state because CS was unasserted\n");
+        ps_display_reset_state(s, true /*assert_done*/);
+    }
+
     return 0;
 }
 
@@ -442,9 +605,15 @@ static void ps_display_set_reset_pin_cb(void *opaque, int n, int level)
 
     DPRINTF("RESET changed to %d\n", value);
     qemu_set_irq(s->done_output, false);
-    qemu_set_irq(s->intn_output, false);
+
+
+    // When reset is asserted, reset our state
     if (!value) {
+        // After a reset, we are not done. Deassert our interrupt (asserted low).
+        qemu_set_irq(s->intn_output, true);
         s->sclk_count_with_cs_high = 0;
+        s->state = PSDISPLAYSTATE_PROGRAMMING;
+        s->prog_byte_offset = 0;
     }
 }
 
@@ -469,7 +638,11 @@ static void ps_display_set_sclk_pin_cb(void *opaque, int n, int level)
             if (s->state == PSDISPLAYSTATE_PROGRAMMING) {
                 DPRINTF("Got %d sclocks, exiting programming mode\n",
                               s->sclk_count_with_cs_high);
-                s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
+                ps_display_reset_state(s, true);
+
+                // Try and figure out which command set the FPGA expects by parsing the
+                // programming data
+                ps_display_determine_command_set(s);
             }
         }
     }

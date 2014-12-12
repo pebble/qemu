@@ -51,7 +51,7 @@ do { \
     exit(1); \
 } while(0)
 
-#define PFLASH_DEBUG
+//#define PFLASH_DEBUG
 #ifdef PFLASH_DEBUG
 #define DPRINTF(fmt, ...)                                   \
 do {                                                        \

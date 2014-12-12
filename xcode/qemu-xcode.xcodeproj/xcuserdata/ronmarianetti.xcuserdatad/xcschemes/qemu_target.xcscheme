@@ -75,7 +75,7 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-S"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-d op,op_opt,int,pcall,cpu_reset,ioport,unimp,guest_errors"
