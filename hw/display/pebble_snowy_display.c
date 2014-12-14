@@ -58,8 +58,7 @@
 #include "ui/pixel_ops.h"
 #include "hw/ssi.h"
 
-//#define DEBUG_PEBBLE_SNOWY_DISPLAY    // DEBUG!!
-
+//#define DEBUG_PEBBLE_SNOWY_DISPLAY
 #ifdef DEBUG_PEBBLE_SNOWY_DISPLAY
 // NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
 #define DPRINTF(fmt, ...)                                       \
@@ -480,6 +479,9 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
         /* The column data is sent from the bottom up */
         s->row_index = SNOWY_NUM_ROWS + SNOWY_ROWS_SKIPPED_AT_BOTTOM - 1;
         s->state = PSDISPLAYSTATE_ACCEPTING_DATA;
+
+        // We are not done, deassert the interrupt
+        qemu_set_irq(s->intn_output, true);
         //DPRINTF("  new column no: %d\n", data);
         break;
 
@@ -498,6 +500,8 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
         } else {
           /* We just received the last byte in the line, change state */
           s->state = PSDISPLAYSTATE_ACCEPTING_LINENO;
+          // We are done with this line, assert the interrupt
+          qemu_set_irq(s->intn_output, false);
         }
         break;
     }
@@ -687,6 +691,9 @@ static int ps_display_init(SSISlave *dev)
 // ----------------------------------------------------------------------------- 
 static Property ps_display_init_properties[] = {
     DEFINE_PROP_PTR("done_output", PSDisplayGlobals, vdone_output),
+
+    // NOTE: Also used as a "busy" flag. If unasserted (high), the MPU asssumes the
+    //  display is busy.
     DEFINE_PROP_PTR("intn_output", PSDisplayGlobals, vintn_output),
     DEFINE_PROP_END_OF_LIST()
 };

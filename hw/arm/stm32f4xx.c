@@ -309,9 +309,24 @@ void stm32f4xx_init(
     
     DeviceState *dma1 = qdev_create(NULL, "f2xx_dma");
     stm32_init_periph(dma1, STM32_DMA1, 0x40026000, NULL);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 0, pic[STM32_DMA1_STREAM0_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 1, pic[STM32_DMA1_STREAM1_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 2, pic[STM32_DMA1_STREAM2_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 3, pic[STM32_DMA1_STREAM3_IRQ]);
     sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 4, pic[STM32_DMA1_STREAM4_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 5, pic[STM32_DMA1_STREAM5_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 6, pic[STM32_DMA1_STREAM6_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 7, pic[STM32_DMA1_STREAM7_IRQ]);
 
     DeviceState *dma2 = qdev_create(NULL, "f2xx_dma");
     stm32_init_periph(dma2, STM32_DMA2, 0x40026400, NULL);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 0, pic[STM32_DMA2_STREAM0_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 1, pic[STM32_DMA2_STREAM1_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 2, pic[STM32_DMA2_STREAM2_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 3, pic[STM32_DMA2_STREAM3_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 4, pic[STM32_DMA2_STREAM4_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 5, pic[STM32_DMA2_STREAM5_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 6, pic[STM32_DMA2_STREAM6_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 7, pic[STM32_DMA2_STREAM7_IRQ]);
 }
 
