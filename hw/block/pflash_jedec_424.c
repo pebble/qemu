@@ -53,9 +53,11 @@ do { \
 
 //#define PFLASH_DEBUG
 #ifdef PFLASH_DEBUG
+// NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
 #define DPRINTF(fmt, ...)                                   \
 do {                                                        \
-    fprintf(stderr, "PFLASH: " fmt , ## __VA_ARGS__);       \
+    printf("PFLASH: " fmt , ## __VA_ARGS__);                \
+    usleep(1000);                                           \
 } while (0)
 #else
 #define DPRINTF(fmt, ...) do { } while (0)
@@ -242,10 +244,9 @@ static uint32_t pflash_read (pflash_t *pfl, hwaddr offset,
 
     ret = -1;
 
-#if 0
-    DPRINTF("%s: reading offset " TARGET_FMT_plx " under cmd %02x width %d\n",
-            __func__, offset, pfl->cmd, width);
-#endif
+    //DPRINTF("%s: reading offset " TARGET_FMT_plx " under cmd %02x width %d\n",
+    //        __func__, offset, pfl->cmd, width);
+
     switch (pfl->cmd) {
     default:
         /* This should never happen : reset state & treat it as a read */
@@ -409,32 +410,36 @@ static inline void pflash_data_write(pflash_t *pfl, hwaddr offset,
     uint8_t *p = pfl->storage;
 
     DPRINTF("%s: block write offset " TARGET_FMT_plx
-            " value %x counter %016" PRIx64 "\n",
-            __func__, offset, value, pfl->counter);
+            " value %x width %d counter %016" PRIx64 "\n",
+            __func__, offset, value, width, pfl->counter);
+
+    // NOTE: Flash can only flip 1's to 0's, so use a &= operation to update the
+    // flash contents. This is critical because some drivers assume they can write
+    // 0xFF to preserve the original value.
     switch (width) {
     case 1:
-        p[offset] = value;
+        p[offset] &= value;
         break;
     case 2:
         if (be) {
-            p[offset] = value >> 8;
-            p[offset + 1] = value;
+            p[offset] &= value >> 8;
+            p[offset + 1] &= value;
         } else {
-            p[offset] = value;
-            p[offset + 1] = value >> 8;
+            p[offset] &= value;
+            p[offset + 1] &= value >> 8;
         }
         break;
     case 4:
         if (be) {
-            p[offset] = value >> 24;
-            p[offset + 1] = value >> 16;
-            p[offset + 2] = value >> 8;
-            p[offset + 3] = value;
+            p[offset] &= value >> 24;
+            p[offset + 1] &= value >> 16;
+            p[offset + 2] &= value >> 8;
+            p[offset + 3] &= value;
         } else {
-            p[offset] = value;
-            p[offset + 1] = value >> 8;
-            p[offset + 2] = value >> 16;
-            p[offset + 3] = value >> 24;
+            p[offset] &= value;
+            p[offset + 1] &= value >> 8;
+            p[offset + 2] &= value >> 16;
+            p[offset + 3] &= value >> 24;
         }
         break;
     }
@@ -451,8 +456,8 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
     uint32_t sector_offset = offset & (pfl->sector_len - 1);
     sector_offset = sector_offset >> (pfl->bank_width - 1);
 
-    DPRINTF("%s: writing sector offset %x value %x "
-            "wcycle %d\n", __func__, sector_offset, value,
+    DPRINTF("%s: writing sector offset 0x%x value 0x%x width %d"
+            "wcycle %d\n", __func__, sector_offset, value, width,
             pfl->wcycle);
 
     if (!pfl->wcycle) {
