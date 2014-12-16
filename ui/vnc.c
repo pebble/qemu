@@ -2858,11 +2858,11 @@ static void vnc_connect(VncDisplay *vd, int csock,
     if (!vs->websocket)
 #endif
     {
-        vnc_init_state(vs);
+        vnc_init_state(vs, NULL);
     }
 }
 
-void vnc_init_state(VncState *vs)
+void vnc_init_state(VncState *vs, char *pre_response)
 {
     vs->initialized = true;
     VncDisplay *vd = vs->vd;
@@ -2882,6 +2882,10 @@ void vnc_init_state(VncState *vs)
 
     graphic_hw_update(NULL);
 
+    if (pre_response) {
+        vnc_write(vs, pre_response, strlen(pre_response));
+        vnc_flush(vs);
+    }
     vnc_write(vs, "RFB 003.008\n", 12);
     vnc_flush(vs);
     vnc_read_when(vs, protocol_version, 12);
