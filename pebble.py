@@ -12,6 +12,10 @@ if __name__ == '__main__':
             default='bb2', help="Which machine to emulate ")
     parser.add_argument('-S', '--start_in_monitor', action='store_true',
             help="Start in the monitor. Enter 'cont' in the monitor to start emulation")
+    parser.add_argument('--vnc', action='store_true',
+            help="Use VNC on port 5900 for the display")
+    parser.add_argument('--vnc_ws', action='store_true',
+            help="Use VNC over websockets on port 4444 for the display")
     parser.add_argument('-d', '--debug',
             help=("Turn on extensive debug logging. Available ones are:"
                   "out_asm,in_asm,op,op_opt,int,exec,cpu,pcall,cpu_reset,ioport,unimp,"
@@ -42,6 +46,13 @@ if __name__ == '__main__':
         cmd_line += "-S "
     if args.debug:
         cmd_line += ("-d " + args.debug)
+
+    if (args.vnc and args.vnc_ws):
+        raise RuntimeError("--vnc and --vnc_ws can not both be specified");
+    if args.vnc:
+        cmd_line += "-vnc :0 "
+    if args.vnc_ws:
+        cmd_line += "-vnc :1,websocket=4444 "
 
     print "Executing command line: \n   ", cmd_line
     os.system(cmd_line)

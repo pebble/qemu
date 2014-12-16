@@ -38,6 +38,18 @@
 #define R_I2C_TRISE    (0x20 / 4)
 #define R_I2C_MAX      (0x24 / 4)
 
+//#define DEBUG_STM32F2XX_I2c
+#ifdef DEBUG_STM32F2XX_I2c
+// NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
+#define DPRINTF(fmt, ...)                                       \
+    do { printf("STM32F2XX_I2c: " fmt , ## __VA_ARGS__); \
+         usleep(1000); \
+    } while (0)
+#else
+#define DPRINTF(fmt, ...)
+#endif
+
+
 typedef struct f2xx_i2c {
     SysBusDevice busdev;
     MemoryRegion iomem;
@@ -52,11 +64,15 @@ typedef struct f2xx_i2c {
     uint16_t regs[R_I2C_MAX];
 } f2xx_i2c;
 
+
+
 static uint64_t
 f2xx_i2c_read(void *arg, hwaddr offset, unsigned size)
 {
     f2xx_i2c *s = arg;
     uint16_t r = UINT16_MAX;
+
+    DPRINTF("%s: offset: 0x%llx, size:%d", __func__, offset, size);
 
     if (!(size == 2 || size == 4 || (offset & 0x3) != 0)) {
         STM32_BAD_REG(offset, size);
@@ -72,6 +88,8 @@ f2xx_i2c_read(void *arg, hwaddr offset, unsigned size)
 //    case R_DR:
 //        s->regs[R_SR] &= ~R_SR_RXNE;
     }
+
+    DPRINTF("   %s: result: %d", __func__, r);
     return r;
 }
 
@@ -80,6 +98,8 @@ static void
 f2xx_i2c_write(void *arg, hwaddr offset, uint64_t data, unsigned size)
 {
     struct f2xx_i2c *s = (struct f2xx_i2c *)arg;
+
+    DPRINTF("%s: offset: 0x%llx, data: 0x%llx, size:%d", __func__, offset, data, size);
 
     if (size != 2 && size != 4) {
         STM32_BAD_REG(offset, size);
