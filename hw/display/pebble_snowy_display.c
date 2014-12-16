@@ -518,6 +518,14 @@ static PSDisplayPixelColor ps_display_get_rgb(uint8_t pixel_value) {
   c.red = ((pixel_value & 0xC0) >> 6) * 255 / 3;
   c.green = ((pixel_value & 0x30) >> 4) * 255 / 3;
   c.blue = ((pixel_value & 0x0C) >> 2) * 255 / 3;
+
+  // If the pixel is white, color adjust it to emulate the actual Pebble display
+  if (c.red == 0xff && c.green == 0xff && c.blue == 0xff) {
+      c.red = 0xaa;
+      c.green = 0xaa;
+      c.blue = 0xaa;
+  }
+
   return c;
 
   /*
