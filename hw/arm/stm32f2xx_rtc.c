@@ -22,22 +22,8 @@
 /*
  * QEMU stm32f2xx RTC emulation
  */
-#include <sys/time.h>
 #include "hw/sysbus.h"
 #include "qemu/timer.h"
-
-//#define DEBUG_STM32F2XX_RTC
-#ifdef DEBUG_STM32F2XX_RTC
-// NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
-#define DPRINTF(fmt, ...)                                       \
-    do { printf("DEBUG_STM32F2XX_RTC: " fmt , ## __VA_ARGS__); \
-         usleep(1000); \
-    } while (0)
-#else
-#define DPRINTF(fmt, ...)
-#endif
-
-
 
 #define R_RTC_TR     (0x00 / 4)
 #define R_RTC_DR     (0x04 / 4)
@@ -64,8 +50,6 @@
 #define R_RTC_BKPxR_LAST (0x9c / 4)
 #define R_RTC_MAX    (0xa0 / 4)
 
-#define R_RTC_CR_FMT_MASK (0x01 << 6)
-
 #define DEBUG_ALARM(x...)
 
 typedef struct f2xx_rtc {
@@ -73,89 +57,27 @@ typedef struct f2xx_rtc {
     MemoryRegion iomem;
     QEMUTimer *timer;
     qemu_irq irq[2];
-    // target_secs = host_secs + host_to_target_offset
-    uint32_t    host_to_target_offset;
     time_t t;
     uint32_t regs[R_RTC_MAX];
     int wp_count; /* Number of correct writes to WP reg */
 } f2xx_rtc;
 
-
-// Set the time and date registers in the RTC to the host's date and time, shifted by the
-// shift amount we determined that the firmware is using (target_to_host_diff_secs)
 static void
-f2xx_rtc_update_tdr_from_host(f2xx_rtc *s)
+f2xx_rtc_set_tdr(f2xx_rtc *s)
 {
-    struct tm now;
+    struct tm tm;
     uint8_t wday;
 
-    qemu_get_timedate(&now, s->host_to_target_offset);
-
-#ifdef DEBUG_STM32F2XX_RTC
-    char new_date_time[256];
-    strftime(new_date_time, sizeof(new_date_time), "%c", &now);
-    DPRINTF("%s: setting new date & time to: %s\n", __func__, new_date_time);
-#endif
-
-    wday = now.tm_wday == 0 ? now.tm_wday : 7;
-    s->regs[R_RTC_TR] = to_bcd(now.tm_sec) |
-                        to_bcd(now.tm_min) << 8 |
-                        to_bcd(now.tm_hour) << 16;
-    s->regs[R_RTC_DR] = to_bcd(now.tm_mday) |
-                        to_bcd(now.tm_mon + 1) << 8 |
+    localtime_r(&s->t, &tm);
+    wday = tm.tm_wday == 0 ? tm.tm_wday : 7;
+    s->regs[R_RTC_TR] = to_bcd(tm.tm_sec) |
+                        to_bcd(tm.tm_min) << 8 |
+                        to_bcd(tm.tm_hour) << 16;
+    s->regs[R_RTC_DR] = to_bcd(tm.tm_mday) |
+                        to_bcd(tm.tm_mon + 1) << 8 |
                         wday << 13 |
-                        to_bcd(now.tm_year % 100) << 16;
+                        to_bcd(tm.tm_year % 100) << 16;
 }
-
-
-// Fill in a tm struct from the contents of the time and date registers in the RTC
-static void
-f2xx_rtc_get_tm_struct(f2xx_rtc *s, struct tm *target_tm)
-{
-    memset(target_tm, 0, sizeof(*target_tm));
-
-    // Fill in the target_tm from the contents of the time register and date registers
-    uint32_t time_reg = s->regs[R_RTC_TR];
-
-    target_tm->tm_hour = from_bcd((time_reg & 0x003F0000) >> 16);
-    bool pm = (time_reg & 0x00800000) != 0;
-    if (pm && (s->regs[R_RTC_CR] & R_RTC_CR_FMT_MASK)) {
-        target_tm->tm_hour += 12;
-    }
-    target_tm->tm_min = from_bcd((time_reg & 0x00007F00) >> 8);
-    target_tm->tm_sec = from_bcd(time_reg & 0x0000007F);
-
-    uint32_t date_reg = s->regs[R_RTC_DR];
-    target_tm->tm_mday = from_bcd(date_reg & 0x3f);
-    target_tm->tm_mon = from_bcd((date_reg & 0x00001F00) >> 8) - 1;
-    target_tm->tm_year = from_bcd((date_reg & 0x00FF0000) >> 16) + 100;
-
-    // Have mktime fill in the remaining fields
-    mktime(target_tm);
-}
-
-
-
-// Update the host to target offset by comparing the time set on the target vs. the host's
-// current time
-static void
-f2xx_rtc_update_host_to_target_offset(f2xx_rtc *s)
-{
-    struct tm target_tm;
-    f2xx_rtc_get_tm_struct(s, &target_tm);
-
-    // Get the offset in seconds
-    s->host_to_target_offset = qemu_timedate_diff(&target_tm);
-
-#ifdef DEBUG_STM32F2XX_RTC
-    char new_date_time[256];
-    strftime(new_date_time, sizeof(new_date_time), "%c", &target_tm);
-    DPRINTF("%s: set target date/time to %s, host_to_target_offset now %d seconds\n",
-              __func__, new_date_time, s->host_to_target_offset);
-#endif
-}
-
-
 
 static uint32_t
 f2xx_period(f2xx_rtc *s)
@@ -221,6 +143,18 @@ f2xx_alarm_check(f2xx_rtc *s, int unit)
     qemu_set_irq(s->irq[unit], cr & 1<<(12 + unit) && isr & 1<<(8 + unit));
 }
 
+static void
+f2xx_timer(void *arg)
+{
+    f2xx_rtc *s = arg;
+
+    s->t++;
+    f2xx_rtc_set_tdr(s);
+    f2xx_alarm_check(s, 0);
+    f2xx_alarm_check(s, 1);
+    timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + f2xx_period(s));
+}
+
 static uint64_t
 f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
 {
@@ -232,35 +166,16 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
     if (addr >= R_RTC_MAX) {
         qemu_log_mask(LOG_GUEST_ERROR, "invalid read f2xx rtc register 0x%x\n",
           (unsigned int)addr << 2);
-        DPRINTF("  %s: result: 0\n", __func__);
         return 0;
     }
-
     uint32_t value = s->regs[addr];
     if (addr == R_RTC_ISR) {
         value |= R_RTC_ISR_RSF;
     }
-
-    if (addr == R_RTC_DR || addr == R_RTC_TR) {
-        f2xx_rtc_update_tdr_from_host(s);
-    }
-
     r = (value >> offset * 8) & ((1ull << (8 * size)) - 1);
-
-#ifdef DEBUG_STM32F2XX_RTC
-    // Debug printing
-    if (addr == R_RTC_TR || addr == R_RTC_DR) {
-        struct tm target_tm;
-        f2xx_rtc_get_tm_struct(s, &target_tm);
-
-        char date_time_str[256];
-        strftime(date_time_str, sizeof(date_time_str), "%c", &target_tm);
-        DPRINTF("%s: reading date/time: %s\n", __func__, date_time_str);
-    } else {
-        DPRINTF("%s: addr: 0x%llx, size: %d, value: 0x%x\n", __func__, addr, size, r);
-    }
-#endif
-
+//    if (addr < R_RTC_BKPxR) {
+//        printf("%s: reg 0x%x offset %x ret 0x%x\n", __func__, (int)addr << 2, offset, r);
+//    }
     return r;
 }
 
@@ -269,9 +184,6 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
 {
     f2xx_rtc *s = arg;
     int offset = addr & 0x3;
-    bool    compute_new_target_offset = false;
-
-    DPRINTF("%s: addr: 0x%llx, data: 0x%llx, size: %d\n", __func__, addr, data, size);
 
     addr >>= 2;
     if (addr >= R_RTC_MAX) {
@@ -321,8 +233,6 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     }
     switch(addr) {
     case R_RTC_TR:
-    case R_RTC_DR:
-        compute_new_target_offset = true;
         break;
     case R_RTC_CR:
         break;
@@ -355,26 +265,6 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     }
     s->regs[addr] = data;
 
-
-    // Do we need to recompute the host to target offset?
-    if (compute_new_target_offset) {
-        f2xx_rtc_update_host_to_target_offset(s);
-    }
-
-}
-
-// This timer runs periodically in order to trigger alarms. For updating the time, we
-// actually rely on calling f2xx_rtc_update_tdr_from_host() whenever the current time or
-// date register is read from the MPU. 
-static void
-f2xx_timer(void *arg)
-{
-    f2xx_rtc *s = arg;
-
-    f2xx_rtc_update_tdr_from_host(s);
-    f2xx_alarm_check(s, 0);
-    f2xx_alarm_check(s, 1);
-    timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + SCALE_MS * 1000);
 }
 
 static const MemoryRegionOps f2xx_rtc_ops = {
@@ -387,6 +277,15 @@ static const MemoryRegionOps f2xx_rtc_ops = {
     }
 };
 
+static void
+f2xx_rtc_set_from_host(f2xx_rtc *s)
+{
+    struct tm now;
+
+    qemu_get_timedate(&now, 0);
+    s->t = mktime(&now);
+    f2xx_rtc_set_tdr(s);
+}
 
 static int
 f2xx_rtc_init(SysBusDevice *dev)
@@ -397,15 +296,12 @@ f2xx_rtc_init(SysBusDevice *dev)
     sysbus_init_mmio(dev, &s->iomem);
     sysbus_init_irq(dev, &s->irq[0]);
     sysbus_init_irq(dev, &s->irq[1]);
-
-    s->host_to_target_offset = 0;
-    f2xx_rtc_update_tdr_from_host(s);
-
+    f2xx_rtc_set_from_host(s);
     s->regs[R_RTC_ISR] = R_RTC_ISR_RESET;
     s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
     s->regs[R_RTC_WUTR] = R_RTC_WUTR_RESET;
-    s->timer = timer_new_ns(QEMU_CLOCK_HOST, f2xx_timer, s);
-    timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + SCALE_MS * 1000);
+    s->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, f2xx_timer, s);
+    timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + f2xx_period(s));
     return 0;
 }
 
