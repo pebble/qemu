@@ -73,38 +73,76 @@ typedef struct f2xx_rtc {
     MemoryRegion iomem;
     QEMUTimer *timer;
     qemu_irq irq[2];
-    // target_secs = host_secs + host_to_target_offset
-    uint32_t    host_to_target_offset;
-    time_t t;
+    // target_us = host_us + host_to_target_offset_us
+    int64_t    host_to_target_offset_us;
     uint32_t regs[R_RTC_MAX];
     int wp_count; /* Number of correct writes to WP reg */
 } f2xx_rtc;
 
 
-// Set the time and date registers in the RTC to the host's date and time, shifted by the
-// shift amount we determined that the firmware is using (target_to_host_diff_secs)
-static void
-f2xx_rtc_update_tdr_from_host(f2xx_rtc *s)
+static uint64_t
+f2xx_period(f2xx_rtc *s)
 {
-    struct tm now;
+    uint32_t prer = s->regs[R_RTC_PRER];
+    unsigned int prescale;
+
+    prescale = (((prer >> R_RTC_PRER_PREDIV_A_SHIFT) & R_RTC_PRER_PREDIV_A_MASK) + 1) *
+               (((prer >> R_RTC_PRER_PREDIV_S_SHIFT) & R_RTC_PRER_PREDIV_S_MASK) + 1);
+    uint64_t result = 1000000000LL * prescale / 32768;
+
+    //DPRINTF("%s: period = %lldns\n", __func__, result);
+    return result;
+}
+
+
+static void
+f2xx_rtc_set_tdr(f2xx_rtc *s, struct tm *tm)
+{
     uint8_t wday;
 
-    qemu_get_timedate(&now, s->host_to_target_offset);
+    wday = tm->tm_wday == 0 ? tm->tm_wday : 7;
+    s->regs[R_RTC_TR] = to_bcd(tm->tm_sec) |
+                        to_bcd(tm->tm_min) << 8 |
+                        to_bcd(tm->tm_hour) << 16;
+    s->regs[R_RTC_DR] = to_bcd(tm->tm_mday) |
+                        to_bcd(tm->tm_mon + 1) << 8 |
+                        wday << 13 |
+                        to_bcd(tm->tm_year % 100) << 16;
+}
+
+
+// Set the time and date registers in the RTC from the host's date and time, shifted by the
+// shift amount we determined that the firmware is using (host_to_target_offset).
+// The rtc_period_ns passed in is the number of nanoseconds in host time that corresponds to 1
+// "tick" (i.e. a second increment in the RTC register). Usually, you would expect this to
+// be 1e9, but on Pebble plastic for example, the firmware sets up the RTC so that the
+// seconds increment 1024 times/sec.
+static void
+f2xx_rtc_update_tdr_from_host(f2xx_rtc *s, uint64_t rtc_period_ns)
+{
+    struct tm now;
+
+    // Get the host time in microseconds
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int64_t host_time_us = tv.tv_sec * 1000000LL + (tv.tv_usec);
+
+    // Compute the target time by adding the offset
+    int64_t target_time_us = host_time_us + s->host_to_target_offset_us;
+
+    // Convert to target ticks according period set in the RTC
+    time_t target_time_sec = (target_time_us * 1000) / rtc_period_ns;
+    
+    // Convert to date, hour, min, sec components
+    gmtime_r(&target_time_sec, &now);
+
 
 #ifdef DEBUG_STM32F2XX_RTC
     char new_date_time[256];
     strftime(new_date_time, sizeof(new_date_time), "%c", &now);
-    DPRINTF("%s: setting new date & time to: %s\n", __func__, new_date_time);
+    //DPRINTF("%s: setting new date & time to: %s\n", __func__, new_date_time);
 #endif
-
-    wday = now.tm_wday == 0 ? now.tm_wday : 7;
-    s->regs[R_RTC_TR] = to_bcd(now.tm_sec) |
-                        to_bcd(now.tm_min) << 8 |
-                        to_bcd(now.tm_hour) << 16;
-    s->regs[R_RTC_DR] = to_bcd(now.tm_mday) |
-                        to_bcd(now.tm_mon + 1) << 8 |
-                        wday << 13 |
-                        to_bcd(now.tm_year % 100) << 16;
+    f2xx_rtc_set_tdr(s, &now);
 }
 
 
@@ -139,33 +177,31 @@ f2xx_rtc_get_tm_struct(f2xx_rtc *s, struct tm *target_tm)
 // Update the host to target offset by comparing the time set on the target vs. the host's
 // current time
 static void
-f2xx_rtc_update_host_to_target_offset(f2xx_rtc *s)
+f2xx_rtc_update_host_to_target_offset(f2xx_rtc *s, int64_t period_ns)
 {
     struct tm target_tm;
-    f2xx_rtc_get_tm_struct(s, &target_tm);
 
-    // Get the offset in seconds
-    s->host_to_target_offset = qemu_timedate_diff(&target_tm);
+    // Get the target ticks
+    f2xx_rtc_get_tm_struct(s, &target_tm);
+    time_t target_time_ticks = mktimegm(&target_tm);
+
+    // Compute target time in microseconds
+    int64_t target_time_us = target_time_ticks * period_ns / 1000;
+
+    // Get the host time in microseconds
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int64_t host_time_us = tv.tv_sec * 1000000LL + (tv.tv_usec);
+
+    // Get the host to target offset in micro seconds
+    s->host_to_target_offset_us = target_time_us - host_time_us;
 
 #ifdef DEBUG_STM32F2XX_RTC
     char new_date_time[256];
     strftime(new_date_time, sizeof(new_date_time), "%c", &target_tm);
-    DPRINTF("%s: set target date/time to %s, host_to_target_offset now %d seconds\n",
-              __func__, new_date_time, s->host_to_target_offset);
+    DPRINTF("%s: set target date/time to %s, host_to_target_offset now %lld us\n",
+              __func__, new_date_time, s->host_to_target_offset_us);
 #endif
-}
-
-
-
-static uint32_t
-f2xx_period(f2xx_rtc *s)
-{
-    uint32_t prer = s->regs[R_RTC_PRER];
-    unsigned int prescale;
-
-    prescale = (((prer >> R_RTC_PRER_PREDIV_A_SHIFT) & R_RTC_PRER_PREDIV_A_MASK) + 1) *
-               (((prer >> R_RTC_PRER_PREDIV_S_SHIFT) & R_RTC_PRER_PREDIV_S_MASK) + 1);
-    return 1000000000LL * prescale / 32768;
 }
 
 static bool
@@ -241,10 +277,6 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
         value |= R_RTC_ISR_RSF;
     }
 
-    if (addr == R_RTC_DR || addr == R_RTC_TR) {
-        f2xx_rtc_update_tdr_from_host(s);
-    }
-
     r = (value >> offset * 8) & ((1ull << (8 * size)) - 1);
 
 #ifdef DEBUG_STM32F2XX_RTC
@@ -255,9 +287,9 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
 
         char date_time_str[256];
         strftime(date_time_str, sizeof(date_time_str), "%c", &target_tm);
-        DPRINTF("%s: reading date/time: %s\n", __func__, date_time_str);
+        //DPRINTF("%s: reading date/time: %s\n", __func__, date_time_str);
     } else {
-        DPRINTF("%s: addr: 0x%llx, size: %d, value: 0x%x\n", __func__, addr, size, r);
+        //DPRINTF("%s: addr: 0x%llx, size: %d, value: 0x%x\n", __func__, addr, size, r);
     }
 #endif
 
@@ -358,10 +390,11 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
 
     // Do we need to recompute the host to target offset?
     if (compute_new_target_offset) {
-        f2xx_rtc_update_host_to_target_offset(s);
+        f2xx_rtc_update_host_to_target_offset(s, f2xx_period(s));
     }
 
 }
+
 
 // This timer runs periodically in order to trigger alarms. For updating the time, we
 // actually rely on calling f2xx_rtc_update_tdr_from_host() whenever the current time or
@@ -370,11 +403,14 @@ static void
 f2xx_timer(void *arg)
 {
     f2xx_rtc *s = arg;
-
-    f2xx_rtc_update_tdr_from_host(s);
+    uint64_t period_ns = f2xx_period(s);
+    
+    //DPRINTF("%s: executing, time_sec=%ld\n", __func__, s->time_sec);
+    
+    f2xx_rtc_update_tdr_from_host(s, period_ns);
     f2xx_alarm_check(s, 0);
     f2xx_alarm_check(s, 1);
-    timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + SCALE_MS * 1000);
+    timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + period_ns);
 }
 
 static const MemoryRegionOps f2xx_rtc_ops = {
@@ -387,7 +423,6 @@ static const MemoryRegionOps f2xx_rtc_ops = {
     }
 };
 
-
 static int
 f2xx_rtc_init(SysBusDevice *dev)
 {
@@ -398,14 +433,22 @@ f2xx_rtc_init(SysBusDevice *dev)
     sysbus_init_irq(dev, &s->irq[0]);
     sysbus_init_irq(dev, &s->irq[1]);
 
-    s->host_to_target_offset = 0;
-    f2xx_rtc_update_tdr_from_host(s);
-
     s->regs[R_RTC_ISR] = R_RTC_ISR_RESET;
     s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
     s->regs[R_RTC_WUTR] = R_RTC_WUTR_RESET;
+
+    uint32_t period_ns = f2xx_period(s);
+    DPRINTF("%s: period: %d ns", __func__, period_ns);
+
+    // Init the time and date registers from the time on the host as the default
+    s->host_to_target_offset_us = 0;
+    struct tm now;
+    qemu_get_timedate(&now, 0);
+    f2xx_rtc_set_tdr(s, &now);
+    f2xx_rtc_update_host_to_target_offset(s, period_ns);
+
     s->timer = timer_new_ns(QEMU_CLOCK_HOST, f2xx_timer, s);
-    timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + SCALE_MS * 1000);
+    timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + period_ns);
     return 0;
 }
 
