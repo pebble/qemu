@@ -888,7 +888,7 @@ static uint64_t stm32_rcc_read(void *opaque, hwaddr offset,
         case 4:
             return stm32_rcc_readw(opaque, offset);
         default:
-            STM32_NOT_IMPL_REG(offset, size);
+            stm32_unimp("Unimplemented: RCC read from register at offset %lld", offset);
             return 0;
     }
 }
