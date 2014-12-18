@@ -530,7 +530,7 @@ static void stm32_uart_USART_DR_read(Stm32Uart *s, uint32_t *read_value)
         /* Put next character into the RDR if we have one */
         stm32_uart_fill_receive_data_register(s);
     } else {
-        hw_error("Read value from USART_DR while it was empty.");
+        printf("STM32_UART WARNING: Read value from USART_DR while it was empty.\n");
     }
 
     stm32_uart_update_irq(s);
