@@ -154,8 +154,16 @@ static void pebble_32f2_init(MachineState *machine, struct button_map *map) {
     SSIBus *spi;
     struct stm32f2xx stm;
 
-    stm32f2xx_init(512, 128, machine->kernel_filename, gpio, uart, 8000000,
-      32768, &stm);
+    // Note: allow for bigger flash images (4MByte) to aid in development and debugging
+    stm32f2xx_init(
+        4096 /*flash size KBytes*/,
+        128  /* ram size, KBytes */,
+        machine->kernel_filename,
+        gpio,
+        uart,
+        8000000, /* osc_freq*/
+        32768, /* osc2_freq*/
+        &stm);
 
     /* SPI flash */
     spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[0], "ssi");
@@ -192,7 +200,8 @@ static void pebble_32f4_init(MachineState *machine, struct button_map *map) {
     SSIBus *spi;
     struct stm32f4xx stm;
 
-    stm32f4xx_init(1024 /*flash_size in KBytes */, 256 /*ram_size on KBytes*/,
+    // Note: allow for bigger flash images (4MByte) to aid in development and debugging
+    stm32f4xx_init(4096 /*flash_size in KBytes */, 256 /*ram_size on KBytes*/,
         machine->kernel_filename, gpio, uart, 8000000 /*osc_freq*/,
         32768 /*osc2_freq*/, &stm);
 

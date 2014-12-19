@@ -100,7 +100,7 @@ static int f2xx_flash_init(SysBusDevice *dev)
     memset(flash->data, 0xff, flash->size);
     if (flash->bdrv) {
         int r;
-        r = bdrv_read(flash->bdrv, 0, flash->data, flash->size >> 9);
+        r = bdrv_read(flash->bdrv, 0, flash->data, bdrv_getlength(flash->bdrv)/BDRV_SECTOR_SIZE);
         if (r < 0) {
             vmstate_unregister_ram(&flash->mem, DEVICE(flash));
             memory_region_destroy(&flash->mem);
