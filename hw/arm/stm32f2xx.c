@@ -194,7 +194,12 @@ void stm32f2xx_init(
     /* RTC real time clock */
     DeviceState *rtc_dev = qdev_create(NULL, "f2xx_rtc");
     stm32_init_periph(rtc_dev, STM32_RTC, 0x40002800, NULL);
+    // Alarm A
     sysbus_connect_irq(SYS_BUS_DEVICE(rtc_dev), 0, qdev_get_gpio_in(exti_dev, 17));
+    // Alarm B
+    sysbus_connect_irq(SYS_BUS_DEVICE(rtc_dev), 1, qdev_get_gpio_in(exti_dev, 17));
+    // Wake up timer
+    sysbus_connect_irq(SYS_BUS_DEVICE(rtc_dev), 2, qdev_get_gpio_in(exti_dev, 22));
 
 #define dummy_dev(name, start, size) do {\
     DeviceState *dummy = qdev_create(NULL, "f2xx_dummy"); \
