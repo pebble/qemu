@@ -42,6 +42,7 @@
 #define R_RTC_TR     (0x00 / 4)
 #define R_RTC_DR     (0x04 / 4)
 #define R_RTC_CR     (0x08 / 4)
+#define R_RTC_CR_ALRAE_BIT 8
 #define R_RTC_CR_WUTE   0x00000400
 #define R_RTC_CR_WUTIE  0x00004000
 
@@ -62,6 +63,7 @@
 #define R_RTC_ALRMAR (0x1c / 4)
 #define R_RTC_ALRMBR (0x20 / 4)
 #define R_RTC_WPR    (0x24 / 4)
+#define R_RTC_SSR    (0x28 / 4)
 #define R_RTC_TSTR   (0x30 / 4)
 #define R_RTC_TSDR   (0x34 / 4)
 #define R_RTC_TAFCR  (0x40 / 4)
@@ -90,6 +92,10 @@ typedef struct f2xx_rtc {
     uint32_t      regs[R_RTC_MAX];
     int           wp_count; /* Number of correct writes to WP reg */
 } f2xx_rtc;
+
+
+// Update target date and time from the host
+static void f2xx_update_current_date_and_time(void *arg);
 
 
 // Compute the period for the clock (seconds increments) in nanoseconds
@@ -256,9 +262,37 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
         return 0;
     }
 
+    // If reading the time or date register, make sure they are brought up to date first
+    if (addr == R_RTC_TR || addr == R_RTC_DR) {
+        f2xx_update_current_date_and_time(s);
+    }
+
     uint32_t value = s->regs[addr];
     if (addr == R_RTC_ISR) {
         value |= R_RTC_ISR_RSF;
+    }
+
+    // If reading the sub-second register, determine what it should be from the current
+    //  host time
+    if (addr == R_RTC_SSR) {
+        // How many ns are in in a full cycle of the subsecond counter?
+        uint32_t prer = s->regs[R_RTC_PRER];;
+        uint32_t prer_s = (prer >> R_RTC_PRER_PREDIV_S_SHIFT) & R_RTC_PRER_PREDIV_S_MASK;
+
+        uint64_t full_cycle_us = f2xx_clock_period_ns(s) / 1000;
+
+        // What fraction of a full cycle are we in?
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        int64_t host_time_us = tv.tv_sec * 1000000LL + (tv.tv_usec);
+        host_time_us += s->host_to_target_offset_us;
+
+        int64_t host_mod = host_time_us % full_cycle_us;
+        double fract = (double)host_mod / full_cycle_us;
+
+        // Compute the prescaler value
+        value = prer_s - (fract * prer_s);
+        DPRINTF("%s: SSR value = %d\n", __func__, value);
     }
 
     r = (value >> offset * 8) & ((1ull << (8 * size)) - 1);
@@ -271,7 +305,7 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
 
         char date_time_str[256];
         strftime(date_time_str, sizeof(date_time_str), "%x %X", &target_tm);
-        //DPRINTF("%s: current date/time: %s\n", __func__, date_time_str);
+        DPRINTF("%s: current date/time: %s\n", __func__, date_time_str);
     } else {
         //DPRINTF("%s: addr: 0x%llx, size: %d, value: 0x%x\n", __func__, addr, size, r);
     }
@@ -445,11 +479,11 @@ f2xx_alarm_check(f2xx_rtc *s, int unit)
     uint32_t cr = s->regs[R_RTC_CR];
     uint32_t isr = s->regs[R_RTC_ISR];
 
-    if ((cr & 1<<(8 + unit)) == 0) {
+    if ((cr & 1<<(R_RTC_CR_ALRAE_BIT + unit)) == 0) {
         return; /* Not enabled. */
     }
 
-    if ((isr & 1<<(8 + unit)) == 0) {
+    if ((isr & 1<<(R_RTC_CR_ALRAE_BIT + unit)) == 0) {
         if (f2xx_alarm_match(s, s->regs[R_RTC_ALRMAR + unit])) {
             isr |= 1<<(8 + unit);
             s->regs[R_RTC_ISR] = isr;
@@ -459,10 +493,10 @@ f2xx_alarm_check(f2xx_rtc *s, int unit)
 	qemu_set_irq(s->irq[unit], cr & 1<<(12 + unit) && isr & 1<<(8 + unit));
 }
 
-
-// This timer runs on every tick (usually second)
+// This method updates the current time and date registers to match the current
+// host time. While it advances the target time, it checks for alarms that need to fire.
 static void
-f2xx_timer(void *arg)
+f2xx_update_current_date_and_time(void *arg)
 {
     f2xx_rtc *s = arg;
     uint64_t period_ns = f2xx_clock_period_ns(s);
@@ -493,8 +527,17 @@ f2xx_timer(void *arg)
         }
     }
 
-    // Reschedule timer in one more tick
+    // Reschedule tick timer to run one tick from now to check for alarms again
     timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + period_ns);
+}
+
+
+// This timer runs on every tick (usually second)
+static void
+f2xx_timer(void *arg)
+{
+    f2xx_rtc *s = arg;
+    f2xx_update_current_date_and_time(s);
 }
 
 
