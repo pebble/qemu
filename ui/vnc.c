@@ -2829,6 +2829,7 @@ static void vnc_connect(VncDisplay *vd, int csock,
     VNC_DEBUG("New client on socket %d\n", csock);
     update_displaychangelistener(&vd->dcl, VNC_REFRESH_INTERVAL_BASE);
     qemu_set_nonblock(vs->csock);
+    qemu_mutex_init(&vs->output_mutex);
 #ifdef CONFIG_VNC_WS
     if (websocket) {
         vs->websocket = 1;
@@ -2875,7 +2876,6 @@ void vnc_init_state(VncState *vs)
     vs->as.fmt = AUD_FMT_S16;
     vs->as.endianness = 0;
 
-    qemu_mutex_init(&vs->output_mutex);
     vs->bh = qemu_bh_new(vnc_jobs_bh, vs);
 
     QTAILQ_INSERT_HEAD(&vd->clients, vs, next);
