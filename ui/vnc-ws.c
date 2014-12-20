@@ -207,11 +207,14 @@ static void vncws_send_handshake_response(VncState *vs, const char* key)
     }
 
     response = g_strdup_printf(WS_HANDSHAKE, accept);
+    vnc_write(vs, response, strlen(response));
+    vnc_flush(vs);
 
-    vs->encode_ws = 1;
-    vnc_init_state(vs, response);
     g_free(accept);
     g_free(response);
+
+    vs->encode_ws = 1;
+    vnc_init_state(vs);
 }
 
 void vncws_process_handshake(VncState *vs, uint8_t *line, size_t size)

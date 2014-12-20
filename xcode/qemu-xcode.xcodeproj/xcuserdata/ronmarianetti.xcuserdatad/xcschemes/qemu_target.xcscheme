@@ -58,10 +58,6 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "-vnc :0"
-            isEnabled = "NO">
-         </CommandLineArgument>
-         <CommandLineArgument
             argument = "-vnc :1,websocket=4444"
             isEnabled = "NO">
          </CommandLineArgument>
