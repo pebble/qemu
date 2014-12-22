@@ -2829,6 +2829,7 @@ static void vnc_connect(VncDisplay *vd, int csock,
     VNC_DEBUG("New client on socket %d\n", csock);
     update_displaychangelistener(&vd->dcl, VNC_REFRESH_INTERVAL_BASE);
     qemu_set_nonblock(vs->csock);
+    qemu_mutex_init(&vs->output_mutex);
 #ifdef CONFIG_VNC_WS
     if (websocket) {
         vs->websocket = 1;
@@ -2858,11 +2859,11 @@ static void vnc_connect(VncDisplay *vd, int csock,
     if (!vs->websocket)
 #endif
     {
-        vnc_init_state(vs, NULL);
+        vnc_init_state(vs);
     }
 }
 
-void vnc_init_state(VncState *vs, char *pre_response)
+void vnc_init_state(VncState *vs)
 {
     vs->initialized = true;
     VncDisplay *vd = vs->vd;
@@ -2875,17 +2876,12 @@ void vnc_init_state(VncState *vs, char *pre_response)
     vs->as.fmt = AUD_FMT_S16;
     vs->as.endianness = 0;
 
-    qemu_mutex_init(&vs->output_mutex);
     vs->bh = qemu_bh_new(vnc_jobs_bh, vs);
 
     QTAILQ_INSERT_HEAD(&vd->clients, vs, next);
 
     graphic_hw_update(NULL);
 
-    if (pre_response) {
-        vnc_write(vs, pre_response, strlen(pre_response));
-        vnc_flush(vs);
-    }
     vnc_write(vs, "RFB 003.008\n", 12);
     vnc_flush(vs);
     vnc_read_when(vs, protocol_version, 12);
