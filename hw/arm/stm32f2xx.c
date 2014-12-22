@@ -201,6 +201,11 @@ void stm32f2xx_init(
     // Wake up timer
     sysbus_connect_irq(SYS_BUS_DEVICE(rtc_dev), 2, qdev_get_gpio_in(exti_dev, 22));
 
+    /* Power management */
+    DeviceState *pwr_dev = qdev_create(NULL, "f2xx_pwr");
+    stm32_init_periph(pwr_dev, STM32_RTC, 0x40007000, NULL);
+
+
 #define dummy_dev(name, start, size) do {\
     DeviceState *dummy = qdev_create(NULL, "f2xx_dummy"); \
     qdev_prop_set_ptr(dummy, "name", (void *)name); \
@@ -245,7 +250,7 @@ void stm32f2xx_init(
     dummy_dev("BxCAN1",    0x40006400, 0x400);
     dummy_dev("BxCAN2",    0x40006800, 0x400);
     dummy_dev("Reserved",  0x40006C00, 0x400);
-    // PWR probably common
+    // PWR
     dummy_dev("DAC1/DAC2", 0x40007400, 0x400);
     dummy_dev("Reserved",  0x40007800, 0x400);
     dummy_dev("Reserved",  0x40008000, 0x8000);

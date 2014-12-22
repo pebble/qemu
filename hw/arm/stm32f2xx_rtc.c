@@ -31,7 +31,7 @@
 // NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
 #define DPRINTF(fmt, ...)                                       \
     do { printf("DEBUG_STM32F2XX_RTC: " fmt , ## __VA_ARGS__); \
-         usleep(1000); \
+         usleep(100); \
     } while (0)
 #else
 #define DPRINTF(fmt, ...)
@@ -435,6 +435,7 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
             timer_mod(s->wu_timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + elapsed);
         } else {
             DPRINTF("%s: Cancelling WUT\n", __func__);
+            qemu_set_irq(s->wut_irq, 0);
             timer_del(s->wu_timer);
         }
     }

@@ -684,6 +684,8 @@ void armv7m_nvic_set_pending(void *opaque, int irq);
 int armv7m_nvic_acknowledge_irq(void *opaque);
 void armv7m_nvic_complete_irq(void *opaque, int irq);
 void armv7m_nvic_set_base_priority(void *opaque, unsigned int priority);
+bool armv7v_nvic_in_deep_sleep(void *opaque);
+void armv7m_nvic_cpu_executed_wfi(void *opaque);
 
 
 /* Interface for defining coprocessor registers.

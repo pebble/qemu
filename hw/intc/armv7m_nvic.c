@@ -29,7 +29,10 @@ typedef struct {
     MemoryRegion sysregmem;
     MemoryRegion gic_iomem_alias;
     MemoryRegion container;
-    uint32_t num_irq;
+    uint32_t  num_irq;
+    uint32_t  scr_reg;      /* contents of SCR register */
+    /* set true if we executed a WFI instruction with the SLEEPDEEP bit set in the SCR */
+    bool      in_deep_sleep;
 } nvic_state;
 
 #define TYPE_NVIC "armv7m_nvic"
@@ -57,6 +60,9 @@ typedef struct NVICClass {
 static const uint8_t nvic_id[] = {
     0x00, 0xb0, 0x1b, 0x00, 0x0d, 0xe0, 0x05, 0xb1
 };
+
+/* SCR register definitions */
+#define SCR_REG_SLEEPDEEP   0x00000004
 
 /* qemu timers run at 1GHz.   We want something closer to 1MHz.  */
 #define SYSTICK_SCALE 1000ULL
@@ -91,8 +97,13 @@ static void systick_timer_tick(void * opaque)
     nvic_state *s = (nvic_state *)opaque;
     s->systick.control |= SYSTICK_COUNTFLAG;
     if (s->systick.control & SYSTICK_TICKINT) {
-        /* Trigger the interrupt.  */
-        armv7m_nvic_set_pending(s, ARMV7M_EXCP_SYSTICK);
+        if (!s->in_deep_sleep) {
+            /* NOTE: In deep sleep mode, all peripherals are off (no clocks), so
+             * no IRQs should be made pending. Eventually, we should gate all 
+             * peripherals according to deep sleep mode, but SysTick is a good
+             * important start. */
+            armv7m_nvic_set_pending(s, ARMV7M_EXCP_SYSTICK);
+        } 
     }
     if (s->systick.reload == 0) {
         s->systick.control &= ~SYSTICK_ENABLE;
@@ -140,6 +151,14 @@ int armv7m_nvic_acknowledge_irq(void *opaque)
     nvic_state *s = (nvic_state *)opaque;
     uint32_t irq;
 
+    /* We can't be in deep sleep mode anymore because we received an interrupt
+     * Actually, the correct way to do this to match the hardware exactly would be to fall 
+     * out of deep sleep even if an interrupt is pending - regardless if it is active or 
+     * not or masked due to BASEPRI. This would involved moving this reset of deep sleep
+     * mode higher up the call chain, perhaps in arm_gic.c, where we get notification of
+     * interrupts that change to pending state.  */
+    s->in_deep_sleep = false;
+
     irq = gic_acknowledge_irq(&s->gic, 0);
     if (irq == 1023)
         hw_error("Interrupt but no vector\n");
@@ -154,6 +173,20 @@ void armv7m_nvic_complete_irq(void *opaque, int irq)
     if (irq >= 16)
         irq += 16;
     gic_complete_irq(&s->gic, 0, irq);
+}
+
+bool armv7v_nvic_in_deep_sleep(void *opaque)
+{
+    nvic_state *s = (nvic_state *)opaque;
+    return s->in_deep_sleep;
+}
+
+void armv7m_nvic_cpu_executed_wfi(void *opaque)
+{
+    nvic_state *s = (nvic_state *)opaque;
+    if ((s->scr_reg & SCR_REG_SLEEPDEEP) != 0) {
+        s->in_deep_sleep = true;
+    }
 }
 
 static uint32_t nvic_readl(nvic_state *s, uint32_t offset)
@@ -231,8 +264,8 @@ static uint32_t nvic_readl(nvic_state *s, uint32_t offset)
     case 0xd0c: /* Application Interrupt/Reset Control.  */
         return 0xfa050000 | s->aircr_reg;
     case 0xd10: /* System Control.  */
-        /* TODO: Implement SLEEPONEXIT.  */
-        return 0;
+        return s->scr_reg;
+        break;
     case 0xd14: /* Configuration Control.  */
         /* TODO: Implement Configuration Control bits.  */
         return 0;
@@ -368,9 +401,11 @@ static void nvic_writel(nvic_state *s, uint32_t offset, uint32_t value)
         }
         break;
     case 0xd10: /* System Control.  */
+        s->scr_reg = value;
+        break;
     case 0xd14: /* Configuration Control.  */
         /* TODO: Implement control registers.  */
-        qemu_log_mask(LOG_UNIMP, "NVIC: SCR and CCR unimplemented\n");
+        qemu_log_mask(LOG_UNIMP, "NVIC: CCR unimplemented\n");
         break;
     case 0xd24: /* System Handler Control.  */
         /* TODO: Real hardware allows you to set/clear the active bits

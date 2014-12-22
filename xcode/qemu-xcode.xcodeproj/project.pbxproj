@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0A04CD3B1A465C950007F8E1 /* stm32f2xx_pwr.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A04CD3A1A465C950007F8E1 /* stm32f2xx_pwr.c */; };
 		0A06C9BE1A1C2450009BB34B /* aio-posix.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A0682D21A1C2410009BB34B /* aio-posix.c */; };
 		0A06C9BF1A1C2450009BB34B /* aio-win32.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A0682D31A1C2410009BB34B /* aio-win32.c */; };
 		0A06C9C01A1C2450009BB34B /* arch_init.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A0682D41A1C2410009BB34B /* arch_init.c */; };
@@ -1281,6 +1282,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0A04CD3A1A465C950007F8E1 /* stm32f2xx_pwr.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = stm32f2xx_pwr.c; sourceTree = "<group>"; };
 		0A067BC81A1C2049009BB34B /* index */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = index; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A0682D21A1C2410009BB34B /* aio-posix.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = "aio-posix.c"; path = "../aio-posix.c"; sourceTree = "<group>"; };
 		0A0682D31A1C2410009BB34B /* aio-win32.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = "aio-win32.c"; path = "../aio-win32.c"; sourceTree = "<group>"; };
@@ -4607,6 +4609,7 @@
 				0A068B3C1A1C2416009BB34B /* stm32f2xx_flash.c */,
 				0A068B3D1A1C2416009BB34B /* stm32f2xx_gpio.c */,
 				0A068B3E1A1C2416009BB34B /* stm32f2xx_i2c.c */,
+				0A04CD3A1A465C950007F8E1 /* stm32f2xx_pwr.c */,
 				0A068B3F1A1C2416009BB34B /* stm32f2xx_rcc.c */,
 				0A068B401A1C2416009BB34B /* stm32f2xx_rcc.h */,
 				0A068B411A1C2416009BB34B /* stm32f2xx_rtc.c */,
@@ -8341,6 +8344,7 @@
 				0A06ECD91A1C2466009BB34B /* bitops.c in Sources */,
 				0A06D14C1A1C2452009BB34B /* pc-testdev.c in Sources */,
 				0A06CFD51A1C2451009BB34B /* setprop_inplace.c in Sources */,
+				0A04CD3B1A465C950007F8E1 /* stm32f2xx_pwr.c in Sources */,
 				0A06CA0F1A1C2450009BB34B /* blockdev.c in Sources */,
 				0A06D0851A1C2451009BB34B /* ptimer.c in Sources */,
 				0A06ECCC1A1C2466009BB34B /* vnc-enc-zrle-template.c in Sources */,
