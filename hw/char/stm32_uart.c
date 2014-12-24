@@ -371,7 +371,7 @@ static void stm32_uart_fill_receive_data_register(Stm32Uart *s)
 
     /* Pull the byte out of our buffer */
     uint8_t byte = s->rcv_char_buf[0];
-    memcpy(&s->rcv_char_buf[0], &s->rcv_char_buf[1], --(s->rcv_char_bytes));
+    memmove(&s->rcv_char_buf[0], &s->rcv_char_buf[1], --(s->rcv_char_bytes));
 
     /* Only handle the received character if the module is enabled, */
     if (enabled) {
@@ -446,7 +446,7 @@ static void stm32_uart_receive(void *opaque, const uint8_t *buf, int size)
 
     /* Copy the characters into our buffer first */
     assert (size <= USART_RCV_BUF_LEN - s->rcv_char_bytes);
-    memcpy(s->rcv_char_buf + s->rcv_char_bytes, buf, size);
+    memmove(s->rcv_char_buf + s->rcv_char_bytes, buf, size);
     s->rcv_char_bytes += size;
 
     /* Put next byte into RDR if the target is ready for it */

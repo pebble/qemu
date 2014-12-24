@@ -29,100 +29,117 @@
 #include "sysemu/blockdev.h"
 #include "ui/console.h"
 
-struct button_map {
+//#define DEBUG_PEBBLE
+#ifdef DEBUG_PEBBLE
+// NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
+#define DPRINTF(fmt, ...)                                       \
+    do { printf("DEBUG_PEBBLE: " fmt , ## __VA_ARGS__); \
+         usleep(1000); \
+    } while (0)
+#else
+#define DPRINTF(fmt, ...)
+#endif
+
+
+typedef enum {
+  PBL_BUTTON_ID_NONE = -1,
+  PBL_BUTTON_ID_BACK = 0,
+  PBL_BUTTON_ID_UP = 1,
+  PBL_BUTTON_ID_SELECT = 2,
+  PBL_BUTTON_ID_DOWN = 3
+  } PblButtonID;
+
+typedef struct {
     int gpio;
     int pin;
-};
+} PblButtonMap;
 
-struct button_map button_map_bb2_ev1_ev2[] = {
+const static PblButtonMap s_button_map_bb2_ev1_ev2[] = {
     {STM32_GPIOC_INDEX, 3},   /* back */
     {STM32_GPIOA_INDEX, 2},   /* up */
     {STM32_GPIOC_INDEX, 6},   /* select */
     {STM32_GPIOA_INDEX, 1},   /* down */
 };
 
-struct button_map button_map_bigboard[] = {
+const static PblButtonMap s_button_map_bigboard[] = {
     {STM32_GPIOA_INDEX, 2},
     {STM32_GPIOA_INDEX, 1},
     {STM32_GPIOA_INDEX, 3},
     {STM32_GPIOC_INDEX, 9}
 };
 
-struct button_map button_map_snowy_bb[] = {
+const static PblButtonMap s_button_map_snowy_bb[] = {
     {STM32_GPIOG_INDEX, 4},
     {STM32_GPIOG_INDEX, 3},
     {STM32_GPIOG_INDEX, 1},
     {STM32_GPIOG_INDEX, 2},
 };
 
-struct button_state {
+typedef struct {
     qemu_irq irq;
-    int pressed;
-};
+    bool pressed;
+} PblButtonState;
 
-static bool s_waiting_key_up = false;
-static int  s_button_id;
+static PblButtonID s_waiting_key_up_id = PBL_BUTTON_ID_NONE;
 static QEMUTimer *s_button_timer;
 
 
 static void prv_send_key_up(void *opaque)
 {
-    struct button_state *bs = opaque;
-    if (!s_waiting_key_up) {
+    PblButtonState *bs = opaque;
+    if (s_waiting_key_up_id == PBL_BUTTON_ID_NONE) {
         /* Should never happen */
         return;
     }
 
-    printf("button %d released\n", s_button_id);
-    qemu_set_irq(bs[s_button_id].irq, true);
-    s_waiting_key_up = false;
+    DPRINTF("button %d released\n", s_waiting_key_up_id);
+    qemu_set_irq(bs[s_waiting_key_up_id].irq, true);
+    s_waiting_key_up_id = PBL_BUTTON_ID_NONE;
 }
 
 
+// NOTE: When running using a VNC display, we alwqys get a key-up immediately after the key-down,
+// even if the user is holding the key down. For long presses, this results in a series of
+// quick back to back key-down, key-up callbacks.
 static void pebble_key_handler(void *arg, int keycode)
 {
+    PblButtonState *bs = arg;
     static int prev_keycode;
 
-    if (s_waiting_key_up) {
-        /* Ignore presses while we are waiting to send the key up */
-        return;
-    }
-
     int pressed = (keycode & 0x80) == 0;
-    int button_id = -1;
-    struct button_state *bs = arg;
+    int button_id = PBL_BUTTON_ID_NONE;
 
     switch (keycode & 0x7F) {
     case 16: /* Q */
-        button_id = 0;
+        button_id = PBL_BUTTON_ID_BACK;
         break;
     case 17: /* W */
-        button_id = 1;
+        button_id = PBL_BUTTON_ID_UP;
         break;
     case 31: /* S */
-        button_id = 2;
+        button_id = PBL_BUTTON_ID_SELECT;
         break;
     case 45: /* X */
-        button_id = 3;
+        button_id = PBL_BUTTON_ID_DOWN;
         break;
     case 72: /* up arrow */
         if (prev_keycode == 224) {
-            button_id = 1;
+            button_id = PBL_BUTTON_ID_UP;
         }
         break;
     case 80: /* down arrow */
         if (prev_keycode == 224) {
-            button_id = 3;
+            button_id = PBL_BUTTON_ID_DOWN;
         }
         break;
     case 75: /* left arrow */
         if (prev_keycode == 224) {
-            button_id = 0;
+            button_id = PBL_BUTTON_ID_BACK;
         }
         break;
     case 77: /* right arrow */
         if (prev_keycode == 224) {
-            button_id = 2;
+            button_id = PBL_BUTTON_ID_SELECT;
         }
         break;
     default:
@@ -130,24 +147,32 @@ static void pebble_key_handler(void *arg, int keycode)
     }
 
     prev_keycode = keycode;
-    if (button_id == -1 || !pressed) {
-        /* Ignore button releases */
+    if (button_id == PBL_BUTTON_ID_NONE || !pressed) {
+        /* Ignore key ups and keys we don't care about */
         return;
     }
-    s_waiting_key_up = true;
-    s_button_id = button_id;
 
-    printf("button %d pressed\n", button_id);
-    qemu_set_irq(bs[button_id].irq, false);   // Pressed
+    // If this is a different key, and we are waiting for the prior one to key up, send the
+    //  key up now
+    if (s_waiting_key_up_id != PBL_BUTTON_ID_NONE && button_id != s_waiting_key_up_id) {
+        prv_send_key_up(bs);
+    }
 
-    /* Set a timer to release the key */
+    if (s_waiting_key_up_id != button_id) {
+        DPRINTF("button %d pressed\n", button_id);
+        s_waiting_key_up_id = button_id;
+        qemu_set_irq(bs[button_id].irq, false);   // Pressed
+    }
+
+    /* Set or reschedule the timer to release the key */
     if (!s_button_timer) {
         s_button_timer = timer_new_ms(QEMU_CLOCK_VIRTUAL, prv_send_key_up, bs);
     }
     timer_mod(s_button_timer, qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + 250);
 }
 
-static void pebble_32f2_init(MachineState *machine, struct button_map *map) {
+
+static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
     Stm32Gpio *gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *uart[STM32F2XX_UART_COUNT];
     DeviceState *spi_flash;
@@ -185,7 +210,7 @@ static void pebble_32f2_init(MachineState *machine, struct button_map *map) {
     stm32_uart_connect(uart[2], serial_hds[2], 0); /* UART3: console */
 
     /* Buttons */
-    static struct button_state bs[4];
+    static PblButtonState bs[4];
     int i;
     for (i = 0; i < 4; i++) {
         bs[i].pressed = 0;
@@ -194,7 +219,7 @@ static void pebble_32f2_init(MachineState *machine, struct button_map *map) {
     qemu_add_kbd_event_handler(pebble_key_handler, bs);
 }
 
-static void pebble_32f4_init(MachineState *machine, struct button_map *map) {
+static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map) {
     Stm32Gpio *gpio[STM32F4XX_GPIO_COUNT];
     Stm32Uart *uart[STM32F4XX_UART_COUNT];
     SSIBus *spi;
@@ -258,7 +283,7 @@ static void pebble_32f4_init(MachineState *machine, struct button_map *map) {
     stm32_uart_connect(uart[2], serial_hds[2], 0); /* UART3: console */
 
     /* Buttons */
-    static struct button_state bs[4];
+    static PblButtonState bs[4];
     int i;
     for (i = 0; i < 4; i++) {
         bs[i].pressed = 0;
@@ -269,17 +294,17 @@ static void pebble_32f4_init(MachineState *machine, struct button_map *map) {
 
 static void
 pebble_bb2_init(MachineState *machine) {
-    pebble_32f2_init(machine, button_map_bb2_ev1_ev2);
+    pebble_32f2_init(machine, s_button_map_bb2_ev1_ev2);
 }
 
 static void
 pebble_bb_init(MachineState *machine) {
-    pebble_32f2_init(machine, button_map_bigboard);
+    pebble_32f2_init(machine, s_button_map_bigboard);
 }
 
 static void
 pebble_snowy_init(MachineState *machine) {
-    pebble_32f4_init(machine, button_map_snowy_bb);
+    pebble_32f4_init(machine, s_button_map_snowy_bb);
 }
 
 
