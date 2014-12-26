@@ -72,6 +72,7 @@ void stm32f4xx_init(
             const char *kernel_filename,
             Stm32Gpio **stm32_gpio,
             Stm32Uart **stm32_uart,
+            Stm32Timer **stm32_timer,
             uint32_t osc_freq,
             uint32_t osc32_freq,
             struct stm32f4xx *stm)
@@ -259,12 +260,19 @@ void stm32f4xx_init(
     dummy_dev("TIM3",      0x40000400, 0x400);
 
     DeviceState *tim4 = qdev_create(NULL, "f2xx_tim");
+    tim4->id = "TIM4";
     stm32_init_periph(tim4, STM32_TIM4, 0x40000800, pic[STM32_TIM4_IRQ]);
+    stm32_timer[4-1] = (Stm32Timer *)tim4;
 
     dummy_dev("TIM5",      0x40000C00, 0x400);
     dummy_dev("TIM6",      0x40001000, 0x400);
     dummy_dev("TIM7",      0x40001400, 0x400);
-    dummy_dev("TIM12",     0x40001800, 0x400);
+
+    DeviceState *tim12 = qdev_create(NULL, "f2xx_tim");
+    tim12->id = "TIM12";
+    stm32_init_periph(tim12, STM32_TIM12, 0x40001800, pic[STM32_TIM8_BRK_TIM12_IRQ]);
+    stm32_timer[12-1] = (Stm32Timer *)tim12;
+
     dummy_dev("TIM13",     0x40001C00, 0x400);
     dummy_dev("TIM14",     0x40002000, 0x400);
     dummy_dev("Reserved",  0x40002400, 0x400);

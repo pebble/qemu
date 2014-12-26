@@ -36,6 +36,7 @@
 #include "ui/console.h"
 #include "ui/pixel_ops.h"
 #include "hw/ssi.h"
+#include "hw/display/ls013b7dh01.h"
 
 #define NUM_ROWS 168
 #define NUM_COLS 144 // 18 bytes
@@ -55,6 +56,7 @@ typedef struct {
     uint8_t framebuffer[NUM_ROWS * NUM_COL_BYTES];
     int fbindex;
     xfer_state_t state;
+    float brightness;
 } lcd_state;
 
 static uint8_t
@@ -129,26 +131,31 @@ static void sm_lcd_update_display(void *arg)
         return;
     }
 
+    // Adjust the white level to compensate for the set brightness.
+    // brightness = 0:  255 in maps to 170 out
+    // brightness = 1.0: 255 in maps to 255 out
+    int max_val = 170 + (255 - 170) * s->brightness;
+
     bpp = surface_bits_per_pixel(surface);
     /* set colours according to bpp */
     switch (bpp) {
     case 8:
-        colour_on = rgb_to_pixel8(0xaa, 0xaa, 0xaa);
+        colour_on = rgb_to_pixel8(max_val, max_val, max_val);
         colour_off = rgb_to_pixel8(0x00, 0x00, 0x00);
         break;
     case 15:
-        colour_on = rgb_to_pixel15(0xaa, 0xaa, 0xaa);
+        colour_on = rgb_to_pixel15(max_val, max_val, max_val);
         colour_off = rgb_to_pixel15(0x00, 0x00, 0x00);
         break;
     case 16:
-        colour_on = rgb_to_pixel16(0xaa, 0xaa, 0xaa);
+        colour_on = rgb_to_pixel16(max_val, max_val, max_val);
         colour_off = rgb_to_pixel16(0x00, 0x00, 0x00);
     case 24:
-        colour_on = rgb_to_pixel24(0xaa, 0xaa, 0xaa);
+        colour_on = rgb_to_pixel24(max_val, max_val, max_val);
         colour_off = rgb_to_pixel24(0x00, 0x00, 0x00);
         break;
     case 32:
-        colour_on = rgb_to_pixel32(0xaa, 0xaa, 0xaa);
+        colour_on = rgb_to_pixel32(max_val, max_val, max_val);
         colour_off = rgb_to_pixel32(0x00, 0x00, 0x00);
         break;
     default:
@@ -193,6 +200,18 @@ static void sm_lcd_invalidate_display(void *arg)
     s->redraw = true;
 }
 
+// -----------------------------------------------------------------------------
+// Set brightness, from 0 to 1.0
+void sm_lcd_set_brightness(void *arg, float brightness)
+{
+    lcd_state *s = (lcd_state *)arg;
+
+    // Temp hack - the Pebble sets the PWM to 25% for max brightness
+    s->brightness = MIN(1.0, brightness * 4);
+    s->redraw = true;
+}
+
+
 static const GraphicHwOps sm_lcd_ops = {
     .gfx_update = sm_lcd_update_display,
     .invalidate = sm_lcd_invalidate_display,
@@ -201,6 +220,8 @@ static const GraphicHwOps sm_lcd_ops = {
 static int sm_lcd_init(SSISlave *dev)
 {
     lcd_state *s = FROM_SSI_SLAVE(lcd_state, dev);
+
+    s->brightness = 1.0;
 
     s->con = graphic_console_init(DEVICE(dev), 0, &sm_lcd_ops, s);
     qemu_console_resize(s->con, NUM_COLS, NUM_ROWS);

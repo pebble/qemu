@@ -57,6 +57,7 @@
 #include "ui/console.h"
 #include "ui/pixel_ops.h"
 #include "hw/ssi.h"
+#include "hw/display/pebble_snowy_display.h"
 
 //#define DEBUG_PEBBLE_SNOWY_DISPLAY
 #ifdef DEBUG_PEBBLE_SNOWY_DISPLAY
@@ -159,6 +160,7 @@ typedef struct {
     uint8_t       framebuffer[SNOWY_NUM_ROWS * SNOWY_BYTES_PER_ROW];
     int           col_index;
     int           row_index;
+    float         brightness;
 
     /* State variables */
     PSDisplayState  state;
@@ -551,19 +553,20 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
 // ----------------------------------------------------------------------------- 
 // This function maps an 8 bit value from the frame buffer into red, green, and blue
 // components
-static PSDisplayPixelColor ps_display_get_rgb(uint8_t pixel_value) {
+static PSDisplayPixelColor ps_display_get_rgb(PSDisplayGlobals *s, uint8_t pixel_value) {
 
   PSDisplayPixelColor c;
   c.red = ((pixel_value & 0xC0) >> 6) * 255 / 3;
   c.green = ((pixel_value & 0x30) >> 4) * 255 / 3;
   c.blue = ((pixel_value & 0x0C) >> 2) * 255 / 3;
 
-  // If the pixel is white, color adjust it to emulate the actual Pebble display
-  if (c.red == 0xff && c.green == 0xff && c.blue == 0xff) {
-      c.red = 0xaa;
-      c.green = 0xaa;
-      c.blue = 0xaa;
-  }
+  // Adjust the pixel RGB to compensate for the set brightness.
+  // brightness = 0:  255 in maps to 170 out
+  // brightness = 1.0: 255 in maps to 255 out
+  int max_val = 170 + (255 - 170) * s->brightness;
+  c.red = (int)c.red * max_val/255;
+  c.green = (int)c.green * max_val/255;
+  c.blue = (int)c.blue * max_val/255;
 
   return c;
 
@@ -597,7 +600,7 @@ static void ps_display_update_display(void *arg)
         for (x = 0; x < SNOWY_NUM_COLS; x++) {
             uint8_t pixel = s->framebuffer[y * SNOWY_BYTES_PER_ROW + x];
 
-            PSDisplayPixelColor color = ps_display_get_rgb(pixel);
+            PSDisplayPixelColor color = ps_display_get_rgb(s, pixel);
 
             switch(bpp) {
             case 8:
@@ -711,15 +714,30 @@ static void ps_display_invalidate_display(void *arg)
 }
 
 // ----------------------------------------------------------------------------- 
-static const GraphicHwOps ps_display_ops = {
+static const GraphicHwOps ps_display_ops =
+{
     .gfx_update = ps_display_update_display,
     .invalidate = ps_display_invalidate_display,
 };
 
-// ----------------------------------------------------------------------------- 
+
+// -----------------------------------------------------------------------------
+// Set brightness, from 0 to 1.0
+void ps_display_set_brightness(void *arg, float brightness)
+{
+    PSDisplayGlobals *s = (PSDisplayGlobals *)arg;
+
+    // Temp hack - the Pebble sets the PWM to 25% for max brightness
+    s->brightness = MIN(1.0, brightness * 4);
+    s->redraw = true;
+}
+
+
+// -----------------------------------------------------------------------------
 static int ps_display_init(SSISlave *dev)
 {
     PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, dev);
+    s->brightness = 1.0;
 
     s->con = graphic_console_init(DEVICE(dev), 0, &ps_display_ops, s);
     qemu_console_resize(s->con, SNOWY_NUM_COLS, SNOWY_NUM_ROWS);

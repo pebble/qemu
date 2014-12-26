@@ -3837,6 +3837,8 @@
 		0A0FD6201A390F1F007F431A /* pebble_snowy_display.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pebble_snowy_display.c; sourceTree = "<group>"; };
 		0A103B971A4A907500847A30 /* png_to_cstruct.py */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.python; path = png_to_cstruct.py; sourceTree = "<group>"; };
 		0A16AF701A3A5B8E0002272F /* pflash_jedec_424.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pflash_jedec_424.c; sourceTree = "<group>"; };
+		0A9FB2461A4D23B500508B50 /* pebble_snowy_display.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pebble_snowy_display.h; sourceTree = "<group>"; };
+		0A9FB2471A4D37FD00508B50 /* ls013b7dh01.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ls013b7dh01.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -5796,6 +5798,7 @@
 				0A068E731A1C2418009BB34B /* cpu */,
 				0A068E781A1C2418009BB34B /* cris */,
 				0A068E7B1A1C2418009BB34B /* devices.h */,
+				0A9FB2451A4D23B500508B50 /* display */,
 				0A068E7C1A1C2418009BB34B /* elf_ops.h */,
 				0A068E7D1A1C2418009BB34B /* empty_slot.h */,
 				0A068E7E1A1C2418009BB34B /* fw-path-provider.h */,
@@ -8047,6 +8050,15 @@
 			);
 			name = "default-configs";
 			path = "../default-configs";
+			sourceTree = "<group>";
+		};
+		0A9FB2451A4D23B500508B50 /* display */ = {
+			isa = PBXGroup;
+			children = (
+				0A9FB2471A4D37FD00508B50 /* ls013b7dh01.h */,
+				0A9FB2461A4D23B500508B50 /* pebble_snowy_display.h */,
+			);
+			path = display;
 			sourceTree = "<group>";
 		};
 		0AB8BA591A13D90800092455 = {

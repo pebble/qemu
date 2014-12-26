@@ -23,7 +23,21 @@
  * QEMU stm32f2xx TIM emulation
  */
 #include "hw/sysbus.h"
+#include "hw/arm/stm32.h"
 #include "qemu/timer.h"
+
+//#define DEBUG_STM32F2XX_TIM
+#ifdef DEBUG_STM32F2XX_TIM
+// NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
+#define DPRINTF(fmt, ...)                                       \
+    do { printf("DEBUG_STM32F2XX_TIM: " fmt , ## __VA_ARGS__); \
+         usleep(100); \
+    } while (0)
+#else
+#define DPRINTF(fmt, ...)
+#endif
+
+
 
 #define R_TIM_CR1    (0x00 / 4) //p
 #define R_TIM_CR2    (0x04 / 4)
@@ -46,12 +60,43 @@
 #define R_TIM_OR     (0x50 / 4)
 #define R_TIM_MAX    (0x54 / 4)
 
+static const char *f2xx_tim_reg_names[] = {
+    ENUM_STRING(R_TIM_CR1),
+    ENUM_STRING(R_TIM_CR2),
+    ENUM_STRING(R_TIM_SMCR),
+    ENUM_STRING(R_TIM_DIER),
+    ENUM_STRING(R_TIM_SR),
+    ENUM_STRING(R_TIM_EGR),
+    ENUM_STRING(R_TIM_CCMR1),
+    ENUM_STRING(R_TIM_CCMR2),
+    ENUM_STRING(R_TIM_CCER),
+    ENUM_STRING(R_TIM_CNT),
+    ENUM_STRING(R_TIM_PSC),
+    ENUM_STRING(R_TIM_ARR),
+    ENUM_STRING(R_TIM_CCR1),
+    ENUM_STRING(R_TIM_CCR2),
+    ENUM_STRING(R_TIM_CCR3),
+    ENUM_STRING(R_TIM_CCR4),
+    ENUM_STRING(R_TIM_DCR),
+    ENUM_STRING(R_TIM_CCMR1),
+    ENUM_STRING(R_TIM_DMAR),
+    ENUM_STRING(R_TIM_OR)
+};
+
+
 typedef struct f2xx_tim {
     SysBusDevice busdev;
     MemoryRegion iomem;
     QEMUTimer *timer;
     qemu_irq irq;
     uint32_t regs[R_TIM_MAX];
+
+    void *pwm_ratio_callback_arg_prop;
+    union {
+        void *pwm_ratio_callback_prop;
+        void (*pwm_ratio_callback)(void *arg, float ratio);
+    };
+
 } f2xx_tim;
 
 static uint32_t
@@ -108,6 +153,9 @@ f2xx_tim_read(void *arg, hwaddr addr, unsigned int size)
         qemu_log_mask(LOG_UNIMP, "f2xx tim unimplemented read 0x%x+%u size %u val 0x%x\n",
           (unsigned int)addr << 2, offset, size, (unsigned int)r);
     }
+
+    DPRINTF("%s %s: reg: %s, size: %d, value: 0x%x\n", s->busdev.parent_obj.id,
+                  __func__, f2xx_tim_reg_names[addr], size, r);
     return r;
 }
 
@@ -118,6 +166,9 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     int offset = addr & 0x3;
 
     addr >>= 2;
+
+    DPRINTF("%s %s: reg:%s, size: %d, value: 0x%llx\n", s->busdev.parent_obj.id,
+                    __func__, f2xx_tim_reg_names[addr], size, data);
     if (addr >= R_TIM_MAX) {
         qemu_log_mask(LOG_GUEST_ERROR, "f2xx tim invalid write register 0x%x\n",
           (unsigned int)addr << 2);
@@ -161,9 +212,53 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         qemu_log_mask(LOG_UNIMP, "f2xx tim unimplemented write EGR+%u size %u val 0x%x\n",
           offset, size, (unsigned int)data);
         break;
+    case R_TIM_CCER:
+        // Capture/Compare Enable register
+        s->regs[addr] = data;
+
+        // If we are enabling PWM mode in output 1, notify the callback if we have one registered
+        if (    (data & 0x01) // Capture Compare 1 output enable
+             && ((s->regs[R_TIM_CCMR1] & 0x60) == 0x60)
+             && ((s->regs[R_TIM_CCMR1] & 0x03) == 0x00)) {
+             
+            float ratio = (float)(s->regs[R_TIM_CCR1]) / s->regs[R_TIM_ARR];
+            DPRINTF("Setting PWM ratio to %f\n", ratio);
+            if (s->pwm_ratio_callback) {
+                s->pwm_ratio_callback(s->pwm_ratio_callback_arg_prop, ratio);
+            }
+        }
+
+        // If we are enabling PWM mode in output 1, notify the callback if we have one registered
+        else if (    (data & 0x10) // Capture Compare 2 output enable
+             && ((s->regs[R_TIM_CCMR1] & 0x6000) == 0x6000)
+             && ((s->regs[R_TIM_CCMR1] & 0x0300) == 0x0000)) {
+             
+            float ratio = (float)(s->regs[R_TIM_CCR2]) / s->regs[R_TIM_ARR];
+            DPRINTF("Setting PWM ratio to %f\n", ratio);
+            if (s->pwm_ratio_callback) {
+                s->pwm_ratio_callback(s->pwm_ratio_callback_arg_prop, ratio);
+            }
+
+        } else {
+            if (s->pwm_ratio_callback) {
+                s->pwm_ratio_callback(s->pwm_ratio_callback_arg_prop, 0.0);
+            }
+        }
+
+        break;
+    case R_TIM_CCMR1:
+        // Capture/Compare mode register 1
+        s->regs[addr] = data;
+        break;
+    case R_TIM_CCMR2:
+        // Capture/Compare mode register 2
+        s->regs[addr] = data;
+        break;
     case R_TIM_DIER:
     case R_TIM_PSC:
     case R_TIM_ARR:
+    case R_TIM_CCR1:
+    case R_TIM_CCR2:
         s->regs[addr] = data;
         break;
     default:
@@ -200,6 +295,8 @@ f2xx_tim_init(SysBusDevice *dev)
 }
 
 static Property f2xx_tim_properties[] = {
+    DEFINE_PROP_PTR("pwm_ratio_callback_arg", f2xx_tim, pwm_ratio_callback_arg_prop),
+    DEFINE_PROP_PTR("pwm_ratio_callback", f2xx_tim, pwm_ratio_callback_prop),
     DEFINE_PROP_END_OF_LIST(),
 };
 

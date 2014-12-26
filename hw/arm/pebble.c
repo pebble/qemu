@@ -24,6 +24,8 @@
 #include "stm32f4xx.h"
 #include "hw/ssi.h"
 #include "hw/boards.h"
+#include "hw/display/pebble_snowy_display.h"
+#include "hw/display/ls013b7dh01.h"
 #include "hw/block/flash.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/blockdev.h"
@@ -175,6 +177,7 @@ static void pebble_key_handler(void *arg, int keycode)
 static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
     Stm32Gpio *gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *uart[STM32F2XX_UART_COUNT];
+    Stm32Timer *timer[STM32F2XX_TIM_COUNT];
     DeviceState *spi_flash;
     SSIBus *spi;
     struct stm32f2xx stm;
@@ -186,6 +189,7 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
         machine->kernel_filename,
         gpio,
         uart,
+        timer,
         8000000, /* osc_freq*/
         32768, /* osc2_freq*/
         &stm);
@@ -217,17 +221,24 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
         bs[i].irq = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
     }
     qemu_add_kbd_event_handler(pebble_key_handler, bs);
+
+    /* Hook up the display brightness to Timer 3's PWM setting */
+    qdev_prop_set_ptr((DeviceState *)timer[3-1], "pwm_ratio_callback_arg",
+                          (void *)display_dev);
+    qdev_prop_set_ptr((DeviceState *)timer[3-1], "pwm_ratio_callback",
+                          (void *)sm_lcd_set_brightness);
 }
 
 static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map) {
     Stm32Gpio *gpio[STM32F4XX_GPIO_COUNT];
     Stm32Uart *uart[STM32F4XX_UART_COUNT];
+    Stm32Timer *timer[STM32F4XX_TIM_COUNT];
     SSIBus *spi;
     struct stm32f4xx stm;
 
     // Note: allow for bigger flash images (4MByte) to aid in development and debugging
     stm32f4xx_init(4096 /*flash_size in KBytes */, 256 /*ram_size on KBytes*/,
-        machine->kernel_filename, gpio, uart, 8000000 /*osc_freq*/,
+        machine->kernel_filename, gpio, uart, timer, 8000000 /*osc_freq*/,
         32768 /*osc2_freq*/, &stm);
 
 
@@ -290,6 +301,12 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map) {
         bs[i].irq = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
     }
     qemu_add_kbd_event_handler(pebble_key_handler, bs);
+
+    /* Hook up the display brightness to Timer 12's PWM setting */
+    qdev_prop_set_ptr((DeviceState *)timer[11], "pwm_ratio_callback_arg",
+                          (void *)display_dev);
+    qdev_prop_set_ptr((DeviceState *)timer[11], "pwm_ratio_callback",
+                          (void *)ps_display_set_brightness);
 }
 
 static void
