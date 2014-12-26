@@ -36,7 +36,6 @@
 #include "ui/console.h"
 #include "ui/pixel_ops.h"
 #include "hw/ssi.h"
-#include "hw/display/ls013b7dh01.h"
 
 #define NUM_ROWS 168
 #define NUM_COLS 144 // 18 bytes
@@ -56,7 +55,9 @@ typedef struct {
     uint8_t framebuffer[NUM_ROWS * NUM_COL_BYTES];
     int fbindex;
     xfer_state_t state;
-    float brightness;
+
+    bool   backlight_enabled;
+    float  brightness;
 } lcd_state;
 
 static uint8_t
@@ -134,7 +135,8 @@ static void sm_lcd_update_display(void *arg)
     // Adjust the white level to compensate for the set brightness.
     // brightness = 0:  255 in maps to 170 out
     // brightness = 1.0: 255 in maps to 255 out
-    int max_val = 170 + (255 - 170) * s->brightness;
+    float brightness = s->backlight_enabled ? s->brightness : 0.0;
+    int max_val = 170 + (255 - 170) * brightness;
 
     bpp = surface_bits_per_pixel(surface);
     /* set colours according to bpp */
@@ -200,15 +202,39 @@ static void sm_lcd_invalidate_display(void *arg)
     s->redraw = true;
 }
 
-// -----------------------------------------------------------------------------
-// Set brightness, from 0 to 1.0
-void sm_lcd_set_brightness(void *arg, float brightness)
+
+// ----------------------------------------------------------------------------- 
+static void sm_lcd_backlight_enable_cb(void *opaque, int n, int level)
 {
-    lcd_state *s = (lcd_state *)arg;
+    lcd_state *s = (lcd_state *)opaque;
+    assert(n == 0);
+
+    printf("Setting enable to %d\n", level);
+    bool enable = (level != 0);
+    if (s->backlight_enabled != enable) {
+        s->backlight_enabled = enable;
+        s->redraw = true;
+    }
+}
+
+
+// -----------------------------------------------------------------------------
+// Set brightness, from 0 to 255
+static void sm_lcd_set_backlight_level_cb(void *opaque, int n, int level)
+{
+    lcd_state *s = (lcd_state *)opaque;
+    assert(n == 0);
+
+    float bright_f = (float)level / 255;
 
     // Temp hack - the Pebble sets the PWM to 25% for max brightness
-    s->brightness = MIN(1.0, brightness * 4);
-    s->redraw = true;
+    float new_setting = MIN(1.0, bright_f * 4);
+    if (new_setting != s->brightness) {
+        s->brightness = MIN(1.0, bright_f * 4);
+        if (s->backlight_enabled) {
+            s->redraw = true;
+        }
+    }
 }
 
 
@@ -221,10 +247,19 @@ static int sm_lcd_init(SSISlave *dev)
 {
     lcd_state *s = FROM_SSI_SLAVE(lcd_state, dev);
 
-    s->brightness = 1.0;
+    s->brightness = 0.0;
 
     s->con = graphic_console_init(DEVICE(dev), 0, &sm_lcd_ops, s);
     qemu_console_resize(s->con, NUM_COLS, NUM_ROWS);
+
+    /* This callback informs us that brightness control is enabled */
+    qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_backlight_enable_cb,
+                            "sm_lcd_backlight_enable", 1);
+
+    /* This callback informs us of the brightness level (from 0 to 255) */
+    qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_set_backlight_level_cb,
+                            "sm_lcd_backlight_level", 1);
+
     return 0;
 }
 

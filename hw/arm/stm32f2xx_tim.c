@@ -91,12 +91,7 @@ typedef struct f2xx_tim {
     qemu_irq irq;
     uint32_t regs[R_TIM_MAX];
 
-    void *pwm_ratio_callback_arg_prop;
-    union {
-        void *pwm_ratio_callback_prop;
-        void (*pwm_ratio_callback)(void *arg, float ratio);
-    };
-
+    qemu_irq pwm_ratio_changed;
 } f2xx_tim;
 
 static uint32_t
@@ -221,11 +216,9 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
              && ((s->regs[R_TIM_CCMR1] & 0x60) == 0x60)
              && ((s->regs[R_TIM_CCMR1] & 0x03) == 0x00)) {
              
-            float ratio = (float)(s->regs[R_TIM_CCR1]) / s->regs[R_TIM_ARR];
-            DPRINTF("Setting PWM ratio to %f\n", ratio);
-            if (s->pwm_ratio_callback) {
-                s->pwm_ratio_callback(s->pwm_ratio_callback_arg_prop, ratio);
-            }
+            uint32_t ratio = (s->regs[R_TIM_CCR1] * 255) / s->regs[R_TIM_ARR];
+            DPRINTF("Setting PWM ratio to %d\n", ratio);
+            qemu_set_irq(s->pwm_ratio_changed, ratio);
         }
 
         // If we are enabling PWM mode in output 1, notify the callback if we have one registered
@@ -233,16 +226,12 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
              && ((s->regs[R_TIM_CCMR1] & 0x6000) == 0x6000)
              && ((s->regs[R_TIM_CCMR1] & 0x0300) == 0x0000)) {
              
-            float ratio = (float)(s->regs[R_TIM_CCR2]) / s->regs[R_TIM_ARR];
-            DPRINTF("Setting PWM ratio to %f\n", ratio);
-            if (s->pwm_ratio_callback) {
-                s->pwm_ratio_callback(s->pwm_ratio_callback_arg_prop, ratio);
-            }
+            uint32_t ratio = (s->regs[R_TIM_CCR2] * 255) / s->regs[R_TIM_ARR];
+            DPRINTF("Setting PWM ratio to %d\n", ratio);
+            qemu_set_irq(s->pwm_ratio_changed, ratio);
 
         } else {
-            if (s->pwm_ratio_callback) {
-                s->pwm_ratio_callback(s->pwm_ratio_callback_arg_prop, 0.0);
-            }
+            qemu_set_irq(s->pwm_ratio_changed, 0);
         }
 
         break;
@@ -290,13 +279,13 @@ f2xx_tim_init(SysBusDevice *dev)
     //s->regs[R_RTC_WUTR] = R_RTC_WUTR_RESET;
     s->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, f2xx_tim_timer, s);
     sysbus_init_irq(dev, &s->irq);
-    
+
+    qdev_init_gpio_out_named(DEVICE(dev), &s->pwm_ratio_changed, "pwm_ratio_changed", 1);
+
     return 0;
 }
 
 static Property f2xx_tim_properties[] = {
-    DEFINE_PROP_PTR("pwm_ratio_callback_arg", f2xx_tim, pwm_ratio_callback_arg_prop),
-    DEFINE_PROP_PTR("pwm_ratio_callback", f2xx_tim, pwm_ratio_callback_prop),
     DEFINE_PROP_END_OF_LIST(),
 };
 

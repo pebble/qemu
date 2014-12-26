@@ -24,8 +24,6 @@
 #include "stm32f4xx.h"
 #include "hw/ssi.h"
 #include "hw/boards.h"
-#include "hw/display/pebble_snowy_display.h"
-#include "hw/display/ls013b7dh01.h"
 #include "hw/block/flash.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/blockdev.h"
@@ -203,10 +201,22 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
     cs = qdev_get_gpio_in_named(spi_flash, SSI_GPIO_CS, 0);
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOA_INDEX], 4, cs);
 
+
     /* Display */
     spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[1], "ssi");
     DeviceState *display_dev = ssi_create_slave_no_init(spi, "sm-lcd");
     qdev_init_nofail(display_dev);
+
+    qemu_irq backlight_enable;
+    backlight_enable = qdev_get_gpio_in_named(display_dev, "sm_lcd_backlight_enable", 0);
+    qdev_connect_gpio_out_named((DeviceState *)gpio[STM32_GPIOB_INDEX], "af", 5,
+                                  backlight_enable);
+
+    qemu_irq backlight_level;
+    backlight_level = qdev_get_gpio_in_named(display_dev, "sm_lcd_backlight_level", 0);
+    qdev_connect_gpio_out_named((DeviceState *)timer[3-1], "pwm_ratio_changed", 0,
+                                  backlight_level);
+
 
     /* UARTs */
     stm32_uart_connect(uart[0], serial_hds[0], 0); /* UART1: not used */
@@ -221,12 +231,6 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
         bs[i].irq = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
     }
     qemu_add_kbd_event_handler(pebble_key_handler, bs);
-
-    /* Hook up the display brightness to Timer 3's PWM setting */
-    qdev_prop_set_ptr((DeviceState *)timer[3-1], "pwm_ratio_callback_arg",
-                          (void *)display_dev);
-    qdev_prop_set_ptr((DeviceState *)timer[3-1], "pwm_ratio_callback",
-                          (void *)sm_lcd_set_brightness);
 }
 
 static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map) {
@@ -280,12 +284,22 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map) {
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOG_INDEX], 8, display_cs);
 
     qemu_irq display_reset;
-    display_reset = qdev_get_gpio_in_named(display_dev, "pebble-snowy-display-reset", 0);
+    display_reset = qdev_get_gpio_in_named(display_dev, "pebble_snowy_display_reset", 0);
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOG_INDEX], 15, display_reset);
 
     qemu_irq display_sclk;
-    display_sclk = qdev_get_gpio_in_named(display_dev, "pebble-snowy-display-sclk", 0);
+    display_sclk = qdev_get_gpio_in_named(display_dev, "pebble_snowy_display_sclk", 0);
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOG_INDEX], 13, display_sclk);
+
+    qemu_irq backlight_enable;
+    backlight_enable = qdev_get_gpio_in_named(display_dev, "pebble_snowy_backlight_enable", 0);
+    qdev_connect_gpio_out_named((DeviceState *)gpio[STM32_GPIOB_INDEX], "af", 14,
+                                  backlight_enable);
+
+    qemu_irq backlight_level;
+    backlight_level = qdev_get_gpio_in_named(display_dev, "pebble_snowy_backlight_level", 0);
+    qdev_connect_gpio_out_named((DeviceState *)timer[11], "pwm_ratio_changed", 0,
+                                  backlight_level);
 
 
     /* UARTs */
@@ -302,11 +316,6 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map) {
     }
     qemu_add_kbd_event_handler(pebble_key_handler, bs);
 
-    /* Hook up the display brightness to Timer 12's PWM setting */
-    qdev_prop_set_ptr((DeviceState *)timer[11], "pwm_ratio_callback_arg",
-                          (void *)display_dev);
-    qdev_prop_set_ptr((DeviceState *)timer[11], "pwm_ratio_callback",
-                          (void *)ps_display_set_brightness);
 }
 
 static void

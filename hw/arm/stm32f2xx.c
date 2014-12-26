@@ -34,6 +34,17 @@ static const char *stm32f2xx_periph_name_arr[] = {
     ENUM_STRING(STM32_UART4),
     ENUM_STRING(STM32_UART5),
     ENUM_STRING(STM32_UART6),
+    ENUM_STRING(STM32_GPIOA),
+    ENUM_STRING(STM32_GPIOB),
+    ENUM_STRING(STM32_GPIOC),
+    ENUM_STRING(STM32_GPIOD),
+    ENUM_STRING(STM32_GPIOE),
+    ENUM_STRING(STM32_GPIOF),
+    ENUM_STRING(STM32_GPIOG),
+    ENUM_STRING(STM32_GPIOH),
+    ENUM_STRING(STM32_GPIOI),
+    ENUM_STRING(STM32_GPIOJ),
+    ENUM_STRING(STM32_GPIOK),
     ENUM_STRING(STM32_PERIPH_COUNT)
 };
 
@@ -103,6 +114,7 @@ void stm32f2xx_init(
     for(i = 0; i < STM32F2XX_GPIO_COUNT; i++) {
         stm32_periph_t periph = STM32_GPIOA + i;
         gpio_dev[i] = qdev_create(NULL, "stm32f2xx_gpio");
+        gpio_dev[i]->id = stm32f2xx_periph_name_arr[periph];
         qdev_prop_set_int32(gpio_dev[i], "periph", periph);
 //        qdev_prop_set_ptr(gpio_dev[i], "stm32_rcc", rcc_dev);
         stm32_init_periph(gpio_dev[i], periph, 0x40020000 + (i * 0x400), NULL);
