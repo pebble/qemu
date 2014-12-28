@@ -173,7 +173,10 @@ typedef struct {
     bool      cs_value;                 // low means asserted
     uint32_t  sclk_count_with_cs_high;
 
-    /* We capture the first 256 bytes of the programming and inspect it to try and figure 
+    bool   vibrate_on;
+    int    vibrate_offset;
+
+    /* We capture the first 256 bytes of the programming and inspect it to try and figure
      * out which command set to expect */
     uint8_t       prog_header[256];
     uint32_t      prog_byte_offset;
@@ -585,17 +588,50 @@ static PSDisplayPixelColor ps_display_get_rgb(PSDisplayGlobals *s, uint8_t pixel
 static void ps_display_update_display(void *arg)
 {
     PSDisplayGlobals *s = arg;
-    DisplaySurface *surface = qemu_console_surface(s->con);
-
     uint8_t *d;
     int x, y, bpp, rgb_value;
+
+    DisplaySurface *surface = qemu_console_surface(s->con);
+    bpp = surface_bits_per_pixel(surface);
+    d = surface_data(surface);
+
+
+
+    // If vibrate is on, simply jiggle the display
+    if (s->vibrate_on) {
+        if (s->vibrate_offset == 0) {
+            s->vibrate_offset = 2;
+        }
+        int bytes_per_pixel;
+        switch (bpp) {
+            case 8:
+                bytes_per_pixel = 1;
+                break;
+            case 15:
+            case 16:
+                bytes_per_pixel = 2;
+                break;
+            case 32:
+                bytes_per_pixel = 4;
+                break;
+            default:
+                abort();
+        }
+        int total_bytes = SNOWY_NUM_ROWS * SNOWY_NUM_COLS * bytes_per_pixel
+                        - abs(s->vibrate_offset) * bytes_per_pixel;
+        if (s->vibrate_offset > 0) {
+            memmove(d, d + s->vibrate_offset * bytes_per_pixel, total_bytes);
+        } else {
+            memmove(d - s->vibrate_offset * bytes_per_pixel, d, total_bytes);
+        }
+        s->vibrate_offset *= -1;
+        dpy_gfx_update(s->con, 0, 0, SNOWY_NUM_COLS, SNOWY_NUM_ROWS);
+        return;
+    }
 
     if (!s->redraw) {
         return;
     }
-
-    bpp = surface_bits_per_pixel(surface);
-    d = surface_data(surface);
 
     for (y = 0; y < SNOWY_NUM_ROWS; y++) {
         for (x = 0; x < SNOWY_NUM_COLS; x++) {
@@ -755,6 +791,15 @@ static void ps_display_set_backlight_level_cb(void *opaque, int n, int level)
     }
 }
 
+// ----------------------------------------------------------------------------- 
+static void ps_display_vibe_ctl(void *opaque, int n, int level)
+{
+    PSDisplayGlobals *s = (PSDisplayGlobals *)opaque;
+    assert(n == 0);
+
+    s->vibrate_on = (level != 0);
+}
+
 
 // -----------------------------------------------------------------------------
 static int ps_display_init(SSISlave *dev)
@@ -776,11 +821,15 @@ static int ps_display_init(SSISlave *dev)
 
     /* This callback informs us that brightness control is enabled */
     qdev_init_gpio_in_named(DEVICE(dev), ps_displa_backlight_enable_cb,
-                            "pebble_snowy_backlight_enable", 1);
+                            "pebble_snowy_display_backlight_enable", 1);
 
     /* This callback informs us of the brightness level (from 0 to 255) */
     qdev_init_gpio_in_named(DEVICE(dev), ps_display_set_backlight_level_cb,
-                            "pebble_snowy_backlight_level", 1);
+                            "pebble_snowy_display_backlight_level", 1);
+
+    /* This callback informs us that the vibrate is on/orr */
+    qdev_init_gpio_in_named(DEVICE(dev), ps_display_vibe_ctl,
+                            "pebble_snowy_display_vibe_ctl", 1);
 
     return 0;
 }

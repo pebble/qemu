@@ -217,6 +217,10 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
     qdev_connect_gpio_out_named((DeviceState *)timer[3-1], "pwm_ratio_changed", 0,
                                   backlight_level);
 
+    qemu_irq vibe_ctl;
+    vibe_ctl = qdev_get_gpio_in_named(display_dev, "sm_lcd_vibe_ctl", 0);
+    qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOB_INDEX], 0, vibe_ctl);
+
 
     /* UARTs */
     stm32_uart_connect(uart[0], serial_hds[0], 0); /* UART1: not used */
@@ -292,14 +296,20 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map) {
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOG_INDEX], 13, display_sclk);
 
     qemu_irq backlight_enable;
-    backlight_enable = qdev_get_gpio_in_named(display_dev, "pebble_snowy_backlight_enable", 0);
+    backlight_enable = qdev_get_gpio_in_named(display_dev,
+                                              "pebble_snowy_display_backlight_enable", 0);
     qdev_connect_gpio_out_named((DeviceState *)gpio[STM32_GPIOB_INDEX], "af", 14,
                                   backlight_enable);
 
     qemu_irq backlight_level;
-    backlight_level = qdev_get_gpio_in_named(display_dev, "pebble_snowy_backlight_level", 0);
+    backlight_level = qdev_get_gpio_in_named(display_dev,
+                                             "pebble_snowy_display_backlight_level", 0);
     qdev_connect_gpio_out_named((DeviceState *)timer[11], "pwm_ratio_changed", 0,
                                   backlight_level);
+
+    qemu_irq vibe_ctl;
+    vibe_ctl = qdev_get_gpio_in_named(display_dev, "pebble_snowy_display_vibe_ctl", 0);
+    qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOF_INDEX], 4, vibe_ctl);
 
 
     /* UARTs */

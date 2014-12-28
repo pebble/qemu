@@ -58,6 +58,9 @@ typedef struct {
 
     bool   backlight_enabled;
     float  brightness;
+
+    bool   vibrate_on;
+    int    vibrate_offset;
 } lcd_state;
 
 static uint8_t
@@ -122,11 +125,47 @@ sm_lcd_transfer(SSISlave *dev, uint32_t data)
 static void sm_lcd_update_display(void *arg)
 {
     lcd_state *s = arg;
-    DisplaySurface *surface = qemu_console_surface(s->con);
 
     uint8_t *d;
     uint32_t colour_on, colour_off, colour;
     int x, y, bpp;
+
+    DisplaySurface *surface = qemu_console_surface(s->con);
+    bpp = surface_bits_per_pixel(surface);
+    d = surface_data(surface);
+
+
+    // If vibrate is on, simply jiggle the display
+    if (s->vibrate_on) {
+        if (s->vibrate_offset == 0) {
+            s->vibrate_offset = 2;
+        }
+        int bytes_per_pixel;
+        switch (bpp) {
+            case 8:
+                bytes_per_pixel = 1;
+                break;
+            case 15:
+            case 16:
+                bytes_per_pixel = 2;
+                break;
+            case 32:
+                bytes_per_pixel = 4;
+                break;
+            default:
+                abort();
+        }
+        int total_bytes = NUM_ROWS * NUM_COLS * bytes_per_pixel
+                        - abs(s->vibrate_offset) * bytes_per_pixel;
+        if (s->vibrate_offset > 0) {
+            memmove(d, d + s->vibrate_offset * bytes_per_pixel, total_bytes);
+        } else {
+            memmove(d - s->vibrate_offset * bytes_per_pixel, d, total_bytes);
+        }
+        s->vibrate_offset *= -1;
+        dpy_gfx_update(s->con, 0, 0, NUM_COLS, NUM_ROWS);
+        return;
+    }
 
     if (!s->redraw) {
         return;
@@ -138,7 +177,6 @@ static void sm_lcd_update_display(void *arg)
     float brightness = s->backlight_enabled ? s->brightness : 0.0;
     int max_val = 170 + (255 - 170) * brightness;
 
-    bpp = surface_bits_per_pixel(surface);
     /* set colours according to bpp */
     switch (bpp) {
     case 8:
@@ -164,7 +202,6 @@ static void sm_lcd_update_display(void *arg)
         return;
     }
 
-    d = surface_data(surface);
     for (y = 0; y < NUM_ROWS; y++) {
         for (x = 0; x < NUM_COLS; x++) {
             /* Rotate display - installed 'upside-down' in pebble. */
@@ -209,7 +246,6 @@ static void sm_lcd_backlight_enable_cb(void *opaque, int n, int level)
     lcd_state *s = (lcd_state *)opaque;
     assert(n == 0);
 
-    printf("Setting enable to %d\n", level);
     bool enable = (level != 0);
     if (s->backlight_enabled != enable) {
         s->backlight_enabled = enable;
@@ -238,6 +274,17 @@ static void sm_lcd_set_backlight_level_cb(void *opaque, int n, int level)
 }
 
 
+// ----------------------------------------------------------------------------- 
+static void sm_lcd_vibe_ctl(void *opaque, int n, int level)
+{
+    lcd_state *s = (lcd_state *)opaque;
+    assert(n == 0);
+
+    s->vibrate_on = (level != 0);
+}
+
+
+// ----------------------------------------------------------------------------- 
 static const GraphicHwOps sm_lcd_ops = {
     .gfx_update = sm_lcd_update_display,
     .invalidate = sm_lcd_invalidate_display,
@@ -259,6 +306,10 @@ static int sm_lcd_init(SSISlave *dev)
     /* This callback informs us of the brightness level (from 0 to 255) */
     qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_set_backlight_level_cb,
                             "sm_lcd_backlight_level", 1);
+
+    /* This callback informs us that the vibrate is on/orr */
+    qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_vibe_ctl,
+                            "sm_lcd_vibe_ctl", 1);
 
     return 0;
 }
