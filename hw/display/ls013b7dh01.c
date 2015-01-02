@@ -55,6 +55,12 @@ typedef struct {
     uint8_t framebuffer[NUM_ROWS * NUM_COL_BYTES];
     int fbindex;
     xfer_state_t state;
+
+    bool   backlight_enabled;
+    float  brightness;
+
+    bool   vibrate_on;
+    int    vibrate_offset;
 } lcd_state;
 
 static uint8_t
@@ -119,43 +125,83 @@ sm_lcd_transfer(SSISlave *dev, uint32_t data)
 static void sm_lcd_update_display(void *arg)
 {
     lcd_state *s = arg;
-    DisplaySurface *surface = qemu_console_surface(s->con);
 
     uint8_t *d;
     uint32_t colour_on, colour_off, colour;
     int x, y, bpp;
 
+    DisplaySurface *surface = qemu_console_surface(s->con);
+    bpp = surface_bits_per_pixel(surface);
+    d = surface_data(surface);
+
+
+    // If vibrate is on, simply jiggle the display
+    if (s->vibrate_on) {
+        if (s->vibrate_offset == 0) {
+            s->vibrate_offset = 2;
+        }
+        int bytes_per_pixel;
+        switch (bpp) {
+            case 8:
+                bytes_per_pixel = 1;
+                break;
+            case 15:
+            case 16:
+                bytes_per_pixel = 2;
+                break;
+            case 32:
+                bytes_per_pixel = 4;
+                break;
+            default:
+                abort();
+        }
+        int total_bytes = NUM_ROWS * NUM_COLS * bytes_per_pixel
+                        - abs(s->vibrate_offset) * bytes_per_pixel;
+        if (s->vibrate_offset > 0) {
+            memmove(d, d + s->vibrate_offset * bytes_per_pixel, total_bytes);
+        } else {
+            memmove(d - s->vibrate_offset * bytes_per_pixel, d, total_bytes);
+        }
+        s->vibrate_offset *= -1;
+        dpy_gfx_update(s->con, 0, 0, NUM_COLS, NUM_ROWS);
+        return;
+    }
+
     if (!s->redraw) {
         return;
     }
 
-    bpp = surface_bits_per_pixel(surface);
+    // Adjust the white level to compensate for the set brightness.
+    // brightness = 0:  255 in maps to 170 out
+    // brightness = 1.0: 255 in maps to 255 out
+    float brightness = s->backlight_enabled ? s->brightness : 0.0;
+    int max_val = 170 + (255 - 170) * brightness;
+
     /* set colours according to bpp */
     switch (bpp) {
     case 8:
-        colour_on = rgb_to_pixel8(0xaa, 0xaa, 0xaa);
+        colour_on = rgb_to_pixel8(max_val, max_val, max_val);
         colour_off = rgb_to_pixel8(0x00, 0x00, 0x00);
         break;
     case 15:
-        colour_on = rgb_to_pixel15(0xaa, 0xaa, 0xaa);
+        colour_on = rgb_to_pixel15(max_val, max_val, max_val);
         colour_off = rgb_to_pixel15(0x00, 0x00, 0x00);
         break;
     case 16:
-        colour_on = rgb_to_pixel16(0xaa, 0xaa, 0xaa);
+        colour_on = rgb_to_pixel16(max_val, max_val, max_val);
         colour_off = rgb_to_pixel16(0x00, 0x00, 0x00);
     case 24:
-        colour_on = rgb_to_pixel24(0xaa, 0xaa, 0xaa);
+        colour_on = rgb_to_pixel24(max_val, max_val, max_val);
         colour_off = rgb_to_pixel24(0x00, 0x00, 0x00);
         break;
     case 32:
-        colour_on = rgb_to_pixel32(0xaa, 0xaa, 0xaa);
+        colour_on = rgb_to_pixel32(max_val, max_val, max_val);
         colour_off = rgb_to_pixel32(0x00, 0x00, 0x00);
         break;
     default:
         return;
     }
 
-    d = surface_data(surface);
     for (y = 0; y < NUM_ROWS; y++) {
         for (x = 0; x < NUM_COLS; x++) {
             /* Rotate display - installed 'upside-down' in pebble. */
@@ -193,6 +239,52 @@ static void sm_lcd_invalidate_display(void *arg)
     s->redraw = true;
 }
 
+
+// ----------------------------------------------------------------------------- 
+static void sm_lcd_backlight_enable_cb(void *opaque, int n, int level)
+{
+    lcd_state *s = (lcd_state *)opaque;
+    assert(n == 0);
+
+    bool enable = (level != 0);
+    if (s->backlight_enabled != enable) {
+        s->backlight_enabled = enable;
+        s->redraw = true;
+    }
+}
+
+
+// -----------------------------------------------------------------------------
+// Set brightness, from 0 to 255
+static void sm_lcd_set_backlight_level_cb(void *opaque, int n, int level)
+{
+    lcd_state *s = (lcd_state *)opaque;
+    assert(n == 0);
+
+    float bright_f = (float)level / 255;
+
+    // Temp hack - the Pebble sets the PWM to 25% for max brightness
+    float new_setting = MIN(1.0, bright_f * 4);
+    if (new_setting != s->brightness) {
+        s->brightness = MIN(1.0, bright_f * 4);
+        if (s->backlight_enabled) {
+            s->redraw = true;
+        }
+    }
+}
+
+
+// ----------------------------------------------------------------------------- 
+static void sm_lcd_vibe_ctl(void *opaque, int n, int level)
+{
+    lcd_state *s = (lcd_state *)opaque;
+    assert(n == 0);
+
+    s->vibrate_on = (level != 0);
+}
+
+
+// ----------------------------------------------------------------------------- 
 static const GraphicHwOps sm_lcd_ops = {
     .gfx_update = sm_lcd_update_display,
     .invalidate = sm_lcd_invalidate_display,
@@ -202,8 +294,23 @@ static int sm_lcd_init(SSISlave *dev)
 {
     lcd_state *s = FROM_SSI_SLAVE(lcd_state, dev);
 
+    s->brightness = 0.0;
+
     s->con = graphic_console_init(DEVICE(dev), 0, &sm_lcd_ops, s);
     qemu_console_resize(s->con, NUM_COLS, NUM_ROWS);
+
+    /* This callback informs us that brightness control is enabled */
+    qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_backlight_enable_cb,
+                            "sm_lcd_backlight_enable", 1);
+
+    /* This callback informs us of the brightness level (from 0 to 255) */
+    qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_set_backlight_level_cb,
+                            "sm_lcd_backlight_level", 1);
+
+    /* This callback informs us that the vibrate is on/orr */
+    qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_vibe_ctl,
+                            "sm_lcd_vibe_ctl", 1);
+
     return 0;
 }
 

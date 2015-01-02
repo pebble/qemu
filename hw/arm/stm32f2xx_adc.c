@@ -126,7 +126,7 @@ stm32f2xx_adc_common_write(stm32_adc *s, hwaddr offset, uint64_t data,
     case R_ADC_CDR:
         break;
     case R_ADC_CCR:
-        printf("ccr set 0x%x\n", (int)data);
+        //printf("ccr set 0x%x\n", (int)data);
         s->ccr = data;
         break;
     default:

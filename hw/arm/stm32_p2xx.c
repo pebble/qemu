@@ -91,6 +91,8 @@ static void stm32_p205_init(MachineState *machine) {
     Stm32P205 *s;
     Stm32Gpio *stm32_gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *stm32_uart[STM32_UART_COUNT];
+    Stm32Timer *stm32_timer[STM32_TIM_COUNT];
+
     struct stm32f2xx stm;
 
     s = (Stm32P205 *)g_malloc0(sizeof(Stm32P205));
@@ -100,6 +102,7 @@ static void stm32_p205_init(MachineState *machine) {
                machine->kernel_filename,
                stm32_gpio,
                stm32_uart,
+               stm32_timer,
                8000000,
                32768,
                &stm);

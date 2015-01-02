@@ -26,9 +26,13 @@
 #include "hw/sysbus.h"
 #include "hw/arm/stm32.h"
 
+//#define DEBUG_STM32_GPIO
 #ifdef DEBUG_STM32_GPIO
+// NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
 #define DPRINTF(fmt, ...)                                       \
-    do { printf("STM32F2XX_GPIO: " fmt , ## __VA_ARGS__); } while (0)
+    do { printf("STM32F2XX_GPIO: " fmt , ## __VA_ARGS__); \
+         usleep(100); \
+    } while (0)
 #else
 #define DPRINTF(fmt, ...)
 #endif
@@ -54,6 +58,7 @@ struct stm32f2xx_gpio {
 
     qemu_irq pin[STM32_GPIO_PIN_COUNT];
     qemu_irq exti[STM32_GPIO_PIN_COUNT];
+    qemu_irq alternate_function[STM32_GPIO_PIN_COUNT];
 
     uint32_t regs[R_GPIO_MAX];
     uint32_t ccr;
@@ -90,6 +95,27 @@ f2xx_update_odr(stm32f2xx_gpio *s, uint16_t val)
 }
 
 static void
+f2xx_update_mode(stm32f2xx_gpio *s, uint32_t val)
+{
+    int i;
+    uint32_t prev_value = s->regs[R_GPIO_MODER];
+
+    for (i = 0; i < STM32_GPIO_PIN_COUNT; i++)
+    {
+        uint32_t setting = (val >> i*2) & 0x03;
+        uint32_t prev_setting = (prev_value >> i*2) & 0x03;
+        if (setting == prev_setting) {
+            continue;
+        }
+
+        DPRINTF("%s mode of pin %i changing to %d\n", s->busdev.parent_obj.id, i, setting);
+        bool is_alternate_function = (setting == 2);
+        qemu_set_irq(s->alternate_function[i], is_alternate_function);
+    }
+    s->regs[R_GPIO_MODER] = val;
+}
+
+static void
 stm32f2xx_gpio_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
 {
     stm32f2xx_gpio *s = arg;
@@ -116,6 +142,9 @@ stm32f2xx_gpio_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     }
 
     switch (addr) {
+    case R_GPIO_MODER:
+        f2xx_update_mode(s, data);
+        break;
     case R_GPIO_ODR:
         f2xx_update_odr(s, data);
         break;
@@ -205,6 +234,7 @@ stm32f2xx_gpio_init(SysBusDevice *dev)
 
     qdev_init_gpio_in(DEVICE(dev), f2xx_gpio_set, STM32_GPIO_PIN_COUNT);
     qdev_init_gpio_out(DEVICE(dev), s->pin, STM32_GPIO_PIN_COUNT);
+    qdev_init_gpio_out_named(DEVICE(dev), s->alternate_function, "af", STM32_GPIO_PIN_COUNT);
 
     return 0;
 }

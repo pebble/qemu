@@ -5,6 +5,7 @@
 #define STM32F4XX_SPI_COUNT 6
 
 #define STM32F4XX_UART_COUNT 8
+#define STM32F4XX_TIM_COUNT 14
 
 struct stm32f4xx {
     DeviceState *spi_dev[STM32F4XX_SPI_COUNT];

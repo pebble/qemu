@@ -3837,6 +3837,7 @@
 		0A0FD61C1A38DF5A007F431A /* xtensa-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "xtensa-softmmu.mak"; sourceTree = "<group>"; };
 		0A0FD61D1A38DF5A007F431A /* xtensaeb-softmmu.mak */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = "xtensaeb-softmmu.mak"; sourceTree = "<group>"; };
 		0A0FD6201A390F1F007F431A /* pebble_snowy_display.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pebble_snowy_display.c; sourceTree = "<group>"; };
+		0A103B971A4A907500847A30 /* png_to_cstruct.py */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.python; path = png_to_cstruct.py; sourceTree = "<group>"; };
 		0A16AF701A3A5B8E0002272F /* pflash_jedec_424.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pflash_jedec_424.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -7141,6 +7142,7 @@
 				0A06C26B1A1C2440009BB34B /* make-release */,
 				0A06C26C1A1C2440009BB34B /* make_device_config.sh */,
 				0A06C26D1A1C2440009BB34B /* ordereddict.py */,
+				0A103B971A4A907500847A30 /* png_to_cstruct.py */,
 				0A06C26E1A1C2440009BB34B /* qapi-commands.py */,
 				0A06C26F1A1C2440009BB34B /* qapi-event.py */,
 				0A06C2701A1C2440009BB34B /* qapi-types.py */,

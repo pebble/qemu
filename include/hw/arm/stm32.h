@@ -133,6 +133,9 @@ enum {
     STM32_TIM9,
     STM32_TIM10,
     STM32_TIM11,
+    STM32_TIM12,
+    STM32_TIM13,
+    STM32_TIM14,
     STM32_BKP,
     STM32_PWR,
     STM32_I2C1,
@@ -238,6 +241,7 @@ const char *stm32_periph_name(stm32_periph_t periph);
 #define STM32_EXTI15_10_IRQ 40
 #define STM32_RTCAlarm_IRQ 41
 #define STM32_OTG_FS_WKUP_IRQ 42
+#define STM32_TIM8_BRK_TIM12_IRQ 43
 
 #define STM32_DMA1_STREAM7_IRQ 47
 
@@ -350,9 +354,9 @@ uint32_t stm32_rcc_get_periph_freq(
 
 
 
-
-
-
+/* TIM */
+typedef struct Stm32Timer Stm32Timer;
+#define STM32_TIM_COUNT   14
 
 
 
@@ -434,6 +438,7 @@ void stm32f2xx_init(
                     const char *kernel_filename,
                     Stm32Gpio **stm32_gpio,
                     Stm32Uart **stm32_uart,
+                    Stm32Timer **stm32_timer,
                     uint32_t osc_freq,
                     uint32_t osc32_freq,
                     struct stm32f2xx *stm);
@@ -445,6 +450,7 @@ void stm32f4xx_init(
                     const char *kernel_filename,
                     Stm32Gpio **stm32_gpio,
                     Stm32Uart **stm32_uart,
+                    Stm32Timer **stm32_timer,
                     uint32_t osc_freq,
                     uint32_t osc32_freq,
                     struct stm32f4xx *stm);
