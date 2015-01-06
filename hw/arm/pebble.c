@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2013
+ * Copyright (c) 2013, 2014
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +28,10 @@
 #include "sysemu/sysemu.h"
 #include "sysemu/blockdev.h"
 #include "ui/console.h"
+
+
+// Disable jiggling the display when Pebble vibration is on.
+//#define PEBBLE_NO_DISPLAY_VIBRATE
 
 //#define DEBUG_PEBBLE
 #ifdef DEBUG_PEBBLE
@@ -217,9 +221,11 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
     qdev_connect_gpio_out_named((DeviceState *)timer[3-1], "pwm_ratio_changed", 0,
                                   backlight_level);
 
+#ifndef PEBBLE_NO_DISPLAY_VIBRATE
     qemu_irq vibe_ctl;
     vibe_ctl = qdev_get_gpio_in_named(display_dev, "sm_lcd_vibe_ctl", 0);
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOB_INDEX], 0, vibe_ctl);
+#endif
 
 
     /* UARTs */
@@ -307,10 +313,11 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map) {
     qdev_connect_gpio_out_named((DeviceState *)timer[11], "pwm_ratio_changed", 0,
                                   backlight_level);
 
+#ifndef PEBBLE_NO_DISPLAY_VIBRATE
     qemu_irq vibe_ctl;
     vibe_ctl = qdev_get_gpio_in_named(display_dev, "pebble_snowy_display_vibe_ctl", 0);
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOF_INDEX], 4, vibe_ctl);
-
+#endif
 
     /* UARTs */
     stm32_uart_connect(uart[0], serial_hds[0], 0); /* UART1: not used */
