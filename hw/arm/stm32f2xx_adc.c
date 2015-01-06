@@ -196,9 +196,9 @@ f2xx_adc_reset(DeviceState *ds)
 {
     stm32_adc *s = FROM_SYSBUS(stm32_adc, SYS_BUS_DEVICE(ds));
 
-    /* Hack for battery voltage ~ 3.8V */
+    /* Hack for low ambient light level (2500) */
     s->regs[0][R_ADC_DR] = 2730;
-    s->regs[1][R_ADC_DR] = 3331;
+    s->regs[1][R_ADC_DR] = 2500;
 }
 
 static int
