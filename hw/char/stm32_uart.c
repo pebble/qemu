@@ -136,7 +136,8 @@ struct Stm32Uart {
     struct QEMUTimer *rx_timer;
     struct QEMUTimer *tx_timer;
 
-    CharDriverState *chr;
+    void *chr_write_obj;
+    int (*chr_write)(void *chr_write_obj, const uint8_t *buf, int len);
 
     /* Stores the USART pin mapping used by the board.  This is used to check
      * the AFIO's USARTx_REMAP register to make sure the software has set
@@ -335,8 +336,8 @@ static void stm32_uart_start_tx(Stm32Uart *s, uint32_t value)
     s->USART_SR_TC = 0;
 
     /* Write the character out. */
-    if (s->chr) {
-        qemu_chr_fe_write(s->chr, &ch, 1);
+    if (s->chr_write_obj) {
+        s->chr_write(s->chr_write_obj, &ch, 1);
     }
 #ifdef STM32_UART_NO_BAUD_DELAY
     /* If BAUD delays are not being simulated, then immediately mark the
@@ -736,17 +737,42 @@ static const MemoryRegionOps stm32_uart_ops = {
 
 /* PUBLIC FUNCTIONS */
 
-void stm32_uart_connect(Stm32Uart *s, CharDriverState *chr,
-                        uint32_t afio_board_map)
+void stm32_uart_set_write_handler(Stm32Uart *s, void *obj,
+        int (*chr_write_handler)(void *chr_write_obj, const uint8_t *buf, int len))
 {
-    s->chr = chr;
+    s->chr_write_obj = obj;
+    s->chr_write = chr_write_handler;
+}
+
+
+void stm32_uart_get_rcv_handlers(Stm32Uart *s, IOCanReadHandler **can_read,
+                                 IOReadHandler **read, IOEventHandler **event)
+{
+    *can_read = stm32_uart_can_receive;
+    *read = stm32_uart_receive;
+    *event = stm32_uart_event;
+}
+
+
+// Stub used to typecast the generic write handler prototype to a
+// qemu_chr write handler.
+static int stm32_uart_chr_fe_write_stub(void *s, const uint8_t *buf, int len)
+{
+    return qemu_chr_fe_write((CharDriverState *)s, buf, len);
+}
+
+
+// Helper method that connects this UART device's receive handlers to a qemu_chr instance.
+void stm32_uart_connect(Stm32Uart *s, CharDriverState *chr, uint32_t afio_board_map)
+{
+    s->chr_write_obj = chr;
     if (chr) {
-        qemu_chr_add_handlers(
-                s->chr,
-                stm32_uart_can_receive,
-                stm32_uart_receive,
-                stm32_uart_event,
-                (void *)s);
+        stm32_uart_set_write_handler(s, chr, stm32_uart_chr_fe_write_stub);
+        IOCanReadHandler *can_read_cb;
+        IOReadHandler *read_cb;
+        IOEventHandler *event_cb;
+        stm32_uart_get_rcv_handlers(s, &can_read_cb, &read_cb, &event_cb);
+        qemu_chr_add_handlers(chr, can_read_cb, read_cb, event_cb, s);
     }
 
     s->afio_board_map = afio_board_map;

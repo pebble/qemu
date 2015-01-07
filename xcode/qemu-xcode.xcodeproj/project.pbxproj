@@ -1279,6 +1279,7 @@
 		0A0FD5D61A3658E6007F431A /* stm32f4xx.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A0FD5D41A3658E6007F431A /* stm32f4xx.c */; };
 		0A0FD6211A390F1F007F431A /* pebble_snowy_display.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A0FD6201A390F1F007F431A /* pebble_snowy_display.c */; };
 		0A16AF711A3A5B8E0002272F /* pflash_jedec_424.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A16AF701A3A5B8E0002272F /* pflash_jedec_424.c */; };
+		0A9FB26D1A5CA7D900508B50 /* pebble_control.c in Sources */ = {isa = PBXBuildFile; fileRef = 0A9FB26C1A5CA7CE00508B50 /* pebble_control.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -3839,6 +3840,8 @@
 		0A0FD6201A390F1F007F431A /* pebble_snowy_display.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pebble_snowy_display.c; sourceTree = "<group>"; };
 		0A103B971A4A907500847A30 /* png_to_cstruct.py */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.python; path = png_to_cstruct.py; sourceTree = "<group>"; };
 		0A16AF701A3A5B8E0002272F /* pflash_jedec_424.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pflash_jedec_424.c; sourceTree = "<group>"; };
+		0A9FB26C1A5CA7CE00508B50 /* pebble_control.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pebble_control.c; sourceTree = "<group>"; };
+		0A9FB26E1A5CB32400508B50 /* pebble_control.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pebble_control.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -4582,6 +4585,8 @@
 				0A068B201A1C2416009BB34B /* omap_sx1.c */,
 				0A068B211A1C2416009BB34B /* palm.c */,
 				0A068B221A1C2416009BB34B /* pebble.c */,
+				0A9FB26C1A5CA7CE00508B50 /* pebble_control.c */,
+				0A9FB26E1A5CB32400508B50 /* pebble_control.h */,
 				0A068B231A1C2416009BB34B /* pxa2xx.c */,
 				0A068B241A1C2416009BB34B /* pxa2xx_gpio.c */,
 				0A068B251A1C2416009BB34B /* pxa2xx_pic.c */,
@@ -8620,6 +8625,7 @@
 				0A06D17F1A1C2452009BB34B /* pic_cpu.c in Sources */,
 				0A06ECC11A1C2466009BB34B /* sdl.c in Sources */,
 				0A06C9BE1A1C2450009BB34B /* aio-posix.c in Sources */,
+				0A9FB26D1A5CA7D900508B50 /* pebble_control.c in Sources */,
 				0A06D2771A1C2452009BB34B /* netmap.c in Sources */,
 				0A06D1C51A1C2452009BB34B /* megasas.c in Sources */,
 				0A06D29F1A1C2452009BB34B /* pixman-cpu.c in Sources */,

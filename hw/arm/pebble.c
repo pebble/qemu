@@ -28,7 +28,7 @@
 #include "sysemu/sysemu.h"
 #include "sysemu/blockdev.h"
 #include "ui/console.h"
-
+#include "pebble_control.h"
 
 // Disable jiggling the display when Pebble vibration is on.
 //#define PEBBLE_NO_DISPLAY_VIBRATE
@@ -44,6 +44,10 @@
 #define DPRINTF(fmt, ...)
 #endif
 
+
+// This is the instance of pebble_control that intercepts packets sent to the emulated
+// pebble over uart 2
+static PebbleControl *s_pebble_control;
 
 typedef enum {
   PBL_BUTTON_ID_NONE = -1,
@@ -176,7 +180,26 @@ static void pebble_key_handler(void *arg, int keycode)
 }
 
 
-static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
+// ------------------------------------------------------------------------------------------
+// Connect up the uarts to serial drivers that connect to the outside world
+static void pebble_connect_uarts(Stm32Uart *uart[])
+{
+    /* UARTs */
+    stm32_uart_connect(uart[0], serial_hds[0], 0); /* UART1: not used */
+
+    // For UARTR2, used for control messages, put in our pebble_control device in between
+    // the qemu serial chr and the uart. This enables us to intercept and act selectively
+    // act on messages sent to the Pebble in QEMU before they get to it.
+    s_pebble_control = pebble_control_create(serial_hds[1], uart[1]);
+
+    stm32_uart_connect(uart[2], serial_hds[2], 0); /* UART3: console */
+}
+
+
+// ------------------------------------------------------------------------------------------
+// Instantiate a 32f2xx based pebble
+static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
+{
     Stm32Gpio *gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *uart[STM32F2XX_UART_COUNT];
     Stm32Timer *timer[STM32F2XX_TIM_COUNT];
@@ -228,10 +251,8 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
 #endif
 
 
-    /* UARTs */
-    stm32_uart_connect(uart[0], serial_hds[0], 0); /* UART1: not used */
-    stm32_uart_connect(uart[1], serial_hds[1], 0); /* UART2: Pebble protocol */
-    stm32_uart_connect(uart[2], serial_hds[2], 0); /* UART3: console */
+    // Connect up the uarts
+    pebble_connect_uarts(uart);
 
     /* Buttons */
     static PblButtonState bs[4];
@@ -243,7 +264,11 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map) {
     qemu_add_kbd_event_handler(pebble_key_handler, bs);
 }
 
-static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map) {
+
+// ------------------------------------------------------------------------------------------
+// Instantiate a 32f4xx based pebble
+static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map)
+{
     Stm32Gpio *gpio[STM32F4XX_GPIO_COUNT];
     Stm32Uart *uart[STM32F4XX_UART_COUNT];
     Stm32Timer *timer[STM32F4XX_TIM_COUNT];
@@ -319,10 +344,8 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map) {
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOF_INDEX], 4, vibe_ctl);
 #endif
 
-    /* UARTs */
-    stm32_uart_connect(uart[0], serial_hds[0], 0); /* UART1: not used */
-    stm32_uart_connect(uart[1], serial_hds[1], 0); /* UART2: Pebble protocol */
-    stm32_uart_connect(uart[2], serial_hds[2], 0); /* UART3: console */
+    // Connect up the uarts
+    pebble_connect_uarts(uart);
 
     /* Buttons */
     static PblButtonState bs[4];

@@ -27,6 +27,7 @@
 #include "qemu-common.h"
 #include "hw/sysbus.h"
 #include "qemu/log.h"
+#include "sysemu/char.h"
 
 
 #define ENUM_STRING(x) [x] = #x
@@ -374,6 +375,14 @@ typedef struct Stm32Uart Stm32Uart;
  */
 void stm32_uart_connect(Stm32Uart *s, CharDriverState *chr,
                         uint32_t afio_board_map);
+
+/* Low level methods that let you connect a UART device to any other instance
+ * that has read/write handlers. These can be used in place of stm32_uart_connect
+ * if not connecting to a CharDriverState instance. */
+void stm32_uart_set_write_handler(Stm32Uart *s, void *obj,
+        int (*chr_write_handler)(void *chr_write_obj, const uint8_t *buf, int len));
+void stm32_uart_get_rcv_handlers(Stm32Uart *s, IOCanReadHandler **can_read,
+                                 IOReadHandler **read, IOEventHandler **event);
 
 void stm32_create_uart_dev(
         Object *stm32_container,
