@@ -3842,6 +3842,7 @@
 		0A16AF701A3A5B8E0002272F /* pflash_jedec_424.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pflash_jedec_424.c; sourceTree = "<group>"; };
 		0A9FB26C1A5CA7CE00508B50 /* pebble_control.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pebble_control.c; sourceTree = "<group>"; };
 		0A9FB26E1A5CB32400508B50 /* pebble_control.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pebble_control.h; sourceTree = "<group>"; };
+		0A9FB26F1A5DD65300508B50 /* pebble.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pebble.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -4585,6 +4586,7 @@
 				0A068B201A1C2416009BB34B /* omap_sx1.c */,
 				0A068B211A1C2416009BB34B /* palm.c */,
 				0A068B221A1C2416009BB34B /* pebble.c */,
+				0A9FB26F1A5DD65300508B50 /* pebble.h */,
 				0A9FB26C1A5CA7CE00508B50 /* pebble_control.c */,
 				0A9FB26E1A5CB32400508B50 /* pebble_control.h */,
 				0A068B231A1C2416009BB34B /* pxa2xx.c */,

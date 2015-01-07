@@ -29,6 +29,7 @@
 #include "sysemu/blockdev.h"
 #include "ui/console.h"
 #include "pebble_control.h"
+#include "pebble.h"
 
 // Disable jiggling the display when Pebble vibration is on.
 //#define PEBBLE_NO_DISPLAY_VIBRATE
@@ -45,16 +46,13 @@
 #endif
 
 
-// This is the instance of pebble_control that intercepts packets sent to the emulated
-// pebble over uart 2
-static PebbleControl *s_pebble_control;
-
 typedef enum {
   PBL_BUTTON_ID_NONE = -1,
   PBL_BUTTON_ID_BACK = 0,
   PBL_BUTTON_ID_UP = 1,
   PBL_BUTTON_ID_SELECT = 2,
-  PBL_BUTTON_ID_DOWN = 3
+  PBL_BUTTON_ID_DOWN = 3,
+  PBL_NUM_BUTTONS = 4
   } PblButtonID;
 
 typedef struct {
@@ -62,46 +60,51 @@ typedef struct {
     int pin;
 } PblButtonMap;
 
-const static PblButtonMap s_button_map_bb2_ev1_ev2[] = {
+const static PblButtonMap s_button_map_bb2_ev1_ev2[PBL_NUM_BUTTONS] = {
     {STM32_GPIOC_INDEX, 3},   /* back */
     {STM32_GPIOA_INDEX, 2},   /* up */
     {STM32_GPIOC_INDEX, 6},   /* select */
     {STM32_GPIOA_INDEX, 1},   /* down */
 };
 
-const static PblButtonMap s_button_map_bigboard[] = {
+const static PblButtonMap s_button_map_bigboard[PBL_NUM_BUTTONS] = {
     {STM32_GPIOA_INDEX, 2},
     {STM32_GPIOA_INDEX, 1},
     {STM32_GPIOA_INDEX, 3},
     {STM32_GPIOC_INDEX, 9}
 };
 
-const static PblButtonMap s_button_map_snowy_bb[] = {
+const static PblButtonMap s_button_map_snowy_bb[PBL_NUM_BUTTONS] = {
     {STM32_GPIOG_INDEX, 4},
     {STM32_GPIOG_INDEX, 3},
     {STM32_GPIOG_INDEX, 1},
     {STM32_GPIOG_INDEX, 2},
 };
 
-typedef struct {
-    qemu_irq irq;
-    bool pressed;
-} PblButtonState;
 
+// ----------------------------------------------------------------------------------------
+// Static globals
 static PblButtonID s_waiting_key_up_id = PBL_BUTTON_ID_NONE;
 static QEMUTimer *s_button_timer;
+
+// This is the instance of pebble_control that intercepts packets sent to the emulated
+// pebble over uart 2
+static PebbleControl *s_pebble_control;
+
+// The irq callbacks for each button
+static qemu_irq s_button_irq[PBL_NUM_BUTTONS];
 
 
 static void prv_send_key_up(void *opaque)
 {
-    PblButtonState *bs = opaque;
+    qemu_irq *button_irqs = opaque;
     if (s_waiting_key_up_id == PBL_BUTTON_ID_NONE) {
         /* Should never happen */
         return;
     }
 
     DPRINTF("button %d released\n", s_waiting_key_up_id);
-    qemu_set_irq(bs[s_waiting_key_up_id].irq, true);
+    qemu_set_irq(button_irqs[s_waiting_key_up_id], true);
     s_waiting_key_up_id = PBL_BUTTON_ID_NONE;
 }
 
@@ -111,7 +114,7 @@ static void prv_send_key_up(void *opaque)
 // quick back to back key-down, key-up callbacks.
 static void pebble_key_handler(void *arg, int keycode)
 {
-    PblButtonState *bs = arg;
+    qemu_irq *button_irqs = arg;
     static int prev_keycode;
 
     int pressed = (keycode & 0x80) == 0;
@@ -163,20 +166,32 @@ static void pebble_key_handler(void *arg, int keycode)
     // If this is a different key, and we are waiting for the prior one to key up, send the
     //  key up now
     if (s_waiting_key_up_id != PBL_BUTTON_ID_NONE && button_id != s_waiting_key_up_id) {
-        prv_send_key_up(bs);
+        prv_send_key_up(button_irqs);
     }
 
     if (s_waiting_key_up_id != button_id) {
         DPRINTF("button %d pressed\n", button_id);
         s_waiting_key_up_id = button_id;
-        qemu_set_irq(bs[button_id].irq, false);   // Pressed
+        qemu_set_irq(button_irqs[button_id], false);   // Pressed
     }
 
     /* Set or reschedule the timer to release the key */
     if (!s_button_timer) {
-        s_button_timer = timer_new_ms(QEMU_CLOCK_VIRTUAL, prv_send_key_up, bs);
+        s_button_timer = timer_new_ms(QEMU_CLOCK_VIRTUAL, prv_send_key_up, button_irqs);
     }
     timer_mod(s_button_timer, qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + 250);
+}
+
+
+// ------------------------------------------------------------------------------------------
+// This method used externally (by pebble_control) for setting a given button state
+void pebble_set_button_state(uint32_t button_state)
+{
+    // Toggle the GPIOs to match the new button state
+    for (int button_id=0; button_id < PBL_NUM_BUTTONS; button_id++) {
+      uint32_t mask = 1 << button_id;
+      qemu_set_irq(s_button_irq[button_id], !(button_state & mask));   // Set new state
+    }
 }
 
 
@@ -193,6 +208,17 @@ static void pebble_connect_uarts(Stm32Uart *uart[])
     s_pebble_control = pebble_control_create(serial_hds[1], uart[1]);
 
     stm32_uart_connect(uart[2], serial_hds[2], 0); /* UART3: console */
+}
+
+
+// -----------------------------------------------------------------------------------------
+// Init button handling
+static void pebble_init_buttons(Stm32Gpio *gpio[], const PblButtonMap *map) {
+    int i;
+    for (i = 0; i < PBL_NUM_BUTTONS; i++) {
+        s_button_irq[i] = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
+    }
+    qemu_add_kbd_event_handler(pebble_key_handler, s_button_irq);
 }
 
 
@@ -254,14 +280,8 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
     // Connect up the uarts
     pebble_connect_uarts(uart);
 
-    /* Buttons */
-    static PblButtonState bs[4];
-    int i;
-    for (i = 0; i < 4; i++) {
-        bs[i].pressed = 0;
-        bs[i].irq = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
-    }
-    qemu_add_kbd_event_handler(pebble_key_handler, bs);
+    // Init the buttons
+    pebble_init_buttons(gpio, map);
 }
 
 
@@ -347,15 +367,8 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map)
     // Connect up the uarts
     pebble_connect_uarts(uart);
 
-    /* Buttons */
-    static PblButtonState bs[4];
-    int i;
-    for (i = 0; i < 4; i++) {
-        bs[i].pressed = 0;
-        bs[i].irq = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
-    }
-    qemu_add_kbd_event_handler(pebble_key_handler, bs);
-
+    // Init the buttons
+    pebble_init_buttons(gpio, map);
 }
 
 static void

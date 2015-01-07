@@ -26,14 +26,22 @@
 #include "qemu/timer.h"
 
 #include "pebble_control.h"
+#include "pebble.h"
 
-#define DEBUG_PEBBLE_CONTROL
+//#define DEBUG_PEBBLE_CONTROL
 #ifdef DEBUG_PEBBLE_CONTROL
-#define DPRINTF(fmt, ...)                                       \
-    do { printf("PEBBLE_CONTROL: " fmt , ## __VA_ARGS__); } while (0)
+#define DPRINTF(fmt, ...)                                 \
+    do { printf("PEBBLE_CONTROL: " fmt , ## __VA_ARGS__); \
+         usleep(1000); \
+    } while (0)
 #else
 #define DPRINTF(fmt, ...)
 #endif
+
+#define EPRINTF(fmt, ...)                                 \
+    do { printf("PEBBLE_CONTROL: " fmt , ## __VA_ARGS__); \
+         usleep(1000); \
+    } while (0)
 
 
 // ------------------------------------------------------------------------------------------
@@ -189,7 +197,15 @@ typedef struct {
 static void pebble_control_button_msg_callback(PebbleControl *s, const uint8_t *data,
                                               uint32_t len)
 {
-    DPRINTF("%s: ", __func__);
+    DPRINTF("%s: \n", __func__);
+    QemuProtocolButtonHeader *hdr = (QemuProtocolButtonHeader *)data;
+    if (len != sizeof(*hdr)) {
+        EPRINTF("%s: invalid packet\n", __func__);
+        return;
+    }
+
+    DPRINTF("%s: new button state: 0x%x\n", __func__, (int)hdr->button_state);
+    pebble_set_button_state(hdr->button_state);
 }
 
 
