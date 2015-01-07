@@ -145,7 +145,7 @@ typedef struct QEMU_PACKED {
 
 // -----------------------------------------------------------------------------------------
 // PebbleControl globals
-#define PBLCONTROL_RCV_BUF_LEN (QEMU_MAX_DATA_LEN + sizeof(QemuCommChannelHdr) \
+#define PBLCONTROL_BUF_LEN (QEMU_MAX_DATA_LEN + sizeof(QemuCommChannelHdr) \
                                 + sizeof(QemuCommChannelFooter))
 
 struct PebbleControl {
@@ -166,10 +166,10 @@ struct PebbleControl {
     IOReadHandler *uart_chr_read;
 
 
-    // We buffer the characters we receive from our qemu_chr receive handler in here
-    // to increase our overall throughput. This allows us to tell the target that
-    // another character is ready immediately after it does a read.
-    uint8_t rcv_char_buf[PBLCONTROL_RCV_BUF_LEN];
+    // We buffer the characters we receive from our qemu_chr receive handler here until
+    // we get a complete packet. From there, we can figure out if we should process it
+    // directly or pass it onto the target's UART
+    uint8_t rcv_char_buf[PBLCONTROL_BUF_LEN];
     uint32_t rcv_char_bytes;    /* number of bytes avaialable in rcv_char_buf */
 
 
@@ -180,6 +180,13 @@ struct PebbleControl {
 
     // Timer used to wake us up to pump more data to the target
     struct QEMUTimer *target_send_timer;
+
+    // We buffer the characters the UART from the target wants to send out here.
+    // We only send it to the front end once we have a complete packet. This insures
+    // that packets we went to send out don't interrupt midstream one that the target is
+    // sending.
+    uint8_t send_char_buf[PBLCONTROL_BUF_LEN];
+    uint32_t send_char_bytes;    /* number of bytes avaialable in send_char_buf */
 };
 
 
@@ -238,7 +245,7 @@ static const PebbleControlMessageHandler* pebble_control_find_handler(PebbleCont
 
 // -----------------------------------------------------------------------------------
 // Drop the first N bytes out of the beginning of the receive buffer
-static void pebble_control_consume_bytes(PebbleControl *s, uint32_t n)
+static void pebble_control_consume_rcv_bytes(PebbleControl *s, uint32_t n)
 {
     assert (n <= s->rcv_char_bytes);
     s->rcv_char_bytes -= n;
@@ -260,7 +267,7 @@ static void pebble_control_forward_to_target(PebbleControl *s)
     if (can_read_bytes > 0) {
         can_read_bytes = MIN(can_read_bytes, s->target_send_bytes);
         s->uart_chr_read(s->uart, s->rcv_char_buf, can_read_bytes);
-        pebble_control_consume_bytes(s, can_read_bytes);
+        pebble_control_consume_rcv_bytes(s, can_read_bytes);
         s->target_send_bytes -= can_read_bytes;
         DPRINTF("%s: sent %d bytes to target, %d remaining\n", __func__, can_read_bytes,
                   s->target_send_bytes);
@@ -293,14 +300,14 @@ static void pebble_control_parse_receive_buffer(PebbleControl *s)
         // Check the header signature
         if (ntohs(hdr->signature) != QEMU_HEADER_SIGNATURE) {
             DPRINTF("%s: invalid packet hdr signature detected\n", __func__);
-            pebble_control_consume_bytes(s, sizeof(hdr->signature));
+            pebble_control_consume_rcv_bytes(s, sizeof(hdr->signature));
         }
 
         // Validate the length
         uint16_t data_len = ntohs(hdr->len);
         if (data_len > QEMU_MAX_DATA_LEN) {
             DPRINTF("%s: invalid packet hdr len detected\n", __func__);
-            pebble_control_consume_bytes(s, sizeof(*hdr));
+            pebble_control_consume_rcv_bytes(s, sizeof(*hdr));
         }
 
         // If not a complete packet yet, break out
@@ -325,13 +332,12 @@ static void pebble_control_parse_receive_buffer(PebbleControl *s)
             }
         } else {
             handler->callback(s, (uint8_t *)(hdr+1), data_len);
-            pebble_control_consume_bytes(s, total_size);
+            pebble_control_consume_rcv_bytes(s, total_size);
         }
 
     }
 
 }
-
 
 
 // -----------------------------------------------------------------------------------
@@ -348,7 +354,7 @@ static int pebble_control_can_receive(void *opaque)
     PebbleControl *s = (PebbleControl *)opaque;
 
     /* How much space do we have in our buffer? */
-    return (PBLCONTROL_RCV_BUF_LEN - s->rcv_char_bytes);
+    return (PBLCONTROL_BUF_LEN - s->rcv_char_bytes);
 }
 
 static void pebble_control_receive(void *opaque, const uint8_t *buf, int size)
@@ -358,7 +364,7 @@ static void pebble_control_receive(void *opaque, const uint8_t *buf, int size)
     assert(size > 0);
 
     // Copy the characters into our buffer first
-    assert (size <= PBLCONTROL_RCV_BUF_LEN - s->rcv_char_bytes);
+    assert (size <= PBLCONTROL_BUF_LEN - s->rcv_char_bytes);
     memmove(s->rcv_char_buf + s->rcv_char_bytes, buf, size);
     s->rcv_char_bytes += size;
 
@@ -368,13 +374,99 @@ static void pebble_control_receive(void *opaque, const uint8_t *buf, int size)
 
 
 // -----------------------------------------------------------------------------------
+// Drop the first N bytes out of the beginning of the send buffer
+static void pebble_control_consume_send_bytes(PebbleControl *s, uint32_t n)
+{
+    assert (n <= s->send_char_bytes);
+    s->send_char_bytes -= n;
+    memmove(&s->send_char_buf[0], &s->send_char_buf[n], s->send_char_bytes);
+}
+
+
+// -----------------------------------------------------------------------------------
 // This method gets passed to the UART's stm32_uart_set_write_handler(). This way
-//  we can intercept all writes that the UART meant to send to the front end.
+//  we can intercept all writes that the UART sends to the front end and insure that
+//  we don't interrupt one mid-stream by sending a packet from QEMU
 static int pebble_control_write(void *opaque, const uint8_t *buf, int len) {
     PebbleControl *s = (PebbleControl *)opaque;
+
+    while (len) {
+        // Copy the new bytes in
+        uint32_t space_left = sizeof(s->send_char_buf) - s->send_char_bytes;
+
+        if (space_left == 0) {
+            EPRINTF("%s: overflowed send buffer, aborting queued up data\n", __func__);
+            s->send_char_bytes = 0;
+            space_left = sizeof(s->send_char_buf);
+        }
+        uint32_t bytes_to_copy = MIN(space_left, len);
+        memmove(&s->send_char_buf[s->send_char_bytes], buf, bytes_to_copy);
+        s->send_char_bytes += bytes_to_copy;
+        len -= bytes_to_copy;
+
+
+        // ------------------------------------------------------------------
+        // See if we have a complete packet yet
+        if (s->send_char_bytes < sizeof(QemuCommChannelHdr)
+                                 + sizeof(QemuCommChannelFooter)) {
+            break;
+        }
+        QemuCommChannelHdr *hdr = (QemuCommChannelHdr *)s->send_char_buf;
+
+        // Check the header signature
+        if (ntohs(hdr->signature) != QEMU_HEADER_SIGNATURE) {
+            DPRINTF("%s: invalid packet hdr signature detected\n", __func__);
+            pebble_control_consume_send_bytes(s, sizeof(hdr->signature));
+        }
+
+        // Validate the length
+        uint16_t data_len = ntohs(hdr->len);
+        if (data_len > QEMU_MAX_DATA_LEN) {
+            DPRINTF("%s: invalid packet hdr len detected\n", __func__);
+            pebble_control_consume_send_bytes(s, sizeof(*hdr));
+        }
+
+        // If not a complete packet yet, break out
+        uint16_t total_size = sizeof(QemuCommChannelHdr) + data_len
+                                + sizeof(QemuCommChannelFooter);
+        if (s->send_char_bytes < total_size) {
+            if (len > 0) {
+                // If we still have not put in all the bytes the caller wanted,
+                // we must be off-frame because we ran out of room.
+                EPRINTF("%s: overflowed send buffer, aborting queued up data\n", __func__);
+                s->send_char_bytes = 0;
+                continue;
+            }
+            break;
+        }
+
+        // We have a complete packet, send it out the front end
+        int bytes_sent;
+        DPRINTF("%s: Sending packet of %d bytes to host\n", __func__, total_size);
+        while (total_size) {
+            bytes_sent = qemu_chr_fe_write(s->chr, s->send_char_buf, total_size);
+            total_size -= bytes_sent;
+            pebble_control_consume_send_bytes(s, bytes_sent);
+        }
+
+    }
+
     return qemu_chr_fe_write(s->chr, buf, len);
 }
 
+
+/*
+// -----------------------------------------------------------------------------------
+// Send a vibe notification to the host
+void pebble_control_send_vibe_notification(bool on)
+{
+    QemuProtocolVibrationNotificationHeader hdr = {
+      .on = on
+    };
+    qemu_serial_send(QemuProtocol_Vibration, (uint8_t *)&hdr, sizeof(hdr));
+
+}
+*/
 
 // -----------------------------------------------------------------------------------
 PebbleControl *pebble_control_create(CharDriverState *chr, Stm32Uart *uart)
