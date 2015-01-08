@@ -243,6 +243,14 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
     memory_region_add_subregion(address_space_mem, 0x20000000, sram);
     armv7m_bitband_init(parent);
 
+    /* If this is an M4, create the core-coupled memory region */
+    if (!strcmp(cpu_model, "cortex-m4")) {
+        MemoryRegion *ccm = g_new(MemoryRegion, 1);
+        memory_region_init_ram(ccm, NULL, "armv7m.ccm", 64 * 1024 /* 64K */);
+        vmstate_register_ram_global(ccm);
+        memory_region_add_subregion(address_space_mem, 0x10000000, ccm);
+    }
+
     nvic = qdev_create(NULL, "armv7m_nvic");
     /* The NVIC must be configured with a multiple of 32 IRQs */
     uint32_t num_irqs = ((STM32_MAX_IRQ + 31) / 32) * 32;
