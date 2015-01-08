@@ -222,6 +222,22 @@ static void pebble_init_buttons(Stm32Gpio *gpio[], const PblButtonMap *map) {
 }
 
 
+// ----------------------------------------------------------------------------------------
+// Init the board device
+static DeviceState *pebble_init_board(Stm32Gpio *gpio[], qemu_irq display_vibe) {
+
+    // Create the board device and wire it up
+    DeviceState *board = qdev_create(NULL, "pebble_board");
+    qdev_prop_set_ptr(board, "name", (void *)"Pebble");
+
+#ifndef PEBBLE_NO_DISPLAY_VIBRATE
+    qdev_prop_set_ptr(board, "display_vibe", display_vibe);
+#endif
+
+    qdev_init_nofail(board);
+    return board;
+}
+
 // ------------------------------------------------------------------------------------------
 // Instantiate a 32f2xx based pebble
 static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
@@ -270,18 +286,22 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
     qdev_connect_gpio_out_named((DeviceState *)timer[3-1], "pwm_ratio_changed", 0,
                                   backlight_level);
 
-#ifndef PEBBLE_NO_DISPLAY_VIBRATE
-    qemu_irq vibe_ctl;
-    vibe_ctl = qdev_get_gpio_in_named(display_dev, "sm_lcd_vibe_ctl", 0);
-    qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOB_INDEX], 0, vibe_ctl);
-#endif
-
-
     // Connect up the uarts
     pebble_connect_uarts(uart);
 
     // Init the buttons
     pebble_init_buttons(gpio, map);
+
+
+    // Create the board device and wire it up
+    qemu_irq display_vibe;
+    display_vibe = qdev_get_gpio_in_named(display_dev, "sm_lcd_vibe_ctl", 0);
+    DeviceState *board = pebble_init_board(gpio, display_vibe);
+
+    // The GPIO from vibrate drives the vibe input on the board
+    qemu_irq board_vibe_in;
+    board_vibe_in = qdev_get_gpio_in_named(board, "pebble_board_vibe_in", 0);
+    qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOB_INDEX], 0, board_vibe_in);
 }
 
 
@@ -358,34 +378,106 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map)
     qdev_connect_gpio_out_named((DeviceState *)timer[11], "pwm_ratio_changed", 0,
                                   backlight_level);
 
-#ifndef PEBBLE_NO_DISPLAY_VIBRATE
-    qemu_irq vibe_ctl;
-    vibe_ctl = qdev_get_gpio_in_named(display_dev, "pebble_snowy_display_vibe_ctl", 0);
-    qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOF_INDEX], 4, vibe_ctl);
-#endif
-
     // Connect up the uarts
     pebble_connect_uarts(uart);
 
     // Init the buttons
     pebble_init_buttons(gpio, map);
+
+
+    // Create the board device and wire it up
+    qemu_irq display_vibe;
+    display_vibe = qdev_get_gpio_in_named(display_dev, "pebble_snowy_display_vibe_ctl", 0);
+    DeviceState *board = pebble_init_board(gpio, display_vibe);
+
+    // The GPIO from vibrate drives the vibe input on the board
+    qemu_irq board_vibe_in;
+    board_vibe_in = qdev_get_gpio_in_named(board, "pebble_board_vibe_in", 0);
+    qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOF_INDEX], 4, board_vibe_in);
 }
 
-static void
-pebble_bb2_init(MachineState *machine) {
+
+// ================================================================================
+// Pebble "board" device. Used when we need to fan out a GPIO outputs to one or more other
+// devices/instances
+typedef struct PebbleBoard {
+    SysBusDevice busdev;
+    void *name;
+
+    union {
+      void *vibe_out_irq_prop;
+      qemu_irq vibe_out_irq;
+    };
+
+} PebbleBoard;
+
+
+static void pebble_board_vibe_ctl(void *opaque, int n, int level)
+{
+    PebbleBoard *s = (PebbleBoard *)opaque;
+    assert(n == 0);
+
+    // Tell the pebble control instance that we vibrated
+    pebble_control_send_vibe_notification(s_pebble_control, level != 0);
+
+    // Tell pass onto the vibe out output as well
+    qemu_set_irq(s->vibe_out_irq, level);
+}
+
+
+static int pebble_board_init(SysBusDevice *dev)
+{
+    //PebbleBoard *s = FROM_SYSBUS(PebbleBoard, dev);
+
+    /* This callback informs us that the vibrate is on/orr */
+    qdev_init_gpio_in_named(DEVICE(dev), pebble_board_vibe_ctl,
+                            "pebble_board_vibe_in", 1);
+
+    return 0;
+}
+
+static Property pebble_board_properties[] = {
+    DEFINE_PROP_PTR("name", PebbleBoard, name),
+    DEFINE_PROP_PTR("display_vibe", PebbleBoard, vibe_out_irq_prop),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
+static void pebble_board_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    SysBusDeviceClass *sc = SYS_BUS_DEVICE_CLASS(klass);
+    sc->init = pebble_board_init;
+    dc->props = pebble_board_properties;
+}
+
+static const TypeInfo pebble_board_info = {
+    .name          = "pebble_board",
+    .parent        = TYPE_SYS_BUS_DEVICE,
+    .instance_size = sizeof(PebbleBoard),
+    .class_init    = pebble_board_class_init,
+};
+
+static void pebble_board_register_types(void)
+{
+    type_register_static(&pebble_board_info);
+}
+
+type_init(pebble_board_register_types)
+
+
+// ================================================================================
+// Machines
+static void pebble_bb2_init(MachineState *machine) {
     pebble_32f2_init(machine, s_button_map_bb2_ev1_ev2);
 }
 
-static void
-pebble_bb_init(MachineState *machine) {
+static void pebble_bb_init(MachineState *machine) {
     pebble_32f2_init(machine, s_button_map_bigboard);
 }
 
-static void
-pebble_snowy_init(MachineState *machine) {
+static void pebble_snowy_init(MachineState *machine) {
     pebble_32f4_init(machine, s_button_map_snowy_bb);
 }
-
 
 
 static QEMUMachine pebble_bb2_machine = {

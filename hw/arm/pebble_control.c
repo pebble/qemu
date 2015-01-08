@@ -455,18 +455,40 @@ static int pebble_control_write(void *opaque, const uint8_t *buf, int len) {
 }
 
 
-/*
+// -----------------------------------------------------------------------------------------
+static void pebble_control_send_packet(PebbleControl *s, QemuProtocol protocol, void *data,
+                                uint32_t len)
+{
+  // Send the header
+  QemuCommChannelHdr hdr = (QemuCommChannelHdr) {
+    .signature = htons(QEMU_HEADER_SIGNATURE),
+    .protocol = htons(protocol),
+    .len = htons(len)
+  };
+  qemu_chr_fe_write(s->chr, (uint8_t *)&hdr, sizeof(hdr));
+
+  // Send the data
+  qemu_chr_fe_write(s->chr, data, len);
+
+  // Send the footer
+  QemuCommChannelFooter footer = (QemuCommChannelFooter) {
+    .signature = htons(QEMU_FOOTER_SIGNATURE)
+  };
+
+  qemu_chr_fe_write(s->chr, (uint8_t *)&footer, sizeof(footer));
+}
+
 // -----------------------------------------------------------------------------------
 // Send a vibe notification to the host
-void pebble_control_send_vibe_notification(bool on)
+void pebble_control_send_vibe_notification(PebbleControl *s, bool on)
 {
+    DPRINTF("%s: vibe %d\n", __func__, (int)on);
+
     QemuProtocolVibrationNotificationHeader hdr = {
       .on = on
     };
-    qemu_serial_send(QemuProtocol_Vibration, (uint8_t *)&hdr, sizeof(hdr));
-
+    pebble_control_send_packet(s, QemuProtocol_Vibration, &hdr, sizeof(hdr));
 }
-*/
 
 // -----------------------------------------------------------------------------------
 PebbleControl *pebble_control_create(CharDriverState *chr, Stm32Uart *uart)
@@ -497,6 +519,6 @@ PebbleControl *pebble_control_create(CharDriverState *chr, Stm32Uart *uart)
             (void *)s);
 
 
-    return 0;
+    return s;
 }
 

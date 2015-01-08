@@ -4,3 +4,6 @@
 typedef struct PebbleControl PebbleControl;
 
 PebbleControl  *pebble_control_create(CharDriverState *chr, Stm32Uart *uart);
+
+void pebble_control_send_vibe_notification(PebbleControl *s, bool on);
+
