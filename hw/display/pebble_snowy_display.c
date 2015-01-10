@@ -58,7 +58,7 @@
 #include "ui/pixel_ops.h"
 #include "hw/ssi.h"
 
-//#define DEBUG_PEBBLE_SNOWY_DISPLAY
+#define DEBUG_PEBBLE_SNOWY_DISPLAY
 #ifdef DEBUG_PEBBLE_SNOWY_DISPLAY
 // NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
 #define DPRINTF(fmt, ...)                                       \
@@ -74,11 +74,20 @@
 #define SNOWY_NUM_COLS        148
 #define SNOWY_BYTES_PER_ROW   SNOWY_NUM_COLS
 
+// The following defines are used by the PDisplayCmd1 command set, when in the
+//  PSDISPLAYSTATE_ACCEPTING_LINE_DATA state.
 #define SNOWY_ROWS_SKIPPED_AT_TOP     17
 #define SNOWY_ROWS_SKIPPED_AT_BOTTOM  16
 #define SNOWY_LINE_DATA_LEN   (SNOWY_ROWS_SKIPPED_AT_TOP + SNOWY_NUM_ROWS \
                                + SNOWY_ROWS_SKIPPED_AT_BOTTOM)
 
+// The following defines are used by the PDisplayCmd2 command set, when in the
+// PSDISPLAYSTATE_ACCEPTING_FRAME_DATA state.
+#define SNOWY_BORDER_ROWS     2       // on both top and bottom
+#define SNOWY_BORDER_COLS     2       // on both left and right
+
+
+// Colors
 #define SNOWY_COLOR_BLACK     0
 #define SNOWY_COLOR_WHITE     0xFC
 #define SNOWY_COLOR_RED       0xC0
@@ -93,8 +102,10 @@ typedef enum {
     PSDISPLAYSTATE_ACCEPTING_PARAM,
     PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE,
 
-    PSDISPLAYSTATE_ACCEPTING_LINENO,
-    PSDISPLAYSTATE_ACCEPTING_DATA,
+    PSDISPLAYSTATE_ACCEPTING_LINENO,      // used in PDisplayCmd1 command set
+    PSDISPLAYSTATE_ACCEPTING_LINE_DATA,   // used in PDisplayCmd1 command set
+
+    PSDISPLAYSTATE_ACCEPTING_FRAME_DATA,  // used in PDisplayCmd2 command set
 
 } PSDisplayState;
 
@@ -104,6 +115,7 @@ typedef enum {
     PSDISPLAY_CMD_SET_UNKNOWN,
     PSDISPLAY_CMD_SET_0,   // Boot ROM built on Dec 10, 2014
     PSDISPLAY_CMD_SET_1,   // FW ROM built on Sep 12, 2014
+    PSDISPLAY_CMD_SET_2,   // FW ROM built on Jan 9, 2015
 } PDisplayCmdSet;
 
 
@@ -127,6 +139,13 @@ typedef enum {
     PSDISPLAYCMD1_FRAME_DATA = 1,
     PSDISPLAYCMD1_FRAME_END = 2
 } PDisplayCmd1;
+
+/* Commands for PSDISPLAY_CMD_SET_2. We accept these while in the
+ * PSDISPLAYSTATE_ACCEPTING_CMD state. These are implemented in the firmware
+ * buit Jan 2015 */
+typedef enum {
+    PSDISPLAYCMD2_FRAME_BEGIN = 5,
+} PDisplayCmd2;
 
 
 // Scene numbers put into cmd_parameter and used by the PSDISPLAYCMD0_DRAW_SCENE command.
@@ -260,6 +279,7 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s) {
     static const CommandSetInfo cmd_sets[] = {
       {"Date: Dec 10 2014 08:30", PSDISPLAY_CMD_SET_0},
       {"Date: Sep 12 2014 16:56:21", PSDISPLAY_CMD_SET_1},
+      {"Date: Jan 9 2015 10:49:47", PSDISPLAY_CMD_SET_2},
     };
 
 
@@ -270,7 +290,7 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s) {
     s->prog_header[s->prog_byte_offset] = 0;
 
     // Default one to use
-    s->cmd_set = PSDISPLAY_CMD_SET_1;
+    s->cmd_set = PSDISPLAY_CMD_SET_2;
 
     // Skip first two bytes which contain 0xFF 00
     for (int i=2; i<s->prog_byte_offset; i++) {
@@ -439,6 +459,29 @@ ps_display_execute_current_cmd_set1(PSDisplayGlobals *s) {
 }
 
 
+// -----------------------------------------------------------------------------
+// Implements command set PSDISPLAY_CMD_SET_2, used in the firmware, built Jan 2015
+static void
+ps_display_execute_current_cmd_set2(PSDisplayGlobals *s) {
+
+    switch (s->cmd) {
+    case PSDISPLAYCMD2_FRAME_BEGIN:
+        DPRINTF("Executing command: FRAME_BEGIN\n");
+        s->row_index = SNOWY_NUM_ROWS - SNOWY_BORDER_ROWS - 1;
+        s->col_index = SNOWY_BORDER_COLS;
+        s->state = PSDISPLAYSTATE_ACCEPTING_FRAME_DATA;
+        // Just say we are done immediately
+        qemu_set_irq(s->intn_output, false);
+        break;
+
+    default:
+        fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported cmd: %d\n", s->cmd);
+        ps_display_reset_state(s, true /*assert_done*/);
+        break;
+    }
+}
+
+
 // ----------------------------------------------------------------------------- 
 static uint32_t
 ps_display_transfer(SSISlave *dev, uint32_t data)
@@ -477,6 +520,8 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
             ps_display_execute_current_cmd_set0(s);
         } else if (s->cmd_set == PSDISPLAY_CMD_SET_1) {
             ps_display_execute_current_cmd_set1(s);
+        } else if (s->cmd_set == PSDISPLAY_CMD_SET_2) {
+            ps_display_execute_current_cmd_set2(s);
         } else {
             fprintf(stderr, "Unimplemeneted command set\n");
             abort();
@@ -522,14 +567,14 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
 
         /* The column data is sent from the bottom up */
         s->row_index = SNOWY_NUM_ROWS + SNOWY_ROWS_SKIPPED_AT_BOTTOM - 1;
-        s->state = PSDISPLAYSTATE_ACCEPTING_DATA;
+        s->state = PSDISPLAYSTATE_ACCEPTING_LINE_DATA;
 
         // We are not done, deassert the interrupt
         qemu_set_irq(s->intn_output, true);
         //DPRINTF("  new column no: %d\n", data);
         break;
 
-    case PSDISPLAYSTATE_ACCEPTING_DATA:
+    case PSDISPLAYSTATE_ACCEPTING_LINE_DATA:
         //DPRINTF("0x%02X, row %d\n", data, s->row_index);
         if (s->row_index >= SNOWY_NUM_ROWS) {
           /* If this row index is in the bottom padding area, ignore it */
@@ -546,6 +591,22 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
           s->state = PSDISPLAYSTATE_ACCEPTING_LINENO;
           // We are done with this line, assert the interrupt
           qemu_set_irq(s->intn_output, false);
+        }
+        break;
+
+    case PSDISPLAYSTATE_ACCEPTING_FRAME_DATA:
+        //DPRINTF("0x%02X,  row %d, col %d\n", data, s->row_index, s->col_index);
+        s->framebuffer[s->row_index * SNOWY_BYTES_PER_ROW + s->col_index] = data;
+        s->row_index--;
+        if (s->row_index < SNOWY_BORDER_ROWS) {
+            // Reached top of column, go to next column
+            s->row_index = SNOWY_NUM_ROWS - SNOWY_BORDER_ROWS - 1;
+            s->col_index += 1;
+            if (s->col_index >= SNOWY_NUM_COLS - SNOWY_BORDER_COLS) {
+                //DPRINTF("Got last byte in frame\n");
+                s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
+                s->redraw = true;
+            }
         }
         break;
     }
