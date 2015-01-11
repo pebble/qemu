@@ -70,7 +70,7 @@
 #include "ui/pixel_ops.h"
 #include "hw/ssi.h"
 
-#define DEBUG_PEBBLE_SNOWY_DISPLAY
+//#define DEBUG_PEBBLE_SNOWY_DISPLAY
 #ifdef DEBUG_PEBBLE_SNOWY_DISPLAY
 // NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
 #define DPRINTF(fmt, ...)                                       \
@@ -503,14 +503,11 @@ static void ps_display_cmd_set_2_unscramble_column(PSDisplayGlobals *s, uint32_t
     const int line_bytes = SNOWY_NUM_ROWS - 2*SNOWY_BORDER_ROWS;
     uint8_t col_buffer[line_bytes];
 
-    printf("Unscrambling col %d: \n  ", col_index);
     // Copy the column into temp buffer first, without border pixels
     for (row_idx = 0; row_idx < line_bytes; row_idx++) {
       col_buffer[row_idx] = s->framebuffer[(row_idx + SNOWY_BORDER_ROWS) * SNOWY_BYTES_PER_ROW
                                             + col_index];
-      printf("%2x ", col_buffer[row_idx]);
     }
-    printf("\n");
 
     // Unscramble the bytes in the scanline.
     //
@@ -551,14 +548,6 @@ static void ps_display_cmd_set_2_unscramble_column(PSDisplayGlobals *s, uint32_t
         s->framebuffer[(row_idx + SNOWY_BORDER_ROWS + 1) * SNOWY_BYTES_PER_ROW
                         + col_index] = pixel_1;
     }
-
-
-    printf("Unscrambled col: \n  ");
-    for (row_idx = 0; row_idx < line_bytes; row_idx++) {
-      printf("%2x ", s->framebuffer[(row_idx + SNOWY_BORDER_ROWS) * SNOWY_BYTES_PER_ROW
-                                            + col_index]);
-    }
-    printf("\n");
 }
 
 
@@ -675,13 +664,11 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
 
     case PSDISPLAYSTATE_ACCEPTING_FRAME_DATA:
         //DPRINTF("0x%02X,  row %d, col %d\n", data, s->row_index, s->col_index);
-        printf("%2x ", data);
         s->framebuffer[s->row_index * SNOWY_BYTES_PER_ROW + s->col_index] = data;
         s->row_index--;
         if (s->row_index < SNOWY_BORDER_ROWS) {
             // Reached top of column, unscrambe the one we just received and go onto the
             // next column
-            printf("\n");
             ps_display_cmd_set_2_unscramble_column(s, s->col_index);
             s->row_index = SNOWY_NUM_ROWS - SNOWY_BORDER_ROWS - 1;
             s->col_index += 1;
