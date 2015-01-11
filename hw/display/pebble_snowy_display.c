@@ -34,7 +34,19 @@
  *    green: 0x30
  *    blue:  0x0C
  *
- * This display expects columns to be sent through the SPI bus, from bottom to top. So, when we 
+ *
+ * This device implements various versions of the FPGA programming, identified by the
+ * PDisplayCmdSet enum:
+ *
+ * PDISPLAY_CMD_SET_0:
+ * -------------------
+ * This is used by the boot loader and has cmd IDs that tell the FPGA to display pre-canned
+ * images
+ *
+ *
+ * PDISPLAY_CMD_SET_1:
+ * -------------------
+ * The display expects columns to be sent through the SPI bus, from bottom to top. So, when we
  *  get a line of data from the SPI bus, the first byte is the column index and the remaining bytes
  *  are the bytes in the column, starting from the bottom.
  *
@@ -43,14 +55,14 @@
  *  uint8_t padding[16]    // SNOWY_ROWS_SKIPPED_AT_BOTTOM
  *  uint8_t column_data[172]
  *  uint8_t padding[17]    // SNOWY_ROWS_SKIPPED_AT_TOP
- */
-
-/*
- * TODO:
- * Add part number attribute and set ROWS/COLS appropriately.
- * Add attribute for 'off' bit colour for simulating backlight.
- * Add display rotation attribute.
- * Handle 24bpp host displays.
+ *
+ *
+ * PDISPLAY_CMD_SET_2:
+ * -------------------
+ * The display expects complete frames to be setn through the SPI bus, one column at a time 
+ * starting from the left-most column, each column sent from bottom to top. The bits and bytes
+ * in each column are scrambled however and need to be unscrambled before placing them into the
+ * framebuffer.
  */
 
 #include "qemu-common.h"
@@ -70,6 +82,7 @@
 #endif
 
 
+// Size of the framebuffer that we expose to QEMU
 #define SNOWY_NUM_ROWS        172
 #define SNOWY_NUM_COLS        148
 #define SNOWY_BYTES_PER_ROW   SNOWY_NUM_COLS
@@ -82,7 +95,8 @@
                                + SNOWY_ROWS_SKIPPED_AT_BOTTOM)
 
 // The following defines are used by the PDisplayCmd2 command set, when in the
-// PSDISPLAYSTATE_ACCEPTING_FRAME_DATA state.
+// PSDISPLAYSTATE_ACCEPTING_FRAME_DATA state. The frame that we receive over the SPI bus when
+// in the PSDISPLAYSTATE_ACCEPTING_FRAME_DATA state does not include these border pixels.
 #define SNOWY_BORDER_ROWS     2       // on both top and bottom
 #define SNOWY_BORDER_COLS     2       // on both left and right
 
@@ -227,7 +241,8 @@ static void ps_display_set_pixel(PSDisplayGlobals *s, uint32_t x, uint32_t y,
 // -----------------------------------------------------------------------------
 // Draw an 8-bits per pixel bitmap to the framebuffer
 static void ps_display_draw_8bpp_bitmap(PSDisplayGlobals *s, uint8_t *bytes,
-                      uint32_t x_offset, uint32_t y_offset, uint32_t width, uint32_t height) {
+                      uint32_t x_offset, uint32_t y_offset, uint32_t width, uint32_t height)
+{
   uint32_t pixels = width * height;
 
   for (int i = 0; i < pixels; ++i) {
@@ -270,7 +285,8 @@ static void ps_display_draw_1bpp_bitmap(PSDisplayGlobals *s, uint8_t *bits,
   3A30: 63 20 31 30 20 32 30 31 34 20 30 38 3A 33 30 3A      c 10 2014 08:30:
   3A40: 00 FF 31 38 00 7E AA 99 7E 51 00 01 05 92 00 20      ..18.~..~Q.....
   3A50: 62 01 4B 72 00 90 82 00 00 11 00 01 01 00 00 00      b.Kr...........  */
-static void ps_display_determine_command_set(PSDisplayGlobals *s) {
+static void ps_display_determine_command_set(PSDisplayGlobals *s)
+{
     // Table of programming header dates and command sets
     typedef struct {
         const char *date_str;
@@ -328,9 +344,8 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s) {
 
 
 // -----------------------------------------------------------------------------
-static void
-ps_display_reset_state(PSDisplayGlobals *s, bool assert_done) {
-
+static void ps_display_reset_state(PSDisplayGlobals *s, bool assert_done)
+{
     // If we are resetting because we done with the previous command, assert done
     if (assert_done) {
         DPRINTF("Asserting done interrupt\n");
@@ -345,8 +360,8 @@ ps_display_reset_state(PSDisplayGlobals *s, bool assert_done) {
 
 // -----------------------------------------------------------------------------
 // Implements command PSDISPLAY_CMD_SET_0, used in the first boot ROM, built Dec 2014
-static void
-ps_display_execute_current_cmd_set0(PSDisplayGlobals *s) {
+static void ps_display_execute_current_cmd_set0(PSDisplayGlobals *s)
+{
     int width, height, x_offset, y_offset;
     uint8_t *pixels;
 
@@ -430,9 +445,8 @@ ps_display_execute_current_cmd_set0(PSDisplayGlobals *s) {
 
 // -----------------------------------------------------------------------------
 // Implements command set PSDISPLAY_CMD_SET_1, used in the development firmware, built Sep 2014
-static void
-ps_display_execute_current_cmd_set1(PSDisplayGlobals *s) {
-
+static void ps_display_execute_current_cmd_set1(PSDisplayGlobals *s)
+{
     switch (s->cmd) {
     case PSDISPLAYCMD1_FRAME_BEGIN:
         DPRINTF("Executing command: FRAME_BEGIN\n");
@@ -461,8 +475,8 @@ ps_display_execute_current_cmd_set1(PSDisplayGlobals *s) {
 
 // -----------------------------------------------------------------------------
 // Implements command set PSDISPLAY_CMD_SET_2, used in the firmware, built Jan 2015
-static void
-ps_display_execute_current_cmd_set2(PSDisplayGlobals *s) {
+static void ps_display_execute_current_cmd_set2(PSDisplayGlobals *s)
+{
 
     switch (s->cmd) {
     case PSDISPLAYCMD2_FRAME_BEGIN:
@@ -483,8 +497,73 @@ ps_display_execute_current_cmd_set2(PSDisplayGlobals *s) {
 
 
 // ----------------------------------------------------------------------------- 
-static uint32_t
-ps_display_transfer(SSISlave *dev, uint32_t data)
+static void ps_display_cmd_set_2_unscramble_column(PSDisplayGlobals *s, uint32_t col_index)
+{
+    int row_idx;
+    const int line_bytes = SNOWY_NUM_ROWS - 2*SNOWY_BORDER_ROWS;
+    uint8_t col_buffer[line_bytes];
+
+    printf("Unscrambling col %d: \n  ", col_index);
+    // Copy the column into temp buffer first, without border pixels
+    for (row_idx = 0; row_idx < line_bytes; row_idx++) {
+      col_buffer[row_idx] = s->framebuffer[(row_idx + SNOWY_BORDER_ROWS) * SNOWY_BYTES_PER_ROW
+                                            + col_index];
+      printf("%2x ", col_buffer[row_idx]);
+    }
+    printf("\n");
+
+    // Unscramble the bytes in the scanline.
+    //
+    // In the desription below, the bits in the first pixel in a column are
+    // identified as follows:
+    //  r0_msb r0_lsb g0_msb g0_lsb b0_msb b0_lsb 0 0
+    // The second pixel:
+    //  r1_msb r1_lsb g1_msb g1_lsb b1_msb b1_lsb 0 0
+    //
+    // Each scan line contains N bytes of data for the N pixels.
+    // [LSB0 LSB2 .................LSBN MSB0 MSB2 ....................MSBN]
+    //
+    // LSB0 contains the following bits:
+    //  0 0 r1_lsb r0_lsb g1_lsb g0_lsb b1_lsb b0_lsb
+    // MSB0 contains the following bits:
+    //  0 0 r1_msb r0_msb g1_msb g0_msb b1_msb b0_msb
+
+    // LSB2 contains the following bits:
+    //  0 0 r3_lsb r2_lsb g3_lsb g2_lsb b3_lsb b2_lsb
+    // MSB2 contains the following bits:
+    //  0 0 r3_msb r2_msb g3_msb g2_msb b3_msb b2_msb
+    //
+    uint8_t ms_bits, ls_bits;
+    for (row_idx = 0; row_idx < line_bytes; row_idx += 2) {
+        ls_bits = col_buffer[row_idx/2];
+        ms_bits = col_buffer[row_idx/2 + line_bytes/2];
+
+        // Form the 2 pixels whose data is found in ls_bits and ms_bits
+        uint8_t pixel_0, pixel_1;
+        pixel_0 = ((ms_bits & 0b00010101) << 1) |  (ls_bits & 0b00010101);
+        pixel_0 <<= 2;
+        pixel_1 =  (ms_bits & 0b00101010)       | ((ls_bits & 0b00101010) >> 1);
+        pixel_1 <<= 2;
+
+        // Write them to the frame buffer
+        s->framebuffer[(row_idx + SNOWY_BORDER_ROWS) * SNOWY_BYTES_PER_ROW
+                        + col_index] = pixel_0;
+        s->framebuffer[(row_idx + SNOWY_BORDER_ROWS + 1) * SNOWY_BYTES_PER_ROW
+                        + col_index] = pixel_1;
+    }
+
+
+    printf("Unscrambled col: \n  ");
+    for (row_idx = 0; row_idx < line_bytes; row_idx++) {
+      printf("%2x ", s->framebuffer[(row_idx + SNOWY_BORDER_ROWS) * SNOWY_BYTES_PER_ROW
+                                            + col_index]);
+    }
+    printf("\n");
+}
+
+
+// ----------------------------------------------------------------------------- 
+static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
 {
     PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, dev);
     uint32_t data_byte = data & 0x00FF;
@@ -596,10 +675,14 @@ ps_display_transfer(SSISlave *dev, uint32_t data)
 
     case PSDISPLAYSTATE_ACCEPTING_FRAME_DATA:
         //DPRINTF("0x%02X,  row %d, col %d\n", data, s->row_index, s->col_index);
+        printf("%2x ", data);
         s->framebuffer[s->row_index * SNOWY_BYTES_PER_ROW + s->col_index] = data;
         s->row_index--;
         if (s->row_index < SNOWY_BORDER_ROWS) {
-            // Reached top of column, go to next column
+            // Reached top of column, unscrambe the one we just received and go onto the
+            // next column
+            printf("\n");
+            ps_display_cmd_set_2_unscramble_column(s, s->col_index);
             s->row_index = SNOWY_NUM_ROWS - SNOWY_BORDER_ROWS - 1;
             s->col_index += 1;
             if (s->col_index >= SNOWY_NUM_COLS - SNOWY_BORDER_COLS) {
