@@ -7,7 +7,6 @@ common-obj-$(CONFIG_SSD0303) += ssd0303.o
 common-obj-$(CONFIG_SSD0323) += ssd0323.o
 common-obj-$(CONFIG_XEN_BACKEND) += xenfb.o
 common-obj-$(CONFIG_LS013B7DH01) += ls013b7dh01.o
-common-obj-$(CONFIG_PEBBLE_SNOWY_DISPLAY) += pebble_snowy_display.o
 
 common-obj-$(CONFIG_VGA_PCI) += vga-pci.o
 common-obj-$(CONFIG_VGA_ISA) += vga-isa.o

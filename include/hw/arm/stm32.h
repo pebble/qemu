@@ -452,16 +452,4 @@ void stm32f2xx_init(
                     uint32_t osc32_freq,
                     struct stm32f2xx *stm);
 
-struct stm32f4xx;
-void stm32f4xx_init(
-                    ram_addr_t flash_size,
-                    ram_addr_t ram_size,
-                    const char *kernel_filename,
-                    Stm32Gpio **stm32_gpio,
-                    Stm32Uart **stm32_uart,
-                    Stm32Timer **stm32_timer,
-                    uint32_t osc_freq,
-                    uint32_t osc32_freq,
-                    struct stm32f4xx *stm);
-
 #endif /* STM32_H */

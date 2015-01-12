@@ -191,7 +191,7 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
     CPUARMState *env;
     DeviceState *nvic;
     /* FIXME: make this local state.  */
-    static qemu_irq pic[STM32_MAX_IRQ + 1];    /* Enough for STM32F4xx */
+    static qemu_irq pic[STM32_MAX_IRQ + 1];
     int image_size;
     uint64_t entry;
     uint64_t lowaddr;
