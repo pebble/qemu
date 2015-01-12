@@ -526,7 +526,8 @@ static void armv7m_nvic_reset(DeviceState *dev)
      */
     s->gic.cpu_enabled[0] = true;
     s->gic.priority_mask[0] = 0x100;
-    for (int i=0; i<GIC_INTERNAL; i++) {
+    int i;
+    for (i=0; i<GIC_INTERNAL; i++) {
         s->gic.priority1[i][0] = 0;
     }
     memset(s->gic.priority2, 0, sizeof(s->gic.priority2));

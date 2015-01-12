@@ -245,7 +245,8 @@ static void ps_display_draw_8bpp_bitmap(PSDisplayGlobals *s, uint8_t *bytes,
 {
   uint32_t pixels = width * height;
 
-  for (int i = 0; i < pixels; ++i) {
+  int i;
+  for (i = 0; i < pixels; ++i) {
       uint8_t value = bytes[i];
       uint8_t x = x_offset + (i % width);
       uint8_t y = y_offset + (i / width);
@@ -309,7 +310,8 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s)
     s->cmd_set = PSDISPLAY_CMD_SET_2;
 
     // Skip first two bytes which contain 0xFF 00
-    for (int i=2; i<s->prog_byte_offset; i++) {
+    int i;
+    for (i=2; i<s->prog_byte_offset; i++) {
         const char *str_p = (const char *)s->prog_header + i;
 
         DPRINTF("%s: found '%s' string in programming header\n", __func__, str_p);
@@ -317,7 +319,8 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s)
         // Look for a string that starts with "Date:"
         if (!strncmp(str_p, "Date:", 5)) {
             int n_cmd_sets = sizeof(cmd_sets) / sizeof(cmd_sets[0]);
-            for (int n=0; n<n_cmd_sets; n++) {
+            int n;
+            for (n=0; n<n_cmd_sets; n++) {
                 if (!strncmp(str_p, cmd_sets[n].date_str, strlen(cmd_sets[n].date_str))) {
                     s->cmd_set = cmd_sets[n].cmd_set;
                     DPRINTF("%s: determined command set as %d\n", __func__, s->cmd_set);
