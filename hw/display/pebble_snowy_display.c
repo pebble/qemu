@@ -941,6 +941,7 @@ static int ps_display_init(SSISlave *dev)
     PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, dev);
     s->brightness = 0.0;
     s->backlight_enabled = false;
+    s->cmd_set = PSDISPLAY_CMD_SET_0;
 
     s->con = graphic_console_init(DEVICE(dev), 0, &ps_display_ops, s);
     qemu_console_resize(s->con, SNOWY_NUM_COLS, SNOWY_NUM_ROWS);
