@@ -575,6 +575,7 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
         case 0xd0:
             if (cmd == 0xf0) {
                 DPRINTF("%s: leaving configuration register mode\n", __func__);
+                pfl->status |= 0x80;
                 goto reset_flash;
             } else if (cmd == 0x25) {
                 /* program to buffer */
