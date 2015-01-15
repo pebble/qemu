@@ -24,6 +24,7 @@
 #include "hw/arm/stm32.h"
 #include "sysemu/char.h"
 #include "qemu/timer.h"
+#include "qemu/sockets.h"
 
 #include "pebble_control.h"
 #include "pebble.h"
@@ -226,7 +227,8 @@ static const PebbleControlMessageHandler* pebble_control_find_handler(PebbleCont
       { QemuProtocol_Button, pebble_control_button_msg_callback },
     };
 
-    for (size_t i = 0; i < ARRAY_LENGTH(s_msg_endpoints); ++i) {
+    size_t i;
+    for (i = 0; i < ARRAY_LENGTH(s_msg_endpoints); ++i) {
       const PebbleControlMessageHandler* handler = &s_msg_endpoints[i];
       if (!handler || handler->protocol_id > protocol_id) {
         break;
