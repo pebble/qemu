@@ -179,7 +179,7 @@ static void pebble_key_handler(void *arg, int keycode)
     if (!s_button_timer) {
         s_button_timer = timer_new_ms(QEMU_CLOCK_VIRTUAL, prv_send_key_up, button_irqs);
     }
-    timer_mod(s_button_timer, qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + 500);
+    timer_mod(s_button_timer, qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + 250);
 }
 
 
