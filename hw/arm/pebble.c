@@ -188,7 +188,8 @@ static void pebble_key_handler(void *arg, int keycode)
 void pebble_set_button_state(uint32_t button_state)
 {
     // Toggle the GPIOs to match the new button state
-    for (int button_id=0; button_id < PBL_NUM_BUTTONS; button_id++) {
+    int button_id;
+    for (button_id=0; button_id < PBL_NUM_BUTTONS; button_id++) {
       uint32_t mask = 1 << button_id;
       qemu_set_irq(s_button_irq[button_id], !(button_state & mask));   // Set new state
     }
