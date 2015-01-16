@@ -105,6 +105,7 @@ static void prv_send_key_up(void *opaque)
     }
 
     DPRINTF("button %d released\n", s_waiting_key_up_id);
+    printf("\nbutton %d released\n", s_waiting_key_up_id);
     qemu_set_irq(button_irqs[s_waiting_key_up_id], true);
     qemu_set_irq(s_button_wakeup, false);
     s_waiting_key_up_id = PBL_BUTTON_ID_NONE;
@@ -175,6 +176,7 @@ static void pebble_key_handler(void *arg, int keycode)
 
     if (s_waiting_key_up_id != button_id) {
         DPRINTF("button %d pressed\n", button_id);
+        printf("\n\nbutton %d pressed\n", button_id);
         s_waiting_key_up_id = button_id;
         qemu_set_irq(button_irqs[button_id], false);   // Pressed
         qemu_set_irq(s_button_wakeup, true);

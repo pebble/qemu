@@ -216,7 +216,10 @@ f2xx_gpio_set(void *arg, int pin, int level)
     qemu_set_irq(s->exti[pin], level);
 
     /* Inform CPU it should wake (i.e. GPIO A0, the WKUP pin) */
-    qemu_set_irq(s->cpu_wake[pin], level);
+    if (g_in_standby && pin==0 && s->periph == 1) {
+      printf("\nSTANDBY - calling cpu_wake handler, %d", level);
+      qemu_set_irq(s->cpu_wake[pin], level);
+    }
 
     DPRINTF("GPIO %d set pin %d level %d\n", s->periph, pin, level);
 }

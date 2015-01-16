@@ -692,6 +692,10 @@ bool armv7v_nvic_in_standby(void *opaque);
 void armv7m_nvic_cpu_executed_wfi(void *opaque);
 void armv7m_nvic_acknowledge_wkup(void *opaque);
 
+// DEBUG!!
+extern bool g_in_standby;
+extern bool g_in_deep_sleep;
+
 /* Interface between interrupt controller and power controller */
 bool f2xx_pwr_powerdown_deepsleep(void *opaqe);
 
