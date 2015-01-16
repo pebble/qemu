@@ -124,10 +124,10 @@ void stm32f2xx_init(
         stm32_gpio[i] = (Stm32Gpio *)gpio_dev[i];
     }
 
-    /* Connect the WKUP pin (GPIO A, pin 0) directly to the CPU's WKUP handler */
-    qemu_irq cpu_wake_irq = qdev_get_gpio_in(DEVICE(cpu), ARM_CPU_WKUP);
-                                                //ARM_CPU_IRQ); //ARM_CPU_WKUP);
-    f2xx_cpu_wake_set((stm32f2xx_gpio *)(stm32_gpio[STM32_GPIOA_INDEX]), 0, cpu_wake_irq);
+    /* Connect the WKUP pin (GPIO A, pin 0) to the NVIC's WKUP handler */
+    qemu_irq nvic_wake_irq = qdev_get_gpio_in_named(DEVICE(cpu->env.nvic), "wakeup_in", 0);
+    f2xx_cpu_wake_set((stm32f2xx_gpio *)(stm32_gpio[STM32_GPIOA_INDEX]), 0, nvic_wake_irq);
+
 
     /* EXTI */
     DeviceState *exti_dev = qdev_create(NULL, "stm32_exti");

@@ -3333,7 +3333,8 @@ void arm_v7m_cpu_do_interrupt(CPUState *cs)
         }
         break;
     case EXCP_WKUP:
-        armv7m_nvic_acknowledge_wkup(env->nvic);
+        // Nothing to do here, we don't need to send acknowledgement to the nvic, it already
+        // knows we woke up because it sent us the WKUP in the first place. 
         return;
     case EXCP_EXCEPTION_EXIT:
         do_v7m_exception_exit(env);

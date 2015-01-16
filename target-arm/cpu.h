@@ -690,7 +690,6 @@ void armv7m_nvic_set_base_priority(void *opaque, unsigned int priority);
 bool armv7v_nvic_in_deep_sleep(void *opaque);
 bool armv7v_nvic_in_standby(void *opaque);
 void armv7m_nvic_cpu_executed_wfi(void *opaque);
-void armv7m_nvic_acknowledge_wkup(void *opaque);
 
 // DEBUG!!
 extern bool g_in_standby;

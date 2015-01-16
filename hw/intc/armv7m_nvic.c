@@ -42,6 +42,9 @@ typedef struct {
     // Properties
     void *stm32_pwr_prop;
 
+    // output IRQs
+    qemu_irq cpu_wakeup_out;
+
 } nvic_state;
 
 #define TYPE_NVIC "armv7m_nvic"
@@ -217,16 +220,20 @@ void armv7m_nvic_cpu_executed_wfi(void *opaque)
 }
 
 
-/* CPU Received a WKUP exception to wake up standby */
-void armv7m_nvic_acknowledge_wkup(void *opaque)
+// ----------------------------------------------------------------------------- 
+static void nvic_wakeup_in_cb(void *opaque, int n, int level)
 {
     nvic_state *s = (nvic_state *)opaque;
-    s->in_deep_sleep = false;
-    s->in_standby = false;
-    g_in_deep_sleep = false;
-    g_in_standby = false;
-}
 
+    // If we are in standby mode, wake up the CPU
+    if (level && s->in_standby) {
+        s->in_standby = false;
+        s->in_deep_sleep = false;
+        qemu_set_irq(s->cpu_wakeup_out, level);
+    } else {
+        qemu_set_irq(s->cpu_wakeup_out, level);
+    }
+}
 
 static uint32_t nvic_readl(nvic_state *s, uint32_t offset)
 {
@@ -620,6 +627,13 @@ static void armv7m_nvic_realize(DeviceState *dev, Error **errp)
      */
     memory_region_add_subregion(get_system_memory(), 0xe000e000, &s->container);
     s->systick.timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, systick_timer_tick, s);
+
+    // Create the input handler to be notified when the WKUP pin gets asserted
+    qdev_init_gpio_in_named(dev, nvic_wakeup_in_cb, "wakeup_in", 1);
+
+    // This is the handler that will wakeup the CPU
+    qdev_init_gpio_out_named(dev, &s->cpu_wakeup_out, "wakeup_out", 1);
+
 }
 
 static void armv7m_nvic_instance_init(Object *obj)
