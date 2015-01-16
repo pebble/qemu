@@ -93,6 +93,7 @@ static PebbleControl *s_pebble_control;
 
 // The irq callbacks for each button
 static qemu_irq s_button_irq[PBL_NUM_BUTTONS];
+static qemu_irq s_button_wakeup;
 
 
 static void prv_send_key_up(void *opaque)
@@ -105,9 +106,12 @@ static void prv_send_key_up(void *opaque)
 
     DPRINTF("button %d released\n", s_waiting_key_up_id);
     qemu_set_irq(button_irqs[s_waiting_key_up_id], true);
+    qemu_set_irq(s_button_wakeup, false);
     s_waiting_key_up_id = PBL_BUTTON_ID_NONE;
 }
 
+
+extern CPUState *g_cpu;
 
 // NOTE: When running using a VNC display, we alwqys get a key-up immediately after the key-down,
 // even if the user is holding the key down. For long presses, this results in a series of
@@ -173,6 +177,8 @@ static void pebble_key_handler(void *arg, int keycode)
         DPRINTF("button %d pressed\n", button_id);
         s_waiting_key_up_id = button_id;
         qemu_set_irq(button_irqs[button_id], false);   // Pressed
+        qemu_set_irq(s_button_wakeup, true);
+        //qemu_cpu_kick(g_cpu);
     }
 
     /* Set or reschedule the timer to release the key */
@@ -218,6 +224,8 @@ static void pebble_init_buttons(Stm32Gpio *gpio[], const PblButtonMap *map) {
     for (i = 0; i < PBL_NUM_BUTTONS; i++) {
         s_button_irq[i] = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
     }
+    // GPIO A, pin 0 is the WKUP pin.
+    s_button_wakeup = qdev_get_gpio_in((DeviceState *)gpio[STM32_GPIOA_INDEX], 0);
     qemu_add_kbd_event_handler(pebble_key_handler, s_button_irq);
 }
 

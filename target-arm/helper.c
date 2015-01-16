@@ -3327,7 +3327,14 @@ void arm_v7m_cpu_do_interrupt(CPUState *cs)
         return;
     case EXCP_IRQ:
         env->v7m.exception = armv7m_nvic_acknowledge_irq(env->nvic);
+        if (env->v7m.exception == 1023) {
+          env->v7m.exception = 0;
+          return;
+        }
         break;
+    case EXCP_WKUP:
+        armv7m_nvic_acknowledge_wkup(env->nvic);
+        return;
     case EXCP_EXCEPTION_EXIT:
         do_v7m_exception_exit(env);
         return;

@@ -51,6 +51,7 @@
 #define EXCP_EXCEPTION_EXIT  8   /* Return from v7M exception.  */
 #define EXCP_KERNEL_TRAP     9   /* Jumped to kernel code page.  */
 #define EXCP_STREX          10
+#define EXCP_WKUP           11   /* Wakeup from standby mode */
 
 #define ARMV7M_EXCP_RESET   1
 #define ARMV7M_EXCP_NMI     2
@@ -65,6 +66,7 @@
 
 /* ARM-specific interrupt pending bits.  */
 #define CPU_INTERRUPT_FIQ   CPU_INTERRUPT_TGT_EXT_1
+#define CPU_INTERRUPT_WKUP  CPU_INTERRUPT_TGT_EXT_2  /* Wake up without any interrupt */
 
 /* The usual mapping for an AArch64 system register to its AArch32
  * counterpart is for the 32 bit world to have access to the lower
@@ -80,9 +82,10 @@
 #define offsetofhigh32(S, M) (offsetof(S, M) + sizeof(uint32_t))
 #endif
 
-/* Meanings of the ARMCPU object's two inbound GPIO lines */
+/* Meanings of the ARMCPU object's three inbound GPIO lines */
 #define ARM_CPU_IRQ 0
 #define ARM_CPU_FIQ 1
+#define ARM_CPU_WKUP 2
 
 typedef void ARMWriteCPFunc(void *opaque, int cp_info,
                             int srcreg, int operand, uint32_t value);
@@ -685,8 +688,12 @@ int armv7m_nvic_acknowledge_irq(void *opaque);
 void armv7m_nvic_complete_irq(void *opaque, int irq);
 void armv7m_nvic_set_base_priority(void *opaque, unsigned int priority);
 bool armv7v_nvic_in_deep_sleep(void *opaque);
+bool armv7v_nvic_in_standby(void *opaque);
 void armv7m_nvic_cpu_executed_wfi(void *opaque);
+void armv7m_nvic_acknowledge_wkup(void *opaque);
 
+/* Interface between interrupt controller and power controller */
+bool f2xx_pwr_powerdown_deepsleep(void *opaqe);
 
 /* Interface for defining coprocessor registers.
  * Registers are defined in tables of arm_cp_reginfo structs

@@ -31,8 +31,17 @@ typedef struct {
     MemoryRegion container;
     uint32_t  num_irq;
     uint32_t  scr_reg;      /* contents of SCR register */
+
     /* set true if we executed a WFI instruction with the SLEEPDEEP bit set in the SCR */
     bool      in_deep_sleep;
+
+    // Set true if we execute a WFI instruction with both SLEEPDEEP bit set in the SCR
+    // and PDDS (Power Down Deep Sleep) bit is set in the PWR_CR register
+    bool      in_standby;
+
+    // Properties
+    void *stm32_pwr_prop;
+
 } nvic_state;
 
 #define TYPE_NVIC "armv7m_nvic"
@@ -158,10 +167,12 @@ int armv7m_nvic_acknowledge_irq(void *opaque)
      * mode higher up the call chain, perhaps in arm_gic.c, where we get notification of
      * interrupts that change to pending state.  */
     s->in_deep_sleep = false;
+    s->in_standby = false;
 
     irq = gic_acknowledge_irq(&s->gic, 0);
     if (irq == 1023)
-        hw_error("Interrupt but no vector\n");
+        //hw_error("Interrupt but no vector\n");
+        return 1023;
     if (irq >= 32)
         irq -= 16;
     return irq;
@@ -181,13 +192,32 @@ bool armv7v_nvic_in_deep_sleep(void *opaque)
     return s->in_deep_sleep;
 }
 
+bool armv7v_nvic_in_standby(void *opaque)
+{
+    nvic_state *s = (nvic_state *)opaque;
+    return s->in_standby;
+}
+
 void armv7m_nvic_cpu_executed_wfi(void *opaque)
 {
     nvic_state *s = (nvic_state *)opaque;
     if ((s->scr_reg & SCR_REG_SLEEPDEEP) != 0) {
         s->in_deep_sleep = true;
+        if (s->stm32_pwr_prop && f2xx_pwr_powerdown_deepsleep(s->stm32_pwr_prop)) {
+            s->in_standby = true;
+        }
     }
 }
+
+
+/* CPU Received a WKUP exception to wake up standby */
+void armv7m_nvic_acknowledge_wkup(void *opaque)
+{
+    nvic_state *s = (nvic_state *)opaque;
+    s->in_deep_sleep = false;
+    s->in_standby = false;
+}
+
 
 static uint32_t nvic_readl(nvic_state *s, uint32_t offset)
 {
@@ -599,6 +629,11 @@ static void armv7m_nvic_instance_init(Object *obj)
     s->num_irq = 64;
 }
 
+static Property armv7m_nvic_properties[] = {
+    DEFINE_PROP_PTR("stm32_pwr", nvic_state, stm32_pwr_prop),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
 static void armv7m_nvic_class_init(ObjectClass *klass, void *data)
 {
     NVICClass *nc = NVIC_CLASS(klass);
@@ -609,6 +644,7 @@ static void armv7m_nvic_class_init(ObjectClass *klass, void *data)
     dc->vmsd  = &vmstate_nvic;
     dc->reset = armv7m_nvic_reset;
     dc->realize = armv7m_nvic_realize;
+    dc->props = armv7m_nvic_properties;
 }
 
 static const TypeInfo armv7m_nvic_info = {

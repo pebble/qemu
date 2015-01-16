@@ -326,6 +326,7 @@ uint8_t stm32_gpio_get_config_bits(Stm32Gpio *s, unsigned pin);
 /* GPIO - f2xx */
 typedef struct stm32f2xx_gpio stm32f2xx_gpio;
 void f2xx_exti_set(stm32f2xx_gpio *, unsigned, qemu_irq);
+void f2xx_cpu_wake_set(stm32f2xx_gpio *, unsigned, qemu_irq);
 
 
 

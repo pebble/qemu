@@ -128,6 +128,16 @@ static const MemoryRegionOps f2xx_pwr_ops = {
     }
 };
 
+
+// Return true if we should go into standby mode when the process goes into deepsleep.
+// deepsleep is entered if the SLEEPDEEP bit is set in the SCR register when the processor
+// executes a WFI instruction.
+bool f2xx_pwr_powerdown_deepsleep(void *opaqe)
+{
+    f2xx_pwr *s = opaqe;
+    return s->regs[R_PWR_CR] & R_PWR_CR_PDDS;
+}
+
 static int
 f2xx_pwr_init(SysBusDevice *dev)
 {
