@@ -194,18 +194,6 @@ void armv7m_nvic_complete_irq(void *opaque, int irq)
     gic_complete_irq(&s->gic, 0, irq);
 }
 
-bool armv7v_nvic_in_deep_sleep(void *opaque)
-{
-    nvic_state *s = (nvic_state *)opaque;
-    return s->in_deep_sleep;
-}
-
-bool armv7v_nvic_in_standby(void *opaque)
-{
-    nvic_state *s = (nvic_state *)opaque;
-    return s->in_standby;
-}
-
 void armv7m_nvic_cpu_executed_wfi(void *opaque)
 {
     nvic_state *s = (nvic_state *)opaque;
@@ -220,7 +208,7 @@ void armv7m_nvic_cpu_executed_wfi(void *opaque)
 }
 
 
-// ----------------------------------------------------------------------------- 
+// -----------------------------------------------------------------------------
 static void nvic_wakeup_in_cb(void *opaque, int n, int level)
 {
     nvic_state *s = (nvic_state *)opaque;

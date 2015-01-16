@@ -3327,10 +3327,6 @@ void arm_v7m_cpu_do_interrupt(CPUState *cs)
         return;
     case EXCP_IRQ:
         env->v7m.exception = armv7m_nvic_acknowledge_irq(env->nvic);
-        if (env->v7m.exception == 1023) {
-          env->v7m.exception = 0;
-          return;
-        }
         break;
     case EXCP_WKUP:
         // Nothing to do here, we don't need to send acknowledgement to the nvic, it already

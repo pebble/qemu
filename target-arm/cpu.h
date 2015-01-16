@@ -687,13 +687,7 @@ void armv7m_nvic_set_pending(void *opaque, int irq);
 int armv7m_nvic_acknowledge_irq(void *opaque);
 void armv7m_nvic_complete_irq(void *opaque, int irq);
 void armv7m_nvic_set_base_priority(void *opaque, unsigned int priority);
-bool armv7v_nvic_in_deep_sleep(void *opaque);
-bool armv7v_nvic_in_standby(void *opaque);
 void armv7m_nvic_cpu_executed_wfi(void *opaque);
-
-// DEBUG!!
-extern bool g_in_standby;
-extern bool g_in_deep_sleep;
 
 /* Interface between interrupt controller and power controller */
 bool f2xx_pwr_powerdown_deepsleep(void *opaqe);

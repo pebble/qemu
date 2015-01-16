@@ -57,7 +57,7 @@ static uint64_t kernel_load_translate_fn(void *opaque, uint64_t from_addr) {
     }
     return from_addr;
 }
-extern CPUState *g_cpu;
+
 void stm32f2xx_init(
             ram_addr_t flash_size,
             ram_addr_t ram_size,
@@ -87,7 +87,6 @@ void stm32f2xx_init(
                 NULL,
                 "cortex-m3",
                 &cpu);
-    g_cpu = cpu;
 
     dinfo = drive_get(IF_PFLASH, 0, 0);
     if (dinfo) {
@@ -126,7 +125,7 @@ void stm32f2xx_init(
 
     /* Connect the WKUP pin (GPIO A, pin 0) to the NVIC's WKUP handler */
     qemu_irq nvic_wake_irq = qdev_get_gpio_in_named(DEVICE(cpu->env.nvic), "wakeup_in", 0);
-    f2xx_cpu_wake_set((stm32f2xx_gpio *)(stm32_gpio[STM32_GPIOA_INDEX]), 0, nvic_wake_irq);
+    f2xx_gpio_wake_set((stm32f2xx_gpio *)(stm32_gpio[STM32_GPIOA_INDEX]), 0, nvic_wake_irq);
 
 
     /* EXTI */

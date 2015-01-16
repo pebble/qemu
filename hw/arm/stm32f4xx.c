@@ -66,8 +66,6 @@ static uint64_t kernel_load_translate_fn(void *opaque, uint64_t from_addr) {
     return from_addr;
 }
 
-CPUState *g_cpu;
-
 void stm32f4xx_init(
             ram_addr_t flash_size,        /* in KBytes */
             ram_addr_t ram_size,          /* in KBytes */
@@ -97,8 +95,6 @@ void stm32f4xx_init(
                 NULL,                     /* translate  function opaque argument */
                 "cortex-m4",              /* cpu model */
                 &cpu);                    /* Returned cpu instance */
-
-    g_cpu = cpu;
 
     dinfo = drive_get(IF_PFLASH, 0, 0);   /* Use the first -pflash argument */
     if (dinfo) {
@@ -147,7 +143,7 @@ void stm32f4xx_init(
 
     /* Connect the WKUP pin (GPIO A, pin 0) directly to the CPU's interrupt handler */
     qemu_irq cpu_wake_irq = qdev_get_gpio_in(DEVICE(cpu), ARM_CPU_IRQ);
-    f2xx_cpu_wake_set((stm32f2xx_gpio *)(stm32_gpio[STM32_GPIOA_INDEX]), 0, cpu_wake_irq);
+    f2xx_gpio_wake_set((stm32f2xx_gpio *)(stm32_gpio[STM32_GPIOA_INDEX]), 0, cpu_wake_irq);
 
 
     /* EXTI */

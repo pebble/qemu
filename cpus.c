@@ -22,7 +22,6 @@
  * THE SOFTWARE.
  */
 
-
 /* Needed early for CONFIG_BSD etc. */
 #include "config-host.h"
 
@@ -64,9 +63,6 @@
 
 #endif /* CONFIG_LINUX */
 
-extern bool g_in_deep_sleep;
-extern bool g_in_standby;
-
 static CPUState *next_cpu;
 
 bool cpu_is_stopped(CPUState *cpu)
@@ -76,20 +72,6 @@ bool cpu_is_stopped(CPUState *cpu)
 
 static bool cpu_thread_is_idle(CPUState *cpu)
 {
-    /*
-    if (g_in_deep_sleep) {
-      printf("\nSLEEP: checking idle. stop:%d, queued_work_first:%p, stopped:%d, halted:%d"
-          ", has_work:%d", cpu->stop, cpu->queued_work_first, cpu_is_stopped(cpu), cpu->halted,
-          cpu_has_work(cpu));
-    }
-    if (g_in_standby) {
-      printf("\nSTANDBY: checking idle. stop:%d, queued_work_first:%p, stopped:%d, halted:%d"
-          ", has_work:%d", cpu->stop, cpu->queued_work_first, cpu_is_stopped(cpu), cpu->halted,
-          cpu_has_work(cpu));
-    }
-    */
-
-
     if (cpu->stop || cpu->queued_work_first) {
         return false;
     }
@@ -843,33 +825,14 @@ static void qemu_tcg_wait_io_event(void)
        /* Start accounting real time to the virtual clock if the CPUs
           are idle.  */
         qemu_clock_warp(QEMU_CLOCK_VIRTUAL);
-
-        if (g_in_deep_sleep) {
-          printf("\nSLEEP: qemu_tcg_wait_io_event on halt_cond");
-        }
-        if (g_in_standby) {
-          printf("\nSTANDBY: qemu_tcg_wait_io_event on halt_cond");
-        }
         qemu_cond_wait(tcg_halt_cond, &qemu_global_mutex);
     }
 
     while (iothread_requesting_mutex) {
-        if (g_in_deep_sleep) {
-          printf("\nSLEEP: qemu_tcg_wait_io_event on qemu_io_proceeded_cond");
-        }
-        if (g_in_standby) {
-          printf("\nSTANDBY: qemu_tcg_wait_io_event on qemu_io_proceeded_cond");
-        }
         qemu_cond_wait(&qemu_io_proceeded_cond, &qemu_global_mutex);
     }
 
     CPU_FOREACH(cpu) {
-        if (g_in_deep_sleep) {
-          printf("\nSLEEP: qemu_tcg_wait_io_event on qemu_wait_io_event_common");
-        }
-        if (g_in_standby) {
-          printf("\nSTANDBY: qemu_tcg_wait_io_event on qemu_wait_io_event_common");
-        }
         qemu_wait_io_event_common(cpu);
     }
 }
@@ -997,22 +960,7 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
                 qemu_clock_notify(QEMU_CLOCK_VIRTUAL);
             }
         }
-
-        if (g_in_deep_sleep) {
-          printf("\nSLEEP: waiting on io event");
-        }
-        if (g_in_standby) {
-          printf("\nSTANDBY: waiting on io event");
-        }
-
         qemu_tcg_wait_io_event();
-
-        if (g_in_deep_sleep) {
-          printf("\nSLEEP: back from io event");
-        }
-        if (g_in_standby) {
-          printf("\nSTANDBY: back from io event");
-        }
     }
 
     return NULL;
@@ -1059,12 +1007,6 @@ static void qemu_cpu_kick_thread(CPUState *cpu)
 
 void qemu_cpu_kick(CPUState *cpu)
 {
-    if (g_in_deep_sleep ) {
-      printf("\nSLEEP: kicking cpu");
-    }
-    if (g_in_standby ) {
-      printf("\nSTANDBY: kicking cpu");
-    }
     qemu_cond_broadcast(cpu->halt_cond);
     if (!tcg_enabled() && !cpu->thread_kicked) {
         qemu_cpu_kick_thread(cpu);
@@ -1353,14 +1295,6 @@ static void tcg_exec_all(void)
     if (next_cpu == NULL) {
         next_cpu = first_cpu;
     }
-
-    if (g_in_deep_sleep) {
-      printf("\nSLEEP: tcg_exec_all, exit_request=%d", exit_request);
-    }
-    if (g_in_standby) {
-      printf("\nSTANDBY: tcg_exec_all, exit_request=%d", exit_request);
-    }
-
     for (; next_cpu != NULL && !exit_request; next_cpu = CPU_NEXT(next_cpu)) {
         CPUState *cpu = next_cpu;
         CPUArchState *env = cpu->env_ptr;
@@ -1377,13 +1311,6 @@ static void tcg_exec_all(void)
         } else if (cpu->stop || cpu->stopped) {
             break;
         }
-    }
-
-    if (g_in_deep_sleep) {
-      printf("\nSLEEP: exiting tcg_exec_all");
-    }
-    if (g_in_standby) {
-      printf("\nSTANDBY: exiting tcg_exec_all");
     }
     exit_request = 0;
 }

@@ -270,8 +270,7 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
 
     // Connect the nvic's "wakeup_out" output to the CPU's WKUP input handler
     qemu_irq cpu_wakeup_in = qdev_get_gpio_in(DEVICE(cpu), ARM_CPU_WKUP);
-    qdev_connect_gpio_out_named(SYS_BUS_DEVICE(nvic), "wakeup_out", 0,
-                                  cpu_wakeup_in);
+    qdev_connect_gpio_out_named(DEVICE(nvic), "wakeup_out", 0, cpu_wakeup_in);
 
 
     for (i = 0; i < STM32_MAX_IRQ; i++) {
