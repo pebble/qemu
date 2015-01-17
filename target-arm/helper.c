@@ -3329,9 +3329,10 @@ void arm_v7m_cpu_do_interrupt(CPUState *cs)
         env->v7m.exception = armv7m_nvic_acknowledge_irq(env->nvic);
         break;
     case EXCP_WKUP:
-        // Nothing to do here, we don't need to send acknowledgement to the nvic, it already
-        // knows we woke up because it sent us the WKUP in the first place. 
-        return;
+        // Take a reset
+        qemu_devices_reset();
+        env->v7m.exception = 1;
+        break;
     case EXCP_EXCEPTION_EXIT:
         do_v7m_exception_exit(env);
         return;
@@ -3363,6 +3364,10 @@ void arm_v7m_cpu_do_interrupt(CPUState *cs)
     addr = ldl_phys(cs->as, env->v7m.vecbase + env->v7m.exception * 4);
     env->regs[15] = addr & 0xfffffffe;
     env->thumb = addr & 1;
+
+    if (env->v7m.exception == 1) { // reset?
+        env->v7m.exception = 0;
+    }
 }
 
 /* Handle a CPU exception.  */

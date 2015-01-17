@@ -138,6 +138,13 @@ bool f2xx_pwr_powerdown_deepsleep(void *opaqe)
     return s->regs[R_PWR_CR] & R_PWR_CR_PDDS;
 }
 
+static void f2xx_pwr_reset(DeviceState *dev)
+{
+    f2xx_pwr *s = (f2xx_pwr *)dev;
+    memset(s->regs, 0, sizeof(s->regs));
+}
+
+
 static int
 f2xx_pwr_init(SysBusDevice *dev)
 {
@@ -162,6 +169,7 @@ f2xx_pwr_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     SysBusDeviceClass *sc = SYS_BUS_DEVICE_CLASS(klass);
     sc->init = f2xx_pwr_init;
+    dc->reset = f2xx_pwr_reset;
     dc->props = f2xx_pwr_properties;
 }
 

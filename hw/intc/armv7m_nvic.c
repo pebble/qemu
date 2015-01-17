@@ -218,7 +218,7 @@ static void nvic_wakeup_in_cb(void *opaque, int n, int level)
         s->in_standby = false;
         s->in_deep_sleep = false;
         qemu_set_irq(s->cpu_wakeup_out, level);
-    } else {
+    } else if (!level) {
         qemu_set_irq(s->cpu_wakeup_out, level);
     }
 }
