@@ -157,9 +157,6 @@ void armv7m_nvic_set_pending(void *opaque, int irq)
     gic_set_pending_private(&s->gic, 0, irq);
 }
 
-bool g_in_deep_sleep;
-bool g_in_standby;
-
 /* Make pending IRQ active.  */
 int armv7m_nvic_acknowledge_irq(void *opaque)
 {
@@ -174,8 +171,6 @@ int armv7m_nvic_acknowledge_irq(void *opaque)
      * interrupts that change to pending state.  */
     s->in_deep_sleep = false;
     s->in_standby = false;
-    g_in_deep_sleep = false;
-    g_in_standby = false;
 
     irq = gic_acknowledge_irq(&s->gic, 0);
     if (irq == 1023)
@@ -199,10 +194,8 @@ void armv7m_nvic_cpu_executed_wfi(void *opaque)
     nvic_state *s = (nvic_state *)opaque;
     if ((s->scr_reg & SCR_REG_SLEEPDEEP) != 0) {
         s->in_deep_sleep = true;
-        g_in_deep_sleep = true;
         if (s->stm32_pwr_prop && f2xx_pwr_powerdown_deepsleep(s->stm32_pwr_prop)) {
             s->in_standby = true;
-            g_in_standby = true;
         }
     }
 }
@@ -552,6 +545,7 @@ static void armv7m_nvic_reset(DeviceState *dev)
 {
     nvic_state *s = NVIC(dev);
     NVICClass *nc = NVIC_GET_CLASS(s);
+
     nc->parent_reset(dev);
     /* Common GIC reset resets to disabled; the NVIC doesn't have
      * per-CPU interfaces so mark our non-existent CPU interface
@@ -569,6 +563,10 @@ static void armv7m_nvic_reset(DeviceState *dev)
     /* The NVIC as a whole is always enabled. */
     s->gic.enabled = true;
     systick_reset(s);
+
+    s->scr_reg = 0;
+    s->in_deep_sleep = false;
+    s->in_standby = false;
 }
 
 static void armv7m_nvic_realize(DeviceState *dev, Error **errp)

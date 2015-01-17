@@ -372,7 +372,14 @@ f2xx_dma_reset(DeviceState *ds)
 {
     f2xx_dma *s = FROM_SYSBUS(f2xx_dma, SYS_BUS_DEVICE(ds));
 
-    (void)s;
+    memset(&s->ifcr, 0, sizeof(s->ifcr));
+
+    int i;
+    for (i=0; i<R_DMA_Sx_COUNT; i++) {
+        qemu_irq save = s->stream[i].irq;
+        memset(&s->stream[i], 0, sizeof(f2xx_dma_stream));
+        s->stream[i].irq = save;
+    }
 }
 
 static Property f2xx_dma_properties[] = {

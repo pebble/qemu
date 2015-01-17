@@ -140,7 +140,8 @@ bool f2xx_pwr_powerdown_deepsleep(void *opaqe)
 
 static void f2xx_pwr_reset(DeviceState *dev)
 {
-    f2xx_pwr *s = (f2xx_pwr *)dev;
+    f2xx_pwr *s = FROM_SYSBUS(f2xx_pwr, SYS_BUS_DEVICE(dev));
+
     memset(s->regs, 0, sizeof(s->regs));
 }
 

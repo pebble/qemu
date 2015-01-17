@@ -589,6 +589,12 @@ static const MemoryRegionOps f2xx_rtc_ops = {
     }
 };
 
+static void f2xx_rtc_reset(DeviceState *dev)
+{
+    f2xx_rtc *s = FROM_SYSBUS(f2xx_rtc, SYS_BUS_DEVICE(dev));
+    s->regs[R_RTC_CR] = 0;
+}
+
 static int
 f2xx_rtc_init(SysBusDevice *dev)
 {
@@ -640,6 +646,7 @@ f2xx_rtc_class_init(ObjectClass *klass, void *data)
     sc->init = f2xx_rtc_init;
     //TODO: fix this: dc->no_user = 1;
     dc->props = f2xx_rtc_properties;
+    dc->reset = f2xx_rtc_reset;
 }
 
 static const TypeInfo
