@@ -283,6 +283,13 @@ static void sm_lcd_vibe_ctl(void *opaque, int n, int level)
     s->vibrate_on = (level != 0);
 }
 
+static void sm_lcd_reset(DeviceState *dev)
+{
+    lcd_state *s = (lcd_state *)dev;
+    memset(&s->framebuffer, 0, sizeof(s->framebuffer));
+    s->redraw = true;
+}
+
 
 // ----------------------------------------------------------------------------- 
 static const GraphicHwOps sm_lcd_ops = {
@@ -321,6 +328,7 @@ static void sm_lcd_class_init(ObjectClass *klass, void *data)
     k->init = sm_lcd_init;
     k->transfer = sm_lcd_transfer;
     k->cs_polarity = SSI_CS_LOW;
+    k->parent_class.reset = sm_lcd_reset;
 }
 
 static const TypeInfo sm_lcd_info = {
