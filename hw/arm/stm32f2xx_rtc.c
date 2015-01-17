@@ -272,7 +272,10 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
         value |= R_RTC_ISR_RSF;
     }
 
-    // Don't say we entered standby
+    // HACK for Pebble. Clear the "entered standby" bit. If this bit is set, the Pebble
+    // will only continue booting if one of the buttons is held down. Because the button GPIOs
+    // are setup AFTER QEMU gets the key press event, it is difficult to set the GPIOs according
+    // to the buttons held down before the reset. 
     if (addr == R_RTC_BKPxR) {
         value &= ~0x10000;
     }

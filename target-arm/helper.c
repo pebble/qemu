@@ -3331,8 +3331,7 @@ void arm_v7m_cpu_do_interrupt(CPUState *cs)
     case EXCP_WKUP:
         // Take a reset
         qemu_devices_reset();
-        env->v7m.exception = 1;
-        break;
+        return;
     case EXCP_EXCEPTION_EXIT:
         do_v7m_exception_exit(env);
         return;
