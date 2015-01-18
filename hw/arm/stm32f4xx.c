@@ -41,6 +41,10 @@ static const char *stm32f4xx_periph_name_arr[] = {
     ENUM_STRING(STM32_SPI2),
     ENUM_STRING(STM32_SPI3),
 
+    ENUM_STRING(STM32_I2C1),
+    ENUM_STRING(STM32_I2C2),
+    ENUM_STRING(STM32_I2C3),
+
     ENUM_STRING(STM32_GPIOA),
     ENUM_STRING(STM32_GPIOB),
     ENUM_STRING(STM32_GPIOC),
@@ -301,12 +305,23 @@ void stm32f4xx_init(
     // 0x40005000
 
     DeviceState *i2c1 = qdev_create(NULL, "f2xx_i2c");
-    stm32_init_periph(i2c1, STM32_I2C1, 0x40005400, NULL);
+    i2c1->id = stm32f4xx_periph_name_arr[STM32_I2C1];
+    qdev_prop_set_int32(i2c1, "periph", STM32_I2C1);
+    stm32_init_periph(i2c1, STM32_I2C1, 0x40005400, pic[STM32_I2C1_EV_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(i2c1), 1, pic[STM32_I2C1_ER_IRQ]);
 
     DeviceState *i2c2 = qdev_create(NULL, "f2xx_i2c");
-    stm32_init_periph(i2c2, STM32_I2C2, 0x40005800, NULL);
+    i2c2->id = stm32f4xx_periph_name_arr[STM32_I2C2];
+    qdev_prop_set_int32(i2c2, "periph", STM32_I2C2);
+    stm32_init_periph(i2c2, STM32_I2C2, 0x40005800, pic[STM32_I2C2_EV_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(i2c2), 1, pic[STM32_I2C2_ER_IRQ]);
 
-    dummy_dev("I2C3",      0x40005C00, 0x400);
+    DeviceState *i2c3 = qdev_create(NULL, "f2xx_i2c");
+    i2c3->id = stm32f4xx_periph_name_arr[STM32_I2C3];
+    qdev_prop_set_int32(i2c3, "periph", STM32_I2C3);
+    stm32_init_periph(i2c3, STM32_I2C2, 0x40005C00, pic[STM32_I2C3_EV_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(i2c3), 1, pic[STM32_I2C3_ER_IRQ]);
+
     dummy_dev("Reserved",  0x40006000, 0x400);
     dummy_dev("BxCAN1",    0x40006400, 0x400);
     dummy_dev("BxCAN2",    0x40006800, 0x400);
