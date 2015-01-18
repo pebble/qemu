@@ -141,9 +141,9 @@ void stm32f4xx_init(
         stm32_gpio[i] = (Stm32Gpio *)gpio_dev[i];
     }
 
-    /* Connect the WKUP pin (GPIO A, pin 0) directly to the CPU's interrupt handler */
-    qemu_irq cpu_wake_irq = qdev_get_gpio_in(DEVICE(cpu), ARM_CPU_IRQ);
-    f2xx_gpio_wake_set((stm32f2xx_gpio *)(stm32_gpio[STM32_GPIOA_INDEX]), 0, cpu_wake_irq);
+    /* Connect the WKUP pin (GPIO A, pin 0) to the NVIC's WKUP handler */
+    qemu_irq nvic_wake_irq = qdev_get_gpio_in_named(DEVICE(cpu->env.nvic), "wakeup_in", 0);
+    f2xx_gpio_wake_set((stm32f2xx_gpio *)(stm32_gpio[STM32_GPIOA_INDEX]), 0, nvic_wake_irq);
 
 
     /* EXTI */
@@ -254,6 +254,11 @@ void stm32f4xx_init(
     sysbus_connect_irq(SYS_BUS_DEVICE(rtc_dev), 1, qdev_get_gpio_in(exti_dev, 17));
     // Wake up timer
     sysbus_connect_irq(SYS_BUS_DEVICE(rtc_dev), 2, qdev_get_gpio_in(exti_dev, 22));
+
+    /* Power management */
+    DeviceState *pwr_dev = qdev_create(NULL, "f2xx_pwr");
+    stm32_init_periph(pwr_dev, STM32_RTC, 0x40007000, NULL);
+    qdev_prop_set_ptr(cpu->env.nvic, "stm32_pwr", pwr_dev);
 
 #define dummy_dev(name, start, size) do {\
     DeviceState *dummy = qdev_create(NULL, "f2xx_dummy"); \

@@ -936,6 +936,15 @@ static void ps_display_vibe_ctl(void *opaque, int n, int level)
 
 
 // -----------------------------------------------------------------------------
+static void ps_display_reset(DeviceState *dev)
+{
+    PSDisplayGlobals *s = (PSDisplayGlobals *)dev;
+    memset(&s->framebuffer, 0, sizeof(s->framebuffer));
+    s->redraw = true;
+}
+
+
+// -----------------------------------------------------------------------------
 static int ps_display_init(SSISlave *dev)
 {
     PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, dev);
@@ -991,6 +1000,7 @@ static void ps_display_class_init(ObjectClass *klass, void *data)
     k->transfer = ps_display_transfer;
     k->cs_polarity = SSI_CS_LOW;
     k->set_cs = ps_display_set_cs;
+    k->parent_class.reset = ps_display_reset;
 }
 
 // ----------------------------------------------------------------------------- 

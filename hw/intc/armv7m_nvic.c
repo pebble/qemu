@@ -196,12 +196,17 @@ void armv7m_nvic_cpu_executed_wfi(void *opaque)
         s->in_deep_sleep = true;
         if (s->stm32_pwr_prop && f2xx_pwr_powerdown_deepsleep(s->stm32_pwr_prop)) {
             s->in_standby = true;
+            // For now, this is an easy way to disable nearly all interrupts from waking up
+            // the CPU. Technically, this is not correct and we should allow specific ones
+            // through (some RTC interrupts, etc.). 
+            armv7m_nvic_set_base_priority(opaque, 0x01);
         }
     }
 }
 
 
 // -----------------------------------------------------------------------------
+// Called when the WKUP pin changes state (GPIO A0)
 static void nvic_wakeup_in_cb(void *opaque, int n, int level)
 {
     nvic_state *s = (nvic_state *)opaque;
