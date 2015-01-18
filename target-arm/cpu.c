@@ -41,7 +41,7 @@ static void arm_cpu_set_pc(CPUState *cs, vaddr value)
 static bool arm_cpu_has_work(CPUState *cs)
 {
     return cs->interrupt_request &
-        (CPU_INTERRUPT_FIQ | CPU_INTERRUPT_HARD | CPU_INTERRUPT_EXITTB);
+        (CPU_INTERRUPT_FIQ | CPU_INTERRUPT_HARD | CPU_INTERRUPT_EXITTB | CPU_INTERRUPT_WKUP);
 }
 
 static void cp_reg_reset(gpointer key, gpointer value, gpointer opaque)
@@ -188,6 +188,13 @@ static void arm_cpu_set_irq(void *opaque, int irq, int level)
             cpu_reset_interrupt(cs, CPU_INTERRUPT_FIQ);
         }
         break;
+    case ARM_CPU_WKUP:
+        if (level) {
+            cpu_interrupt(cs, CPU_INTERRUPT_WKUP);
+        } else {
+            cpu_reset_interrupt(cs, CPU_INTERRUPT_WKUP);
+        }
+        break;
     default:
         hw_error("arm_cpu_set_irq: Bad interrupt line %d\n", irq);
     }
@@ -235,9 +242,9 @@ static void arm_cpu_initfn(Object *obj)
 #ifndef CONFIG_USER_ONLY
     /* Our inbound IRQ and FIQ lines */
     if (kvm_enabled()) {
-        qdev_init_gpio_in(DEVICE(cpu), arm_cpu_kvm_set_irq, 2);
+        qdev_init_gpio_in(DEVICE(cpu), arm_cpu_kvm_set_irq, 3);
     } else {
-        qdev_init_gpio_in(DEVICE(cpu), arm_cpu_set_irq, 2);
+        qdev_init_gpio_in(DEVICE(cpu), arm_cpu_set_irq, 3);
     }
 
     cpu->gt_timer[GTIMER_PHYS] = timer_new(QEMU_CLOCK_VIRTUAL, GTIMER_SCALE,

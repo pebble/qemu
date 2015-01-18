@@ -325,7 +325,8 @@ uint8_t stm32_gpio_get_config_bits(Stm32Gpio *s, unsigned pin);
 
 /* GPIO - f2xx */
 typedef struct stm32f2xx_gpio stm32f2xx_gpio;
-void f2xx_exti_set(stm32f2xx_gpio *, unsigned, qemu_irq);
+void f2xx_gpio_exti_set(stm32f2xx_gpio *, unsigned, qemu_irq);
+void f2xx_gpio_wake_set(stm32f2xx_gpio *, unsigned, qemu_irq);
 
 
 
@@ -450,7 +451,8 @@ void stm32f2xx_init(
                     Stm32Timer **stm32_timer,
                     uint32_t osc_freq,
                     uint32_t osc32_freq,
-                    struct stm32f2xx *stm);
+                    struct stm32f2xx *stm,
+                    ARMCPU **cpu);
 
 struct stm32f4xx;
 void stm32f4xx_init(
@@ -462,6 +464,7 @@ void stm32f4xx_init(
                     Stm32Timer **stm32_timer,
                     uint32_t osc_freq,
                     uint32_t osc32_freq,
-                    struct stm32f4xx *stm);
+                    struct stm32f4xx *stm,
+                    ARMCPU **cpu);
 
 #endif /* STM32_H */

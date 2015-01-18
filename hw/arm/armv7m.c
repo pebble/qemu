@@ -176,8 +176,9 @@ static void armv7m_reset(void *opaque)
 qemu_irq *armv7m_init(Object *parent, MemoryRegion *address_space_mem,
                       int flash_size, int sram_size,
                       const char *kernel_filename, const char *cpu_model) {
+    ARMCPU *cpu;
     return armv7m_translated_init(parent, address_space_mem, flash_size, sram_size,
-            kernel_filename, NULL, NULL, cpu_model);
+            kernel_filename, NULL, NULL, cpu_model, &cpu);
 }
 
 qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem,
@@ -185,7 +186,8 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
                                  const char *kernel_filename,
                                  uint64_t (*translate_fn)(void *, uint64_t),
                                  void *translate_opaque,
-                                 const char *cpu_model)
+                                 const char *cpu_model,
+                                 ARMCPU **cpu_device)
 {
     ARMCPU *cpu;
     CPUARMState *env;
@@ -216,6 +218,7 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
         fprintf(stderr, "Unable to find CPU definition\n");
         exit(1);
     }
+    *cpu_device = cpu;
     env = &cpu->env;
 
 #if 0
@@ -260,8 +263,16 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
         object_property_add_child(parent, "nvic", OBJECT(nvic), NULL);
     }
     qdev_init_nofail(nvic);
+
+    // Connect the nvic's CPU #0 "parent_irq" output to the CPU's IRQ input handler
     sysbus_connect_irq(SYS_BUS_DEVICE(nvic), 0,
                        qdev_get_gpio_in(DEVICE(cpu), ARM_CPU_IRQ));
+
+    // Connect the nvic's "wakeup_out" output to the CPU's WKUP input handler
+    qemu_irq cpu_wakeup_in = qdev_get_gpio_in(DEVICE(cpu), ARM_CPU_WKUP);
+    qdev_connect_gpio_out_named(DEVICE(nvic), "wakeup_out", 0, cpu_wakeup_in);
+
+
     for (i = 0; i < STM32_MAX_IRQ; i++) {
         pic[i] = qdev_get_gpio_in(nvic, i);
     }

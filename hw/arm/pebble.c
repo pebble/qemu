@@ -93,6 +93,7 @@ static PebbleControl *s_pebble_control;
 
 // The irq callbacks for each button
 static qemu_irq s_button_irq[PBL_NUM_BUTTONS];
+static qemu_irq s_button_wakeup;
 
 
 static void prv_send_key_up(void *opaque)
@@ -105,6 +106,7 @@ static void prv_send_key_up(void *opaque)
 
     DPRINTF("button %d released\n", s_waiting_key_up_id);
     qemu_set_irq(button_irqs[s_waiting_key_up_id], true);
+    qemu_set_irq(s_button_wakeup, false);
     s_waiting_key_up_id = PBL_BUTTON_ID_NONE;
 }
 
@@ -173,6 +175,7 @@ static void pebble_key_handler(void *arg, int keycode)
         DPRINTF("button %d pressed\n", button_id);
         s_waiting_key_up_id = button_id;
         qemu_set_irq(button_irqs[button_id], false);   // Pressed
+        qemu_set_irq(s_button_wakeup, true);
     }
 
     /* Set or reschedule the timer to release the key */
@@ -219,6 +222,8 @@ static void pebble_init_buttons(Stm32Gpio *gpio[], const PblButtonMap *map) {
     for (i = 0; i < PBL_NUM_BUTTONS; i++) {
         s_button_irq[i] = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
     }
+    // GPIO A, pin 0 is the WKUP pin.
+    s_button_wakeup = qdev_get_gpio_in((DeviceState *)gpio[STM32_GPIOA_INDEX], 0);
     qemu_add_kbd_event_handler(pebble_key_handler, s_button_irq);
 }
 
@@ -249,6 +254,7 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
     DeviceState *spi_flash;
     SSIBus *spi;
     struct stm32f2xx stm;
+    ARMCPU *cpu;
 
     // Note: allow for bigger flash images (4MByte) to aid in development and debugging
     stm32f2xx_init(
@@ -260,7 +266,8 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
         timer,
         8000000, /* osc_freq*/
         32768, /* osc2_freq*/
-        &stm);
+        &stm,
+        &cpu);
 
     /* SPI flash */
     spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[0], "ssi");
@@ -278,14 +285,19 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
     qdev_init_nofail(display_dev);
 
     qemu_irq backlight_enable;
-    backlight_enable = qdev_get_gpio_in_named(display_dev, "sm_lcd_backlight_enable", 0);
+    backlight_enable = qdev_get_gpio_in_named(display_dev, "backlight_enable", 0);
     qdev_connect_gpio_out_named((DeviceState *)gpio[STM32_GPIOB_INDEX], "af", 5,
                                   backlight_enable);
 
     qemu_irq backlight_level;
-    backlight_level = qdev_get_gpio_in_named(display_dev, "sm_lcd_backlight_level", 0);
+    backlight_level = qdev_get_gpio_in_named(display_dev, "backlight_level", 0);
     qdev_connect_gpio_out_named((DeviceState *)timer[3-1], "pwm_ratio_changed", 0,
                                   backlight_level);
+
+    qemu_irq display_power;
+    display_power = qdev_get_gpio_in_named(display_dev, "power_ctl", 0);
+    qdev_connect_gpio_out_named((DeviceState *)cpu->env.nvic, "power_out", 0,
+                                  display_power);
 
     // Connect up the uarts
     pebble_connect_uarts(uart);
@@ -296,7 +308,7 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
 
     // Create the board device and wire it up
     qemu_irq display_vibe;
-    display_vibe = qdev_get_gpio_in_named(display_dev, "sm_lcd_vibe_ctl", 0);
+    display_vibe = qdev_get_gpio_in_named(display_dev, "vibe_ctl", 0);
     DeviceState *board = pebble_init_board(gpio, display_vibe);
 
     // The GPIO from vibrate drives the vibe input on the board
@@ -315,11 +327,12 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map)
     Stm32Timer *timer[STM32F4XX_TIM_COUNT];
     SSIBus *spi;
     struct stm32f4xx stm;
+    ARMCPU *cpu;
 
     // Note: allow for bigger flash images (4MByte) to aid in development and debugging
     stm32f4xx_init(4096 /*flash_size in KBytes */, 256 /*ram_size on KBytes*/,
         machine->kernel_filename, gpio, uart, timer, 8000000 /*osc_freq*/,
-        32768 /*osc2_freq*/, &stm);
+        32768 /*osc2_freq*/, &stm, &cpu);
 
 
     /* Storage flash (NOR-flash on Snowy) */
@@ -360,24 +373,30 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map)
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOG_INDEX], 8, display_cs);
 
     qemu_irq display_reset;
-    display_reset = qdev_get_gpio_in_named(display_dev, "pebble_snowy_display_reset", 0);
+    display_reset = qdev_get_gpio_in_named(display_dev, "reset", 0);
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOG_INDEX], 15, display_reset);
 
     qemu_irq display_sclk;
-    display_sclk = qdev_get_gpio_in_named(display_dev, "pebble_snowy_display_sclk", 0);
+    display_sclk = qdev_get_gpio_in_named(display_dev, "sclk", 0);
     qdev_connect_gpio_out((DeviceState *)gpio[STM32_GPIOG_INDEX], 13, display_sclk);
 
     qemu_irq backlight_enable;
     backlight_enable = qdev_get_gpio_in_named(display_dev,
-                                              "pebble_snowy_display_backlight_enable", 0);
+                                              "backlight_enable", 0);
     qdev_connect_gpio_out_named((DeviceState *)gpio[STM32_GPIOB_INDEX], "af", 14,
                                   backlight_enable);
 
     qemu_irq backlight_level;
     backlight_level = qdev_get_gpio_in_named(display_dev,
-                                             "pebble_snowy_display_backlight_level", 0);
+                                             "backlight_level", 0);
     qdev_connect_gpio_out_named((DeviceState *)timer[11], "pwm_ratio_changed", 0,
                                   backlight_level);
+
+    qemu_irq display_power;
+    display_power = qdev_get_gpio_in_named(display_dev, "power_ctl", 0);
+    qdev_connect_gpio_out_named((DeviceState *)cpu->env.nvic, "power_out", 0,
+                                  display_power);
+
 
     // Connect up the uarts
     pebble_connect_uarts(uart);
@@ -388,7 +407,7 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map)
 
     // Create the board device and wire it up
     qemu_irq display_vibe;
-    display_vibe = qdev_get_gpio_in_named(display_dev, "pebble_snowy_display_vibe_ctl", 0);
+    display_vibe = qdev_get_gpio_in_named(display_dev, "vibe_ctl", 0);
     DeviceState *board = pebble_init_board(gpio, display_vibe);
 
     // The GPIO from vibrate drives the vibe input on the board

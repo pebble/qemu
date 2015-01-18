@@ -272,6 +272,14 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
         value |= R_RTC_ISR_RSF;
     }
 
+    // HACK for Pebble. Clear the "entered standby" bit. If this bit is set, the Pebble
+    // will only continue booting if one of the buttons is held down. Because the button GPIOs
+    // are setup AFTER QEMU gets the key press event, it is difficult to set the GPIOs according
+    // to the buttons held down before the reset. 
+    if (addr == R_RTC_BKPxR) {
+        value &= ~0x10000;
+    }
+
     // If reading the sub-second register, determine what it should be from the current
     //  host time
     if (addr == R_RTC_SSR) {
@@ -307,7 +315,7 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
         strftime(date_time_str, sizeof(date_time_str), "%x %X", &target_tm);
         DPRINTF("%s: current date/time: %s\n", __func__, date_time_str);
     } else {
-        //DPRINTF("%s: addr: 0x%llx, size: %d, value: 0x%x\n", __func__, addr, size, r);
+        DPRINTF("%s: addr: 0x%llx, size: %d, value: 0x%x\n", __func__, addr << 2, size, r);
     }
 #endif
 
@@ -322,7 +330,7 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     bool    compute_new_target_offset = false;
     bool    update_wut = false;
 
-    //DPRINTF("%s: addr: 0x%llx, data: 0x%llx, size: %d\n", __func__, addr, data, size);
+    DPRINTF("%s: addr: 0x%llx, data: 0x%llx, size: %d\n", __func__, addr, data, size);
 
     addr >>= 2;
     if (addr >= R_RTC_MAX) {
@@ -584,6 +592,12 @@ static const MemoryRegionOps f2xx_rtc_ops = {
     }
 };
 
+static void f2xx_rtc_reset(DeviceState *dev)
+{
+    f2xx_rtc *s = FROM_SYSBUS(f2xx_rtc, SYS_BUS_DEVICE(dev));
+    s->regs[R_RTC_CR] = 0;
+}
+
 static int
 f2xx_rtc_init(SysBusDevice *dev)
 {
@@ -635,6 +649,7 @@ f2xx_rtc_class_init(ObjectClass *klass, void *data)
     sc->init = f2xx_rtc_init;
     //TODO: fix this: dc->no_user = 1;
     dc->props = f2xx_rtc_properties;
+    dc->reset = f2xx_rtc_reset;
 }
 
 static const TypeInfo

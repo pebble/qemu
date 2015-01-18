@@ -24,7 +24,8 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
                                  const char *kernel_filename,
                                  uint64_t (*kernel_translate_fn)(void *, uint64_t),
                                  void *kernel_translate_opaque,
-                                 const char *cpu_model);
+                                 const char *cpu_model,
+                                 ARMCPU **cpu_device);
 
 /* arm_boot.c */
 struct arm_boot_info {

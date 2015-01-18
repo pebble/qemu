@@ -31,8 +31,21 @@ typedef struct {
     MemoryRegion container;
     uint32_t  num_irq;
     uint32_t  scr_reg;      /* contents of SCR register */
+
     /* set true if we executed a WFI instruction with the SLEEPDEEP bit set in the SCR */
     bool      in_deep_sleep;
+
+    // Set true if we execute a WFI instruction with both SLEEPDEEP bit set in the SCR
+    // and PDDS (Power Down Deep Sleep) bit is set in the PWR_CR register
+    bool      in_standby;
+
+    // Properties
+    void *stm32_pwr_prop;
+
+    // output IRQs
+    qemu_irq cpu_wakeup_out;
+    qemu_irq power_out;
+
 } nvic_state;
 
 #define TYPE_NVIC "armv7m_nvic"
@@ -158,10 +171,15 @@ int armv7m_nvic_acknowledge_irq(void *opaque)
      * mode higher up the call chain, perhaps in arm_gic.c, where we get notification of
      * interrupts that change to pending state.  */
     s->in_deep_sleep = false;
+    if (s->in_standby) {
+        qemu_set_irq(s->power_out, true);
+        s->in_standby = false;
+    }
 
     irq = gic_acknowledge_irq(&s->gic, 0);
     if (irq == 1023)
-        hw_error("Interrupt but no vector\n");
+        //hw_error("Interrupt but no vector\n");
+        return 1023;
     if (irq >= 32)
         irq -= 16;
     return irq;
@@ -175,17 +193,39 @@ void armv7m_nvic_complete_irq(void *opaque, int irq)
     gic_complete_irq(&s->gic, 0, irq);
 }
 
-bool armv7v_nvic_in_deep_sleep(void *opaque)
-{
-    nvic_state *s = (nvic_state *)opaque;
-    return s->in_deep_sleep;
-}
-
 void armv7m_nvic_cpu_executed_wfi(void *opaque)
 {
     nvic_state *s = (nvic_state *)opaque;
     if ((s->scr_reg & SCR_REG_SLEEPDEEP) != 0) {
         s->in_deep_sleep = true;
+        if (s->stm32_pwr_prop && f2xx_pwr_powerdown_deepsleep(s->stm32_pwr_prop)) {
+            s->in_standby = true;
+            // For now, this is an easy way to disable nearly all interrupts from waking up
+            // the CPU. Technically, this is not correct and we should allow specific ones
+            // through (some RTC interrupts, etc.). 
+            armv7m_nvic_set_base_priority(opaque, 0x01);
+
+            // Inform peripherals that the power is off
+            qemu_set_irq(s->power_out, false);
+        }
+    }
+}
+
+
+// -----------------------------------------------------------------------------
+// Called when the WKUP pin changes state (GPIO A0)
+static void nvic_wakeup_in_cb(void *opaque, int n, int level)
+{
+    nvic_state *s = (nvic_state *)opaque;
+
+    // If we are in standby mode, wake up the CPU
+    if (level && s->in_standby) {
+        s->in_standby = false;
+        s->in_deep_sleep = false;
+        qemu_set_irq(s->power_out, true);
+        qemu_set_irq(s->cpu_wakeup_out, level);
+    } else if (!level) {
+        qemu_set_irq(s->cpu_wakeup_out, level);
     }
 }
 
@@ -518,6 +558,7 @@ static void armv7m_nvic_reset(DeviceState *dev)
 {
     nvic_state *s = NVIC(dev);
     NVICClass *nc = NVIC_GET_CLASS(s);
+
     nc->parent_reset(dev);
     /* Common GIC reset resets to disabled; the NVIC doesn't have
      * per-CPU interfaces so mark our non-existent CPU interface
@@ -535,6 +576,11 @@ static void armv7m_nvic_reset(DeviceState *dev)
     /* The NVIC as a whole is always enabled. */
     s->gic.enabled = true;
     systick_reset(s);
+
+    s->scr_reg = 0;
+    s->in_deep_sleep = false;
+    s->in_standby = false;
+    qemu_set_irq(s->power_out, true);
 }
 
 static void armv7m_nvic_realize(DeviceState *dev, Error **errp)
@@ -581,6 +627,16 @@ static void armv7m_nvic_realize(DeviceState *dev, Error **errp)
      */
     memory_region_add_subregion(get_system_memory(), 0xe000e000, &s->container);
     s->systick.timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, systick_timer_tick, s);
+
+    // Create the input handler to be notified when the WKUP pin gets asserted
+    qdev_init_gpio_in_named(dev, nvic_wakeup_in_cb, "wakeup_in", 1);
+
+    // This is the handler that will wakeup the CPU
+    qdev_init_gpio_out_named(dev, &s->cpu_wakeup_out, "wakeup_out", 1);
+
+    // This is the handler that informs peripherals that the power is on/off
+    qdev_init_gpio_out_named(dev, &s->power_out, "power_out", 1);
+
 }
 
 static void armv7m_nvic_instance_init(Object *obj)
@@ -599,6 +655,11 @@ static void armv7m_nvic_instance_init(Object *obj)
     s->num_irq = 64;
 }
 
+static Property armv7m_nvic_properties[] = {
+    DEFINE_PROP_PTR("stm32_pwr", nvic_state, stm32_pwr_prop),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
 static void armv7m_nvic_class_init(ObjectClass *klass, void *data)
 {
     NVICClass *nc = NVIC_CLASS(klass);
@@ -609,6 +670,7 @@ static void armv7m_nvic_class_init(ObjectClass *klass, void *data)
     dc->vmsd  = &vmstate_nvic;
     dc->reset = armv7m_nvic_reset;
     dc->realize = armv7m_nvic_realize;
+    dc->props = armv7m_nvic_properties;
 }
 
 static const TypeInfo armv7m_nvic_info = {

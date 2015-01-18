@@ -267,6 +267,15 @@ static const MemoryRegionOps f2xx_tim_ops = {
     }
 };
 
+static void f2xx_tim_reset(DeviceState *dev)
+{
+    f2xx_tim *s = FROM_SYSBUS(f2xx_tim, SYS_BUS_DEVICE(dev));
+
+    timer_del(s->timer);
+    memset(&s->regs, 0, sizeof(s->regs));
+}
+
+
 static int
 f2xx_tim_init(SysBusDevice *dev)
 {
@@ -297,6 +306,7 @@ f2xx_tim_class_init(ObjectClass *klass, void *data)
     sc->init = f2xx_tim_init;
     //TODO: fix this: dc->no_user = 1;
     dc->props = f2xx_tim_properties;
+    dc->reset = f2xx_tim_reset;
 }
 
 static const TypeInfo

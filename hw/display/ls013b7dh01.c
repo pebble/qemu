@@ -61,6 +61,8 @@ typedef struct {
 
     bool   vibrate_on;
     int    vibrate_offset;
+
+    bool power_on;
 } lcd_state;
 
 static uint8_t
@@ -283,6 +285,28 @@ static void sm_lcd_vibe_ctl(void *opaque, int n, int level)
     s->vibrate_on = (level != 0);
 }
 
+// ----------------------------------------------------------------------------- 
+static void sm_lcd_power_ctl(void *opaque, int n, int level)
+{
+    lcd_state *s = (lcd_state *)opaque;
+    assert(n == 0);
+
+    if (!level && s->power_on) {
+        memset(&s->framebuffer, 0, sizeof(s->framebuffer));
+        s->redraw = true;
+        s->power_on = false;
+    }
+    s->power_on = !!level;
+}
+
+
+static void sm_lcd_reset(DeviceState *dev)
+{
+    lcd_state *s = (lcd_state *)dev;
+    memset(&s->framebuffer, 0, sizeof(s->framebuffer));
+    s->redraw = true;
+}
+
 
 // ----------------------------------------------------------------------------- 
 static const GraphicHwOps sm_lcd_ops = {
@@ -301,15 +325,19 @@ static int sm_lcd_init(SSISlave *dev)
 
     /* This callback informs us that brightness control is enabled */
     qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_backlight_enable_cb,
-                            "sm_lcd_backlight_enable", 1);
+                            "backlight_enable", 1);
 
     /* This callback informs us of the brightness level (from 0 to 255) */
     qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_set_backlight_level_cb,
-                            "sm_lcd_backlight_level", 1);
+                            "backlight_level", 1);
 
     /* This callback informs us that the vibrate is on/orr */
     qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_vibe_ctl,
-                            "sm_lcd_vibe_ctl", 1);
+                            "vibe_ctl", 1);
+
+    /* This callback informs us that power is on/off */
+    qdev_init_gpio_in_named(DEVICE(dev), sm_lcd_power_ctl,
+                            "power_ctl", 1);
 
     return 0;
 }
@@ -321,6 +349,7 @@ static void sm_lcd_class_init(ObjectClass *klass, void *data)
     k->init = sm_lcd_init;
     k->transfer = sm_lcd_transfer;
     k->cs_polarity = SSI_CS_LOW;
+    k->parent_class.reset = sm_lcd_reset;
 }
 
 static const TypeInfo sm_lcd_info = {

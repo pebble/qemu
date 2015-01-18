@@ -59,6 +59,7 @@ struct stm32f2xx_gpio {
     qemu_irq pin[STM32_GPIO_PIN_COUNT];
     qemu_irq exti[STM32_GPIO_PIN_COUNT];
     qemu_irq alternate_function[STM32_GPIO_PIN_COUNT];
+    qemu_irq cpu_wake[STM32_GPIO_PIN_COUNT];
 
     uint32_t regs[R_GPIO_MAX];
     uint32_t ccr;
@@ -214,14 +215,25 @@ f2xx_gpio_set(void *arg, int pin, int level)
     /* Inform EXTI module of pin state */
     qemu_set_irq(s->exti[pin], level);
 
+    // For the stm32, only GPIOA, pin 0 will have a wakeup handler tied to it. It will be
+    // tied to a handler callback in the NVIC. 
+    qemu_set_irq(s->cpu_wake[pin], level);
+
     DPRINTF("GPIO %d set pin %d level %d\n", s->periph, pin, level);
 }
 
 void
-f2xx_exti_set(stm32f2xx_gpio *s, unsigned pin, qemu_irq irq)
+f2xx_gpio_exti_set(stm32f2xx_gpio *s, unsigned pin, qemu_irq irq)
 {
     s->exti[pin] = irq;
     DPRINTF("GPIO %d set exti %d irq %p\n", s->periph, pin, irq);
+}
+
+void
+f2xx_gpio_wake_set(stm32f2xx_gpio *s, unsigned pin, qemu_irq irq)
+{
+    s->cpu_wake[pin] = irq;
+    DPRINTF("GPIO %d set cpu_wake %d irq %p\n", s->periph, pin, irq);
 }
 
 static int

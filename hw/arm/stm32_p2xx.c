@@ -92,6 +92,7 @@ static void stm32_p205_init(MachineState *machine) {
     Stm32Gpio *stm32_gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *stm32_uart[STM32_UART_COUNT];
     Stm32Timer *stm32_timer[STM32_TIM_COUNT];
+    ARMCPU *cpu;
 
     struct stm32f2xx stm;
 
@@ -105,7 +106,8 @@ static void stm32_p205_init(MachineState *machine) {
                stm32_timer,
                8000000,
                32768,
-               &stm);
+               &stm,
+               &cpu);
 
 //    /* Connect LED to GPIO C pin 12 */
 //    led_irq = qemu_allocate_irqs(led_irq_handler, NULL, 1);

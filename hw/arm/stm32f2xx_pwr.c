@@ -128,6 +128,24 @@ static const MemoryRegionOps f2xx_pwr_ops = {
     }
 };
 
+
+// Return true if we should go into standby mode when the process goes into deepsleep.
+// deepsleep is entered if the SLEEPDEEP bit is set in the SCR register when the processor
+// executes a WFI instruction.
+bool f2xx_pwr_powerdown_deepsleep(void *opaqe)
+{
+    f2xx_pwr *s = opaqe;
+    return s->regs[R_PWR_CR] & R_PWR_CR_PDDS;
+}
+
+static void f2xx_pwr_reset(DeviceState *dev)
+{
+    f2xx_pwr *s = FROM_SYSBUS(f2xx_pwr, SYS_BUS_DEVICE(dev));
+
+    memset(s->regs, 0, sizeof(s->regs));
+}
+
+
 static int
 f2xx_pwr_init(SysBusDevice *dev)
 {
@@ -152,6 +170,7 @@ f2xx_pwr_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     SysBusDeviceClass *sc = SYS_BUS_DEVICE_CLASS(klass);
     sc->init = f2xx_pwr_init;
+    dc->reset = f2xx_pwr_reset;
     dc->props = f2xx_pwr_properties;
 }
 
