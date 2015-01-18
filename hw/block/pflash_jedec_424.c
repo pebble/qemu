@@ -260,8 +260,8 @@ static uint32_t pflash_read (pflash_t *pfl, hwaddr offset,
         switch (width) {
         case 1:
             ret = p[offset];
-            DPRINTF("%s: data offset " TARGET_FMT_plx " %02x\n",
-                    __func__, offset, ret);
+            //DPRINTF("%s: data offset " TARGET_FMT_plx " %02x\n",
+            //        __func__, offset, ret);
             break;
         case 2:
             if (be) {
@@ -271,8 +271,8 @@ static uint32_t pflash_read (pflash_t *pfl, hwaddr offset,
                 ret = p[offset];
                 ret |= p[offset + 1] << 8;
             }
-            DPRINTF("%s: data offset " TARGET_FMT_plx " %04x\n",
-                    __func__, offset, ret);
+            //DPRINTF("%s: data offset " TARGET_FMT_plx " %04x\n",
+            //        __func__, offset, ret);
             break;
         case 4:
             if (be) {
@@ -286,8 +286,8 @@ static uint32_t pflash_read (pflash_t *pfl, hwaddr offset,
                 ret |= p[offset + 2] << 16;
                 ret |= p[offset + 3] << 24;
             }
-            DPRINTF("%s: data offset " TARGET_FMT_plx " %08x\n",
-                    __func__, offset, ret);
+            //DPRINTF("%s: data offset " TARGET_FMT_plx " %08x\n",
+            //        __func__, offset, ret);
             break;
         default:
             DPRINTF("BUG in %s\n", __func__);
@@ -385,7 +385,7 @@ static uint32_t pflash_read (pflash_t *pfl, hwaddr offset,
         break;
     }
 
-    DPRINTF("%s: returning 0x%x\n", __func__, ret);
+    //DPRINTF("%s: returning 0x%x\n", __func__, ret);
     return ret;
 }
 
@@ -450,6 +450,8 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
                          uint32_t value, int width, int be)
 {
     uint8_t cmd;
+    int i;
+    uint8_t *p;
 
     cmd = value;
 
@@ -475,6 +477,21 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
             DPRINTF("%s: Program to buffer\n", __func__);
             pfl->status |= 0x80; /* Ready! */
             break;
+        case 0x33:
+            DPRINTF("%s: Blank check\n", __func__);
+            // Is it blank?
+            pfl->status |= 0x80; /* Ready! */
+            pfl->status &= ~0x20;  /* clear non-erased bit */
+            uint8_t *p = pfl->storage;
+            offset &= ~(pfl->sector_len - 1);
+            p += offset;
+            for (i=0; i<pfl->sector_len; i++) {
+                if (p[i] != 0xFF) {
+                    pfl->status |= 0x20;    // Not erased
+                    break;
+                }
+            }
+            goto reset_flash;
         case 0x60: /* Block (un)lock */
             DPRINTF("%s: Block unlock\n", __func__);
             break;
@@ -544,8 +561,10 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
                     __func__, offset, (unsigned)pfl->sector_len);
 
                 if (!pfl->ro) {
-                    memset(pfl->storage, 0xff, pfl->sector_len);
+                    p = pfl->storage;
+                    memset(p + offset, 0xff, pfl->sector_len);
                     pflash_update(pfl, offset, pfl->sector_len);
+                    pfl->status &= ~0x20;  /* clear non-erased bit */
                 } else {
                     pfl->status |= 0x20; /* Block erase error */
                 }
@@ -555,6 +574,7 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
                 if (!pfl->ro) {
                     memset(pfl->storage, 0xff, pfl->sector_len * pfl->nb_blocs);
                     pflash_update(pfl, 0, pfl->sector_len * pfl->nb_blocs);
+                    pfl->status &= ~0x20;  /* clear non-erased bit */
                 } else {
                     pfl->status |= 0x20; /* Block erase error */
                 }
