@@ -451,7 +451,8 @@ void stm32f2xx_init(
                     Stm32Timer **stm32_timer,
                     uint32_t osc_freq,
                     uint32_t osc32_freq,
-                    struct stm32f2xx *stm);
+                    struct stm32f2xx *stm,
+                    ARMCPU **cpu);
 
 struct stm32f4xx;
 void stm32f4xx_init(
@@ -463,6 +464,7 @@ void stm32f4xx_init(
                     Stm32Timer **stm32_timer,
                     uint32_t osc_freq,
                     uint32_t osc32_freq,
-                    struct stm32f4xx *stm);
+                    struct stm32f4xx *stm,
+                    ARMCPU **cpu);
 
 #endif /* STM32_H */

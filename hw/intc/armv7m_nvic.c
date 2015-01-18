@@ -44,6 +44,7 @@ typedef struct {
 
     // output IRQs
     qemu_irq cpu_wakeup_out;
+    qemu_irq power_out;
 
 } nvic_state;
 
@@ -170,7 +171,10 @@ int armv7m_nvic_acknowledge_irq(void *opaque)
      * mode higher up the call chain, perhaps in arm_gic.c, where we get notification of
      * interrupts that change to pending state.  */
     s->in_deep_sleep = false;
-    s->in_standby = false;
+    if (s->in_standby) {
+        qemu_set_irq(s->power_out, true);
+        s->in_standby = false;
+    }
 
     irq = gic_acknowledge_irq(&s->gic, 0);
     if (irq == 1023)
@@ -200,6 +204,9 @@ void armv7m_nvic_cpu_executed_wfi(void *opaque)
             // the CPU. Technically, this is not correct and we should allow specific ones
             // through (some RTC interrupts, etc.). 
             armv7m_nvic_set_base_priority(opaque, 0x01);
+
+            // Inform peripherals that the power is off
+            qemu_set_irq(s->power_out, false);
         }
     }
 }
@@ -215,6 +222,7 @@ static void nvic_wakeup_in_cb(void *opaque, int n, int level)
     if (level && s->in_standby) {
         s->in_standby = false;
         s->in_deep_sleep = false;
+        qemu_set_irq(s->power_out, true);
         qemu_set_irq(s->cpu_wakeup_out, level);
     } else if (!level) {
         qemu_set_irq(s->cpu_wakeup_out, level);
@@ -572,6 +580,7 @@ static void armv7m_nvic_reset(DeviceState *dev)
     s->scr_reg = 0;
     s->in_deep_sleep = false;
     s->in_standby = false;
+    qemu_set_irq(s->power_out, true);
 }
 
 static void armv7m_nvic_realize(DeviceState *dev, Error **errp)
@@ -624,6 +633,9 @@ static void armv7m_nvic_realize(DeviceState *dev, Error **errp)
 
     // This is the handler that will wakeup the CPU
     qdev_init_gpio_out_named(dev, &s->cpu_wakeup_out, "wakeup_out", 1);
+
+    // This is the handler that informs peripherals that the power is on/off
+    qdev_init_gpio_out_named(dev, &s->power_out, "power_out", 1);
 
 }
 

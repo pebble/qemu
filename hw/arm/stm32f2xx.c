@@ -67,13 +67,13 @@ void stm32f2xx_init(
             Stm32Timer **stm32_timer,
             uint32_t osc_freq,
             uint32_t osc32_freq,
-            struct stm32f2xx *stm)
+            struct stm32f2xx *stm,
+            ARMCPU **cpu)
 {
     MemoryRegion *address_space_mem = get_system_memory();
     DriveInfo *dinfo;
     qemu_irq *pic;
     int i;
-    ARMCPU *cpu;
 
     Object *stm32_container = container_get(qdev_get_machine(), "/stm32");
 
@@ -86,7 +86,7 @@ void stm32f2xx_init(
                 kernel_load_translate_fn,
                 NULL,
                 "cortex-m3",
-                &cpu);
+                cpu);
 
     dinfo = drive_get(IF_PFLASH, 0, 0);
     if (dinfo) {
@@ -124,7 +124,7 @@ void stm32f2xx_init(
     }
 
     /* Connect the WKUP pin (GPIO A, pin 0) to the NVIC's WKUP handler */
-    qemu_irq nvic_wake_irq = qdev_get_gpio_in_named(DEVICE(cpu->env.nvic), "wakeup_in", 0);
+    qemu_irq nvic_wake_irq = qdev_get_gpio_in_named(DEVICE((*cpu)->env.nvic), "wakeup_in", 0);
     f2xx_gpio_wake_set((stm32f2xx_gpio *)(stm32_gpio[STM32_GPIOA_INDEX]), 0, nvic_wake_irq);
 
 
@@ -224,7 +224,7 @@ void stm32f2xx_init(
     /* Power management */
     DeviceState *pwr_dev = qdev_create(NULL, "f2xx_pwr");
     stm32_init_periph(pwr_dev, STM32_RTC, 0x40007000, NULL);
-    qdev_prop_set_ptr(cpu->env.nvic, "stm32_pwr", pwr_dev);
+    qdev_prop_set_ptr((*cpu)->env.nvic, "stm32_pwr", pwr_dev);
 
 
 #define dummy_dev(name, start, size) do {\

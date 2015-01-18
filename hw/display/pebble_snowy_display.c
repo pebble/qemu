@@ -194,6 +194,7 @@ typedef struct {
     int           row_index;
     bool          backlight_enabled;
     float         brightness;
+    bool          power_on;
 
     /* State variables */
     PSDisplayState  state;
@@ -935,6 +936,21 @@ static void ps_display_vibe_ctl(void *opaque, int n, int level)
 }
 
 
+// ----------------------------------------------------------------------------- 
+static void ps_display_power_ctl(void *opaque, int n, int level)
+{
+    PSDisplayGlobals *s = (PSDisplayGlobals *)opaque;
+    assert(n == 0);
+
+    if (!level && s->power_on) {
+        memset(&s->framebuffer, 0, sizeof(s->framebuffer));
+        s->redraw = true;
+        s->power_on = false;
+    }
+    s->power_on = !!level;
+}
+
+
 // -----------------------------------------------------------------------------
 static void ps_display_reset(DeviceState *dev)
 {
@@ -957,23 +973,27 @@ static int ps_display_init(SSISlave *dev)
 
     /* Create our inputs that will be connected to GPIOs from the STM32 */
     qdev_init_gpio_in_named(DEVICE(dev), ps_display_set_reset_pin_cb,
-                            "pebble_snowy_display_reset", 1);
+                            "reset", 1);
 
     /* Create our inputs that will be connected to GPIOs from the STM32 */
     qdev_init_gpio_in_named(DEVICE(dev), ps_display_set_sclk_pin_cb,
-                            "pebble_snowy_display_sclk", 1);
+                            "sclk", 1);
 
     /* This callback informs us that brightness control is enabled */
     qdev_init_gpio_in_named(DEVICE(dev), ps_displa_backlight_enable_cb,
-                            "pebble_snowy_display_backlight_enable", 1);
+                            "backlight_enable", 1);
 
     /* This callback informs us of the brightness level (from 0 to 255) */
     qdev_init_gpio_in_named(DEVICE(dev), ps_display_set_backlight_level_cb,
-                            "pebble_snowy_display_backlight_level", 1);
+                            "backlight_level", 1);
 
     /* This callback informs us that the vibrate is on/orr */
     qdev_init_gpio_in_named(DEVICE(dev), ps_display_vibe_ctl,
-                            "pebble_snowy_display_vibe_ctl", 1);
+                            "vibe_ctl", 1);
+
+    /* This callback informs us that power is on/orr */
+    qdev_init_gpio_in_named(DEVICE(dev), ps_display_power_ctl,
+                            "power_ctl", 1);
 
     return 0;
 }
