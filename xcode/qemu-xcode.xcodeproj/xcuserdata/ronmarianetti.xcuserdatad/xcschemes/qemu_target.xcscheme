@@ -63,11 +63,11 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-machine pebble-bb2  -cpu cortex-m3 -pflash ../test_images/qemu_micro_flash.bin -mtdblock ../test_images/qemu_spi_flash.bin"
-            isEnabled = "NO">
+            isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-machine pebble-snowy-bb  -cpu cortex-m4 -pflash ../test_images/qemu_micro_flash.bin -pflash ../test_images/qemu_spi_flash.bin"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-icount 0"
@@ -91,6 +91,16 @@
             key = "MallocStackLogging"
             value = "1"
             isEnabled = "NO">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "PEBBLE_QEMU_DEFAULT_NOT_CONNECTED"
+            value = "0"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "PEBBLE_QEMU_ALLOW_FIRST_BOOT"
+            value = "0"
+            isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "MallocCheckHeapStart"

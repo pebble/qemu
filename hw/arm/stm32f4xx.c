@@ -77,6 +77,7 @@ void stm32f4xx_init(
             Stm32Gpio **stm32_gpio,
             Stm32Uart **stm32_uart,
             Stm32Timer **stm32_timer,
+            DeviceState **stm32_rtc,
             uint32_t osc_freq,
             uint32_t osc32_freq,
             struct stm32f4xx *stm,
@@ -251,6 +252,7 @@ void stm32f4xx_init(
 
     /* RTC real time clock */
     DeviceState *rtc_dev = qdev_create(NULL, "f2xx_rtc");
+    *stm32_rtc = rtc_dev;
     stm32_init_periph(rtc_dev, STM32_RTC, 0x40002800, NULL);
     // Alarm A
     sysbus_connect_irq(SYS_BUS_DEVICE(rtc_dev), 0, qdev_get_gpio_in(exti_dev, 17));

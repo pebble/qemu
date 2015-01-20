@@ -25,6 +25,11 @@
 #include <sys/time.h>
 #include "hw/sysbus.h"
 #include "qemu/timer.h"
+#include "hw/arm/stm32.h"
+
+// Define this to add extra BKUP registers past the normal ones implemented by the STM.
+// For Pebble emulation, we use these to pass settings flags to the emulated target
+#define STM32F2XX_RTC_NUM_EXTRA_BKUP_REG  1
 
 //#define DEBUG_STM32F2XX_RTC
 #ifdef DEBUG_STM32F2XX_RTC
@@ -69,7 +74,8 @@
 #define R_RTC_TAFCR  (0x40 / 4)
 #define R_RTC_BKPxR  (0x50 / 4)
 #define R_RTC_BKPxR_LAST (0x9c / 4)
-#define R_RTC_MAX    (0xa0 / 4)
+#define R_RTC_BKPxR_INC_EXTRA_LAST (R_RTC_BKPxR_LAST + STM32F2XX_RTC_NUM_EXTRA_BKUP_REG)
+#define R_RTC_MAX    (R_RTC_BKPxR_INC_EXTRA_LAST + 1)
 
 #define R_RTC_CR_FMT_MASK (0x01 << 6)
 
@@ -367,7 +373,7 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     default:
         abort();
     }
-    if (addr >= R_RTC_BKPxR && addr <= R_RTC_BKPxR_LAST) {
+    if (addr >= R_RTC_BKPxR && addr <= R_RTC_BKPxR_INC_EXTRA_LAST) {
         s->regs[addr] = data;
         return;
     }
@@ -582,6 +588,19 @@ f2xx_wu_timer(void *arg)
 }
 
 
+// External interface to set the value of an "extra" backup register. This can be used to
+// communicate emulator specific settings to the target
+void f2xx_rtc_set_extra_bkup_reg(void *opaque, uint32_t idx, uint32_t value)
+{
+    f2xx_rtc *s = (f2xx_rtc *)opaque;
+
+     // Copy in the extra backup registers that were specified via properties
+    assert(idx < STM32F2XX_RTC_NUM_EXTRA_BKUP_REG);
+    s->regs[R_RTC_BKPxR_LAST + 1 + idx] = value;
+}
+
+
+
 static const MemoryRegionOps f2xx_rtc_ops = {
     .read = f2xx_rtc_read,
     .write = f2xx_rtc_write,
@@ -603,7 +622,7 @@ f2xx_rtc_init(SysBusDevice *dev)
 {
     f2xx_rtc *s = FROM_SYSBUS(f2xx_rtc, dev);
 
-    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_rtc_ops, s, "rtc", 0xa0);
+    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_rtc_ops, s, "rtc", 0x03ff);
     sysbus_init_mmio(dev, &s->iomem);
 
     sysbus_init_irq(dev, &s->irq[0]);

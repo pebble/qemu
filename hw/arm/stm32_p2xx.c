@@ -92,6 +92,7 @@ static void stm32_p205_init(MachineState *machine) {
     Stm32Gpio *stm32_gpio[STM32F2XX_GPIO_COUNT];
     Stm32Uart *stm32_uart[STM32_UART_COUNT];
     Stm32Timer *stm32_timer[STM32_TIM_COUNT];
+    DeviceState *rtc_dev;
     ARMCPU *cpu;
 
     struct stm32f2xx stm;
@@ -104,6 +105,7 @@ static void stm32_p205_init(MachineState *machine) {
                stm32_gpio,
                stm32_uart,
                stm32_timer,
+               &rtc_dev,
                8000000,
                32768,
                &stm,

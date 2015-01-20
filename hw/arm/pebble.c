@@ -244,6 +244,36 @@ static DeviceState *pebble_init_board(Stm32Gpio *gpio[], qemu_irq display_vibe) 
     return board;
 }
 
+
+// ----------------------------------------------------------------------------------------
+// Set our QEMU specific settings to the target
+static void pebble_set_qemu_settings(DeviceState *rtc_dev)
+{
+    #define QEMU_REG_0_FIRST_BOOT_COMPLETE      0x00000001
+    #define QEMU_REG_0_DEFAULT_CONNECTED        0x00000002
+
+    // Default setting
+    uint32_t  flags = QEMU_REG_0_FIRST_BOOT_COMPLETE | QEMU_REG_0_DEFAULT_CONNECTED;
+
+    // Set the QEMU specific settings in the extra backup registers
+    char *strval;
+    strval = getenv("PEBBLE_QEMU_ALLOW_FIRST_BOOT");
+    if (strval && atoi(strval)) {
+        // If set, allow "first boot" behavior, which displays the "Ready for Update"
+        // screen
+        flags &= ~QEMU_REG_0_FIRST_BOOT_COMPLETE;
+    }
+
+    strval = getenv("PEBBLE_QEMU_DEFAULT_NOT_CONNECTED");
+    if (strval && atoi(strval)) {
+        // If set, default to bluetooth not connected
+        flags &= ~QEMU_REG_0_DEFAULT_CONNECTED;
+    }
+
+    f2xx_rtc_set_extra_bkup_reg(rtc_dev, 0, flags);
+}
+
+
 // ------------------------------------------------------------------------------------------
 // Instantiate a 32f2xx based pebble
 static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
@@ -252,6 +282,7 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
     Stm32Uart *uart[STM32F2XX_UART_COUNT];
     Stm32Timer *timer[STM32F2XX_TIM_COUNT];
     DeviceState *spi_flash;
+    DeviceState *rtc_dev;
     SSIBus *spi;
     struct stm32f2xx stm;
     ARMCPU *cpu;
@@ -264,10 +295,15 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
         gpio,
         uart,
         timer,
+        &rtc_dev,
         8000000, /* osc_freq*/
         32768, /* osc2_freq*/
         &stm,
         &cpu);
+
+
+    // Set the Pebble specific QEMU settings on the target
+    pebble_set_qemu_settings(rtc_dev);
 
     /* SPI flash */
     spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[0], "ssi");
@@ -325,15 +361,19 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map)
     Stm32Gpio *gpio[STM32F4XX_GPIO_COUNT];
     Stm32Uart *uart[STM32F4XX_UART_COUNT];
     Stm32Timer *timer[STM32F4XX_TIM_COUNT];
+    DeviceState *rtc_dev;
     SSIBus *spi;
     struct stm32f4xx stm;
     ARMCPU *cpu;
 
     // Note: allow for bigger flash images (4MByte) to aid in development and debugging
     stm32f4xx_init(4096 /*flash_size in KBytes */, 256 /*ram_size on KBytes*/,
-        machine->kernel_filename, gpio, uart, timer, 8000000 /*osc_freq*/,
+        machine->kernel_filename, gpio, uart, timer, &rtc_dev, 8000000 /*osc_freq*/,
         32768 /*osc2_freq*/, &stm, &cpu);
 
+
+    // Set the Pebble specific QEMU settings on the target
+    pebble_set_qemu_settings(rtc_dev);
 
     /* Storage flash (NOR-flash on Snowy) */
     const uint32_t flash_size_bytes = 16 * 1024 * 1024;  /* 16 MBytes */
