@@ -249,25 +249,45 @@ static DeviceState *pebble_init_board(Stm32Gpio *gpio[], qemu_irq display_vibe) 
 // Set our QEMU specific settings to the target
 static void pebble_set_qemu_settings(DeviceState *rtc_dev)
 {
-    #define QEMU_REG_0_FIRST_BOOT_COMPLETE      0x00000001
-    #define QEMU_REG_0_DEFAULT_CONNECTED        0x00000002
+    #define QEMU_REG_0_FIRST_BOOT_LOGIC_ENABLE  0x00000001
+    #define QEMU_REG_0_START_CONNECTED          0x00000002
+    #define QEMU_REG_0_START_PLUGGED_IN         0x00000004
 
-    // Default setting
-    uint32_t  flags = QEMU_REG_0_FIRST_BOOT_COMPLETE | QEMU_REG_0_DEFAULT_CONNECTED;
+    // Default settings
+    uint32_t  flags = QEMU_REG_0_START_CONNECTED;
 
     // Set the QEMU specific settings in the extra backup registers
     char *strval;
-    strval = getenv("PEBBLE_QEMU_ALLOW_FIRST_BOOT");
-    if (strval && atoi(strval)) {
+    strval = getenv("PEBBLE_QEMU_FIRST_BOOT_LOGIC_ENABLE");
+    if (strval) {
         // If set, allow "first boot" behavior, which displays the "Ready for Update"
         // screen
-        flags &= ~QEMU_REG_0_FIRST_BOOT_COMPLETE;
+        if (atoi(strval)) {
+            flags |= QEMU_REG_0_FIRST_BOOT_LOGIC_ENABLE;
+        } else {
+            flags &= ~QEMU_REG_0_FIRST_BOOT_LOGIC_ENABLE;
+        }
     }
 
-    strval = getenv("PEBBLE_QEMU_DEFAULT_NOT_CONNECTED");
-    if (strval && atoi(strval)) {
+    strval = getenv("PEBBLE_QEMU_START_CONNECTED");
+    if (strval) {
         // If set, default to bluetooth not connected
-        flags &= ~QEMU_REG_0_DEFAULT_CONNECTED;
+        if (atoi(strval)) {
+            flags |= QEMU_REG_0_START_CONNECTED;
+        } else {
+            flags &= ~QEMU_REG_0_START_CONNECTED;
+        }
+
+    }
+
+    strval = getenv("PEBBLE_QEMU_START_PLUGGED_IN");
+    if (strval) {
+        // If set, default to plugged in
+        if (atoi(strval)) {
+            flags |= QEMU_REG_0_START_PLUGGED_IN;
+        } else {
+            flags &= ~QEMU_REG_0_START_PLUGGED_IN;
+        }
     }
 
     f2xx_rtc_set_extra_bkup_reg(rtc_dev, 0, flags);
