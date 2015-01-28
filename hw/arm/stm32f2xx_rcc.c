@@ -44,6 +44,9 @@ do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
         stm32_unimp("Not implemented: RCC " #mask ". Masked value: 0x%08x\n", (new_value & mask)); \
     }
 
+#define WARN_UNIMPLEMENTED_REG(offset) \
+        stm32_unimp("STM32f2xx_rcc: unimplemented register: 0x%x", (int)offset)
+
 #define HSI_FREQ 16000000
 #define LSI_FREQ 32000
 
@@ -754,13 +757,13 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
         case RCC_AHB1RSTR_OFFSET:
         case RCC_AHB2RSTR_OFFSET:
         case RCC_AHB3RSTR_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
+            WARN_UNIMPLEMENTED_REG(offset);
             return 0;
         case RCC_APB1RSTR_OFFSET:
-            stm32_unimp("Unimplemented read: RCC_APB1RSTR_OFFSET\n");
+            WARN_UNIMPLEMENTED_REG(offset);
             return 0;
         case RCC_APB2RSTR_OFFSET:
-            stm32_unimp("Unimplemented read: RCC_APB2RSTR_OFFSET\n");
+            WARN_UNIMPLEMENTED_REG(offset);
             return 0;
         case RCC_AHB1ENR_OFFSET:
             return stm32_rcc_RCC_AHB1ENR_read(s);
@@ -777,21 +780,22 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
         case RCC_AHB3LPENR_OFFSET:
         case RCC_APB1LPENR_OFFSET:
         case RCC_APB2LPENR_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
+            WARN_UNIMPLEMENTED_REG(offset);
             return 0;
         case RCC_BDCR_OFFSET:
             return stm32_rcc_RCC_BDCR_read(s);
         case RCC_CSR_OFFSET:
             return stm32_rcc_RCC_CSR_read(s);
         case RCC_SSCGR_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
+            WARN_UNIMPLEMENTED_REG(offset);
             return 0;
         case RCC_PLLI2SCFGR_OFFSET:
             return stm32_rcc_RCC_PLLI2SCFGR_read(s);
         default:
-            STM32_BAD_REG(offset, 4);
+            WARN_UNIMPLEMENTED_REG(offset);
             break;
     }
+    return 0;
 }
 
 static void stm32_rcc_writeb(void *opaque, hwaddr offset, uint64_t value)
@@ -833,7 +837,7 @@ static void stm32_rcc_writew(void *opaque, hwaddr offset,
             stm32_unimp("Unimplemented write: RCC_APB2RSTR_OFFSET 0x%x\n", (uint32_t)value);
             break;
         case RCC_AHB3RSTR_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
+            WARN_UNIMPLEMENTED_REG(offset);
             break;
         case RCC_AHB1ENR_OFFSET:
             stm32_rcc_RCC_AHB1ENR_write(s, value, false);
@@ -846,7 +850,7 @@ static void stm32_rcc_writew(void *opaque, hwaddr offset,
             break;
         case RCC_APB1LPENR_OFFSET:
         case RCC_APB2LPENR_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
+            WARN_UNIMPLEMENTED_REG(offset);
             break;
         case RCC_APB2ENR_OFFSET:
             stm32_rcc_RCC_APB2ENR_write(s, value, false);
@@ -870,13 +874,13 @@ static void stm32_rcc_writew(void *opaque, hwaddr offset,
             stm32_rcc_RCC_CSR_write(s, value, false);
             break;
         case RCC_SSCGR_OFFSET:
-            STM32_NOT_IMPL_REG(offset, 4);
+            WARN_UNIMPLEMENTED_REG(offset);
             break;
         case RCC_PLLI2SCFGR_OFFSET:
             stm32_rcc_RCC_PLLI2SCFGR_write(s, value, false);
             break;
         default:
-            STM32_BAD_REG(offset, 4);
+            WARN_UNIMPLEMENTED_REG(offset);
             break;
     }
 }
@@ -904,7 +908,7 @@ static void stm32_rcc_write(void *opaque, hwaddr offset,
             stm32_rcc_writeb(opaque, offset, value);
             break;
         default:
-            STM32_NOT_IMPL_REG(offset, size);
+            WARN_UNIMPLEMENTED_REG(offset);
             break;
     }
 }

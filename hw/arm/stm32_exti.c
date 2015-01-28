@@ -331,7 +331,7 @@ void stm32_exti_set_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_in
     assert(exti_line < EXTI_LINE_COUNT);
 
     /* Call the GPIO module with the EXTI lines IRQ handler. */
-    f2xx_exti_set(s->stm32_gpio[gpio_index], exti_line, qdev_get_gpio_in(DEVICE(&s->busdev), exti_line));
+    f2xx_gpio_exti_set(s->stm32_gpio[gpio_index], exti_line, qdev_get_gpio_in(DEVICE(&s->busdev), exti_line));
 }
 
 void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_index)
@@ -339,7 +339,7 @@ void stm32_exti_reset_gpio(Stm32Exti *s, unsigned exti_line, const uint8_t gpio_
     assert(exti_line < EXTI_LINE_COUNT);
 
     /* Call the GPIO module to clear its IRQ assignment. */
-    f2xx_exti_set(s->stm32_gpio[gpio_index], exti_line, NULL);
+    f2xx_gpio_exti_set(s->stm32_gpio[gpio_index], exti_line, NULL);
 }
 
 

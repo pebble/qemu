@@ -25,6 +25,11 @@
 #include <sys/time.h>
 #include "hw/sysbus.h"
 #include "qemu/timer.h"
+#include "hw/arm/stm32.h"
+
+// Define this to add extra BKUP registers past the normal ones implemented by the STM.
+// For Pebble emulation, we use these to pass settings flags to the emulated target
+#define STM32F2XX_RTC_NUM_EXTRA_BKUP_REG  1
 
 //#define DEBUG_STM32F2XX_RTC
 #ifdef DEBUG_STM32F2XX_RTC
@@ -69,7 +74,8 @@
 #define R_RTC_TAFCR  (0x40 / 4)
 #define R_RTC_BKPxR  (0x50 / 4)
 #define R_RTC_BKPxR_LAST (0x9c / 4)
-#define R_RTC_MAX    (0xa0 / 4)
+#define R_RTC_BKPxR_INC_EXTRA_LAST (R_RTC_BKPxR_LAST + STM32F2XX_RTC_NUM_EXTRA_BKUP_REG)
+#define R_RTC_MAX    (R_RTC_BKPxR_INC_EXTRA_LAST + 1)
 
 #define R_RTC_CR_FMT_MASK (0x01 << 6)
 
@@ -272,6 +278,14 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
         value |= R_RTC_ISR_RSF;
     }
 
+    // HACK for Pebble. Clear the "entered standby" bit. If this bit is set, the Pebble
+    // will only continue booting if one of the buttons is held down. Because the button GPIOs
+    // are setup AFTER QEMU gets the key press event, it is difficult to set the GPIOs according
+    // to the buttons held down before the reset. 
+    if (addr == R_RTC_BKPxR) {
+        value &= ~0x10000;
+    }
+
     // If reading the sub-second register, determine what it should be from the current
     //  host time
     if (addr == R_RTC_SSR) {
@@ -307,7 +321,7 @@ f2xx_rtc_read(void *arg, hwaddr addr, unsigned int size)
         strftime(date_time_str, sizeof(date_time_str), "%x %X", &target_tm);
         DPRINTF("%s: current date/time: %s\n", __func__, date_time_str);
     } else {
-        //DPRINTF("%s: addr: 0x%llx, size: %d, value: 0x%x\n", __func__, addr, size, r);
+        DPRINTF("%s: addr: 0x%llx, size: %d, value: 0x%x\n", __func__, addr << 2, size, r);
     }
 #endif
 
@@ -322,7 +336,7 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     bool    compute_new_target_offset = false;
     bool    update_wut = false;
 
-    //DPRINTF("%s: addr: 0x%llx, data: 0x%llx, size: %d\n", __func__, addr, data, size);
+    DPRINTF("%s: addr: 0x%llx, data: 0x%llx, size: %d\n", __func__, addr, data, size);
 
     addr >>= 2;
     if (addr >= R_RTC_MAX) {
@@ -359,7 +373,7 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
     default:
         abort();
     }
-    if (addr >= R_RTC_BKPxR && addr <= R_RTC_BKPxR_LAST) {
+    if (addr >= R_RTC_BKPxR && addr <= R_RTC_BKPxR_INC_EXTRA_LAST) {
         s->regs[addr] = data;
         return;
     }
@@ -574,6 +588,19 @@ f2xx_wu_timer(void *arg)
 }
 
 
+// External interface to set the value of an "extra" backup register. This can be used to
+// communicate emulator specific settings to the target
+void f2xx_rtc_set_extra_bkup_reg(void *opaque, uint32_t idx, uint32_t value)
+{
+    f2xx_rtc *s = (f2xx_rtc *)opaque;
+
+     // Copy in the extra backup registers that were specified via properties
+    assert(idx < STM32F2XX_RTC_NUM_EXTRA_BKUP_REG);
+    s->regs[R_RTC_BKPxR_LAST + 1 + idx] = value;
+}
+
+
+
 static const MemoryRegionOps f2xx_rtc_ops = {
     .read = f2xx_rtc_read,
     .write = f2xx_rtc_write,
@@ -584,12 +611,18 @@ static const MemoryRegionOps f2xx_rtc_ops = {
     }
 };
 
+static void f2xx_rtc_reset(DeviceState *dev)
+{
+    f2xx_rtc *s = FROM_SYSBUS(f2xx_rtc, SYS_BUS_DEVICE(dev));
+    s->regs[R_RTC_CR] = 0;
+}
+
 static int
 f2xx_rtc_init(SysBusDevice *dev)
 {
     f2xx_rtc *s = FROM_SYSBUS(f2xx_rtc, dev);
 
-    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_rtc_ops, s, "rtc", 0xa0);
+    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_rtc_ops, s, "rtc", 0x03ff);
     sysbus_init_mmio(dev, &s->iomem);
 
     sysbus_init_irq(dev, &s->irq[0]);
@@ -635,6 +668,7 @@ f2xx_rtc_class_init(ObjectClass *klass, void *data)
     sc->init = f2xx_rtc_init;
     //TODO: fix this: dc->no_user = 1;
     dc->props = f2xx_rtc_properties;
+    dc->reset = f2xx_rtc_reset;
 }
 
 static const TypeInfo
