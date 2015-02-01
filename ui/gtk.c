@@ -1228,7 +1228,9 @@ static void gd_ungrab_keyboard(GtkDisplayState *s)
 
 static void gd_grab_pointer(VirtualConsole *vc)
 {
+#ifdef NO_MOUSE
     return;
+#endif
     GdkDisplay *display = gtk_widget_get_display(vc->gfx.drawing_area);
 #if GTK_CHECK_VERSION(3, 0, 0)
     GdkDeviceManager *mgr = gdk_display_get_device_manager(display);
@@ -1261,7 +1263,9 @@ static void gd_grab_pointer(VirtualConsole *vc)
 
 static void gd_ungrab_pointer(GtkDisplayState *s)
 {
+#ifdef NO_MOUSE
     return;
+#endif
     VirtualConsole *vc = s->ptr_owner;
 
     if (vc == NULL) {
