@@ -196,6 +196,9 @@ void arm_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
                         int flags);
 
 hwaddr arm_cpu_get_phys_page_debug(CPUState *cpu, vaddr addr);
+void arm_cpu_unassigned_access(CPUState *cs, hwaddr addr,
+                                bool is_write, bool is_exec, int unused,
+                                unsigned size);
 
 int arm_cpu_gdb_read_register(CPUState *cpu, uint8_t *buf, int reg);
 int arm_cpu_gdb_write_register(CPUState *cpu, uint8_t *buf, int reg);

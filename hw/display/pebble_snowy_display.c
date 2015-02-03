@@ -205,7 +205,6 @@ typedef struct {
 
     bool      sclk_value;
     bool      cs_value;                 // low means asserted
-    uint32_t  sclk_count_with_cs_high;
 
     bool   vibrate_on;
     int    vibrate_offset;
@@ -257,7 +256,7 @@ static void ps_display_draw_8bpp_bitmap(PSDisplayGlobals *s, uint8_t *bytes,
 
 /*
 // -----------------------------------------------------------------------------
-// Draw an 1-bit per pixel bitmap to the framebuffer
+// Draw a 1-bit per pixel bitmap to the framebuffer
 static void ps_display_draw_1bpp_bitmap(PSDisplayGlobals *s, uint8_t *bits,
                       uint32_t x_offset, uint32_t y_offset, uint32_t width, uint32_t height) {
   uint32_t pixels = width * height;
@@ -298,6 +297,7 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s)
       {"Date: Dec 10 2014 08:30", PSDISPLAY_CMD_SET_0},
       {"Date: Sep 12 2014 16:56:21", PSDISPLAY_CMD_SET_1},
       {"Date: Jan 9 2015 10:49:47", PSDISPLAY_CMD_SET_2},
+      {"Date: Jan 30 2015 15:11:", PSDISPLAY_CMD_SET_2},
     };
 
 
@@ -562,7 +562,6 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
     uint32_t data_byte = data & 0x00FF;
 
     //DPRINTF("rcv byte: 0x%02x\n", data_byte);
-    //DPRINTF("Got %d sclocks\n", s->sclk_count_with_cs_high);
 
     /* Ignore incoming data if our chip select is not asserted */
     if (s->cs_value) {
@@ -813,10 +812,14 @@ static int ps_display_set_cs(SSISlave *dev, bool value)
     DPRINTF("CS changed to %d\n", value);
     s->cs_value = value;
 
-    // When CS goes up (unasserted), reset our state
-    if (value && s->state != PSDISPLAYSTATE_PROGRAMMING) {
-        DPRINTF("Resetting state because CS was unasserted\n");
+    // When CS goes up (unasserted), we are done programming
+    if (value && s->state == PSDISPLAYSTATE_PROGRAMMING) {
+        DPRINTF("Exiting programming mode\n");
         ps_display_reset_state(s, true /*assert_done*/);
+
+        // Try and figure out which command set the FPGA expects by parsing the
+        // programming data
+        ps_display_determine_command_set(s);
     }
 
     return 0;
@@ -832,14 +835,21 @@ static void ps_display_set_reset_pin_cb(void *opaque, int n, int level)
     DPRINTF("RESET changed to %d\n", value);
     qemu_set_irq(s->done_output, false);
 
-
-    // When reset is asserted, reset our state
-    if (!value) {
-        // After a reset, we are not done. Deassert our interrupt (asserted low).
+    // When reset goes high, sample the CS input to see what state we should be in
+    // if CS is low, expect new FPGA programming to arrive
+    // if CS is high, assume we will be using the bootloader configuration
+    if (value) {
+        // After a reset, we are not done. De-assert our interrupt (asserted low).
         qemu_set_irq(s->intn_output, true);
-        s->sclk_count_with_cs_high = 0;
-        s->state = PSDISPLAYSTATE_PROGRAMMING;
-        s->prog_byte_offset = 0;
+
+        if (s->cs_value) {
+            // Assume we are using the bootloader configuration
+            s->cmd_set = PSDISPLAY_CMD_SET_0;
+            ps_display_reset_state(s, true);
+        } else {
+            s->state = PSDISPLAYSTATE_PROGRAMMING;
+            s->prog_byte_offset = 0;
+        }
     }
 }
 
@@ -849,32 +859,8 @@ static void ps_display_set_sclk_pin_cb(void *opaque, int n, int level)
     PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, opaque);
     assert(n == 0);
 
-    bool new_value = !!level;
-
-    /* Count number of clocks received when CS is held high, this tells us when we are
-     * done receiving programming */
-    if (s->cs_value) {
-        if (new_value && new_value != s->sclk_value) {
-            s->sclk_count_with_cs_high++;
-        }
-
-        /* After enough cycles of sclck, say we are done with programming mode */
-        if (s->sclk_count_with_cs_high > 50) {
-            qemu_set_irq(s->done_output, true);
-            if (s->state == PSDISPLAYSTATE_PROGRAMMING) {
-                DPRINTF("Got %d sclocks, exiting programming mode\n",
-                              s->sclk_count_with_cs_high);
-                ps_display_reset_state(s, true);
-
-                // Try and figure out which command set the FPGA expects by parsing the
-                // programming data
-                ps_display_determine_command_set(s);
-            }
-        }
-    }
-
     /* Save new value */
-    s->sclk_value = new_value;
+    s->sclk_value = !!level;
 }
 
 
@@ -967,6 +953,7 @@ static int ps_display_init(SSISlave *dev)
     s->brightness = 0.0;
     s->backlight_enabled = false;
     s->cmd_set = PSDISPLAY_CMD_SET_0;
+    s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
 
     s->con = graphic_console_init(DEVICE(dev), 0, &ps_display_ops, s);
     qemu_console_resize(s->con, SNOWY_NUM_COLS, SNOWY_NUM_ROWS);

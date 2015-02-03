@@ -4199,6 +4199,22 @@ hwaddr arm_cpu_get_phys_page_debug(CPUState *cs, vaddr addr)
     return phys_addr;
 }
 
+void arm_cpu_unassigned_access(CPUState *cs, hwaddr addr,
+                                bool is_write, bool is_exec, int unused,
+                                unsigned size)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
+
+    env->exception.vaddress = addr;
+    if (is_exec) {
+        cs->exception_index = EXCP_PREFETCH_ABORT;
+        cpu_loop_exit(cs);
+    } else {
+        cs->exception_index = EXCP_DATA_ABORT;
+    }
+}
+
 void HELPER(set_r13_banked)(CPUARMState *env, uint32_t mode, uint32_t val)
 {
     if ((env->uncached_cpsr & CPSR_M) == mode) {
