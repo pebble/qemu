@@ -378,6 +378,9 @@ static void sdl_show_cursor(void)
 
 static void sdl_grab_start(void)
 {
+#ifdef NO_MOUSE
+    return;
+#endif
     /*
      * If the application is not active, do not try to enter grab state. This
      * prevents 'SDL_WM_GrabInput(SDL_GRAB_ON)' from blocking all the
@@ -400,6 +403,9 @@ static void sdl_grab_start(void)
 
 static void sdl_grab_end(void)
 {
+#ifdef NO_MOUSE
+    return;
+#endif
     SDL_WM_GrabInput(SDL_GRAB_OFF);
     gui_grab = 0;
     sdl_show_cursor();
