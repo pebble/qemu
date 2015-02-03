@@ -4001,7 +4001,7 @@ fi
 # check for mouse support
 
 if test "$mouse" = "no"; then
-  CFLAGS="-DNO_MOUSE=y $CFLAGS"
+  CFLAGS="-DNO_MOUSE $CFLAGS"
 fi
 
 ##########################################
