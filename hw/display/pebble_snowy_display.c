@@ -298,6 +298,7 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s)
       {"Date: Sep 12 2014 16:56:21", PSDISPLAY_CMD_SET_1},
       {"Date: Jan 9 2015 10:49:47", PSDISPLAY_CMD_SET_2},
       {"Date: Jan 30 2015 15:11:", PSDISPLAY_CMD_SET_2},
+      {"Date: Jan 30 2015 15:10:", PSDISPLAY_CMD_SET_2},
     };
 
 
