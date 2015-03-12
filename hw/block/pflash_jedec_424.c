@@ -540,16 +540,10 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
             pfl->wcycle++;
             break;
         case 0x60:
-            if (cmd == 0xd0) {
-                pfl->wcycle = 0;
-                pfl->status |= 0x80;
-            } else if (cmd == 0x01) {
-                pfl->wcycle = 0;
-                pfl->status |= 0x80;
-            } else if (cmd == 0xff) {
-                goto reset_flash;
-            } else {
-                DPRINTF("%s: Unknown (un)locking command\n", __func__);
+            if (cmd == 0x61) {
+                pfl->cmd = 0x61;
+                pfl->wcycle++;
+            } else if (sector_offset != 0x2aa) {
                 goto reset_flash;
             }
             break;
@@ -651,6 +645,9 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
                 goto reset_flash;
             }
             break;
+        case 0x61:
+            // Sector Lock Range protection is not implemented
+            goto reset_flash;
         default:
             goto error_flash;
         }
