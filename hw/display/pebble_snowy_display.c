@@ -486,10 +486,12 @@ static void ps_display_execute_current_cmd_set2(PSDisplayGlobals *s)
     switch (s->cmd) {
     case PSDISPLAYCMD2_FRAME_BEGIN:
         DPRINTF("Executing command: FRAME_BEGIN\n");
+        // Don't allow a redraw to occur in the middle of getting a new frame
+        s->redraw = false;
         s->row_index = SNOWY_NUM_ROWS - SNOWY_BORDER_ROWS - 1;
         s->col_index = SNOWY_BORDER_COLS;
         s->state = PSDISPLAYSTATE_ACCEPTING_FRAME_DATA;
-        // Just say we are done immediately
+        // Just say we are done immediately. We can accept more data right away.
         qemu_set_irq(s->intn_output, false);
         break;
 
@@ -990,7 +992,7 @@ static int ps_display_init(SSISlave *dev)
 static Property ps_display_init_properties[] = {
     DEFINE_PROP_PTR("done_output", PSDisplayGlobals, vdone_output),
 
-    // NOTE: Also used as a "busy" flag. If unasserted (high), the MPU asssumes the
+    // NOTE: The "done" flag, asserted low. If unasserted (high), the MPU asssumes the
     //  display is busy.
     DEFINE_PROP_PTR("intn_output", PSDisplayGlobals, vintn_output),
     DEFINE_PROP_END_OF_LIST()
