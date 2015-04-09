@@ -190,6 +190,7 @@ typedef struct {
     QemuConsole   *con;
     bool          redraw;
     uint8_t       framebuffer[SNOWY_NUM_ROWS * SNOWY_BYTES_PER_ROW];
+    uint8_t       framebuffer_copy[SNOWY_NUM_ROWS * SNOWY_BYTES_PER_ROW];
     int           col_index;
     int           row_index;
     bool          backlight_enabled;
@@ -229,6 +230,13 @@ static uint8_t *get_pebble_logo_4colors_image(int *width, int *height);
 static uint8_t *get_dead_face_image(int *width, int *height);
 static uint8_t *get_small_pebble_logo_image(int *width, int *height);
 static uint8_t *get_url_image(int *width, int *height);
+
+
+// -----------------------------------------------------------------------------
+static void ps_set_redraw(PSDisplayGlobals *s) {
+    s->redraw = true;
+    memmove(s->framebuffer_copy, s->framebuffer, SNOWY_NUM_ROWS * SNOWY_BYTES_PER_ROW);
+}
 
 
 // -----------------------------------------------------------------------------
@@ -433,7 +441,7 @@ static void ps_display_execute_current_cmd_set0(PSDisplayGlobals *s)
                 break;
             }
             ps_display_reset_state(s, true /*assert_done*/);
-            s->redraw = true;
+            ps_set_redraw(s);
         } else {
             fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Tried to execute draw scene in "
                       "wrong state: %d\n", s->state);
@@ -466,7 +474,7 @@ static void ps_display_execute_current_cmd_set1(PSDisplayGlobals *s)
     case PSDISPLAYCMD1_FRAME_END:
         DPRINTF("Executing command: FRAME_END\n");
         // Go back to accepting command. This will also assert the done interrupt.
-        s->redraw = true;
+        ps_set_redraw(s);
         ps_display_reset_state(s, true /*assert_done*/);
         break;
 
@@ -487,7 +495,6 @@ static void ps_display_execute_current_cmd_set2(PSDisplayGlobals *s)
     case PSDISPLAYCMD2_FRAME_BEGIN:
         DPRINTF("Executing command: FRAME_BEGIN\n");
         // Don't allow a redraw to occur in the middle of getting a new frame
-        s->redraw = false;
         s->row_index = SNOWY_NUM_ROWS - SNOWY_BORDER_ROWS - 1;
         s->col_index = SNOWY_BORDER_COLS;
         s->state = PSDISPLAYSTATE_ACCEPTING_FRAME_DATA;
@@ -681,7 +688,7 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
             if (s->col_index >= SNOWY_NUM_COLS - SNOWY_BORDER_COLS) {
                 //DPRINTF("Got last byte in frame\n");
                 s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
-                s->redraw = true;
+                ps_set_redraw(s);
             }
         }
         break;
@@ -733,7 +740,6 @@ static void ps_display_update_display(void *arg)
     d = surface_data(surface);
 
 
-
     // If vibrate is on, simply jiggle the display
     if (s->vibrate_on) {
         if (s->vibrate_offset == 0) {
@@ -772,7 +778,7 @@ static void ps_display_update_display(void *arg)
 
     for (y = 0; y < SNOWY_NUM_ROWS; y++) {
         for (x = 0; x < SNOWY_NUM_COLS; x++) {
-            uint8_t pixel = s->framebuffer[y * SNOWY_BYTES_PER_ROW + x];
+            uint8_t pixel = s->framebuffer_copy[y * SNOWY_BYTES_PER_ROW + x];
 
             PSDisplayPixelColor color = ps_display_get_rgb(s, pixel);
 
@@ -933,7 +939,7 @@ static void ps_display_power_ctl(void *opaque, int n, int level)
 
     if (!level && s->power_on) {
         memset(&s->framebuffer, 0, sizeof(s->framebuffer));
-        s->redraw = true;
+        ps_set_redraw(s);
         s->power_on = false;
     }
     s->power_on = !!level;
@@ -945,7 +951,7 @@ static void ps_display_reset(DeviceState *dev)
 {
     PSDisplayGlobals *s = (PSDisplayGlobals *)dev;
     memset(&s->framebuffer, 0, sizeof(s->framebuffer));
-    s->redraw = true;
+    ps_set_redraw(s);
 }
 
 
