@@ -249,12 +249,17 @@ const char *stm32_periph_name(stm32_periph_t periph);
 #define STM32_RTCAlarm_IRQ 41
 #define STM32_OTG_FS_WKUP_IRQ 42
 #define STM32_TIM8_BRK_TIM12_IRQ 43
+#define STM32_TIM8_UP_TIM13_IRQ 44
+#define STM32_TIM8_TRG_COMM_TIM14_IRQ 45
 
 #define STM32_DMA1_STREAM7_IRQ 47
 
+#define STM32_TIM5_IRQ 50
 #define STM32_SPI3_IRQ 51
 #define STM32_UART4_IRQ 52
 #define STM32_UART5_IRQ 53
+#define STM32_TIM6_IRQ 54
+#define STM32_TIM7_IRQ 55
 
 #define STM32_DMA2_STREAM0_IRQ 56
 #define STM32_DMA2_STREAM1_IRQ 57

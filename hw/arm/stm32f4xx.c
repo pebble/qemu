@@ -45,6 +45,21 @@ static const char *stm32f4xx_periph_name_arr[] = {
     ENUM_STRING(STM32_I2C2),
     ENUM_STRING(STM32_I2C3),
 
+    ENUM_STRING(STM32_TIM1),
+    ENUM_STRING(STM32_TIM2),
+    ENUM_STRING(STM32_TIM3),
+    ENUM_STRING(STM32_TIM4),
+    ENUM_STRING(STM32_TIM5),
+    ENUM_STRING(STM32_TIM6),
+    ENUM_STRING(STM32_TIM7),
+    ENUM_STRING(STM32_TIM8),
+    ENUM_STRING(STM32_TIM9),
+    ENUM_STRING(STM32_TIM10),
+    ENUM_STRING(STM32_TIM11),
+    ENUM_STRING(STM32_TIM12),
+    ENUM_STRING(STM32_TIM13),
+    ENUM_STRING(STM32_TIM14),
+
     ENUM_STRING(STM32_GPIOA),
     ENUM_STRING(STM32_GPIOB),
     ENUM_STRING(STM32_GPIOC),
@@ -274,25 +289,36 @@ void stm32f4xx_init(
     sysbus_mmio_map(SYS_BUS_DEVICE(dummy), 0, start); \
 } while (0)
 
-    dummy_dev("TIM2",      0x40000000, 0x400);
-    dummy_dev("TIM3",      0x40000400, 0x400);
 
-    DeviceState *tim4 = qdev_create(NULL, "f2xx_tim");
-    tim4->id = "TIM4";
-    stm32_init_periph(tim4, STM32_TIM4, 0x40000800, pic[STM32_TIM4_IRQ]);
-    stm32_timer[4-1] = (Stm32Timer *)tim4;
+    /* Timers */
+    struct {
+        uint8_t timer_num;
+        uint32_t addr;
+        uint8_t irq_idx;
+    } const timer_desc[] = {
+        {2, 0x40000000, STM32_TIM2_IRQ},
+        {3, 0x40000400, STM32_TIM3_IRQ},
+        {4, 0x40000800, STM32_TIM4_IRQ},
+        {5, 0x40000C00, STM32_TIM5_IRQ},
+        {6, 0x40001000, STM32_TIM6_IRQ},
+        {7, 0x40001400, STM32_TIM7_IRQ},
+        {9, 0x40014000, STM32_TIM1_BRK_TIM9_IRQ},
+        {10, 0x40014400, STM32_TIM1_UP_TIM10_IRQ},
+        {11, 0x40014800, STM32_TIM1_TRG_COM_TIM11_IRQ},
+        {12, 0x40001800, STM32_TIM8_BRK_TIM12_IRQ},
+        {13, 0x40001C00, STM32_TIM8_UP_TIM13_IRQ},
+        {14, 0x40002000, STM32_TIM8_TRG_COMM_TIM14_IRQ},
+    };
+    for (i = 0; i < ARRAY_LENGTH(timer_desc); ++i) {
+        assert(i < STM32F4XX_TIM_COUNT);
+        const stm32_periph_t periph = STM32_TIM1 + timer_desc[i].timer_num - 1;
 
-    dummy_dev("TIM5",      0x40000C00, 0x400);
-    dummy_dev("TIM6",      0x40001000, 0x400);
-    dummy_dev("TIM7",      0x40001400, 0x400);
+        DeviceState *timer = qdev_create(NULL, "f2xx_tim");
+        timer->id = stm32f4xx_periph_name_arr[periph];
+        stm32_init_periph(timer, periph, timer_desc[i].addr, pic[timer_desc[i].irq_idx]);
+        stm32_timer[timer_desc[i].timer_num - 1] = (Stm32Timer *)timer;
+    }
 
-    DeviceState *tim12 = qdev_create(NULL, "f2xx_tim");
-    tim12->id = "TIM12";
-    stm32_init_periph(tim12, STM32_TIM12, 0x40001800, pic[STM32_TIM8_BRK_TIM12_IRQ]);
-    stm32_timer[12-1] = (Stm32Timer *)tim12;
-
-    dummy_dev("TIM13",     0x40001C00, 0x400);
-    dummy_dev("TIM14",     0x40002000, 0x400);
     dummy_dev("Reserved",  0x40002400, 0x400);
     // 0x40002800
     dummy_dev("WWDG",      0x40002C00, 0x400);
@@ -342,9 +368,6 @@ void stm32f4xx_init(
     dummy_dev("SDIO",      0x40012C00, 0x400);
     // SPI1
     // SYSCFG needed
-    dummy_dev("TIM9",      0x40014000, 0x400);
-    dummy_dev("TIM10",     0x40014400, 0x400);
-    dummy_dev("TIM11",     0x40014800, 0x400);
 
     DeviceState *crc = qdev_create(NULL, "f2xx_crc");
     stm32_init_periph(crc, STM32_CRC, 0x40023000, NULL);
