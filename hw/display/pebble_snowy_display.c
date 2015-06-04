@@ -52,6 +52,8 @@
  * framebuffer.
  */
 
+#include <math.h>
+
 #include "qemu-common.h"
 #include "ui/console.h"
 #include "ui/pixel_ops.h"
@@ -146,6 +148,7 @@ typedef struct {
     int32_t num_border_rows;
     int32_t num_border_cols;
     uint8_t row_major;
+    uint8_t round_mask;
 
     // -------------------------------------------------------------------
     // Other state variables
@@ -750,6 +753,14 @@ static void ps_display_update_display(void *arg)
     for (y = 0; y < s->num_rows; y++) {
         for (x = 0; x < s->num_cols; x++) {
             uint8_t pixel = s->framebuffer_copy[y * s->bytes_per_row + x];
+            if (s->round_mask) {
+                float dx = (float)x - s->num_cols/2.0;
+                float dy = (float)y - s->num_rows/2.0;
+                float radius = sqrt(dx * dx + dy * dy);
+                if (radius > s->num_cols/2) {
+                  pixel = 0;
+                }
+            }
 
             PSDisplayPixelColor color = ps_display_get_rgb(s, pixel);
 
@@ -985,6 +996,7 @@ static Property ps_display_init_properties[] = {
     DEFINE_PROP_INT32("num_border_rows", PSDisplayGlobals, num_border_rows, 2),
     DEFINE_PROP_INT32("num_border_cols", PSDisplayGlobals, num_border_cols, 2),
     DEFINE_PROP_UINT8("row_major", PSDisplayGlobals, row_major, 0),
+    DEFINE_PROP_UINT8("round_mask", PSDisplayGlobals, round_mask, 0),
 
     DEFINE_PROP_END_OF_LIST()
 };

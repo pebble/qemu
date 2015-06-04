@@ -444,6 +444,7 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map,
         qdev_prop_set_int32(display_dev, "num_border_rows", 0);
         qdev_prop_set_int32(display_dev, "num_border_cols", 0);
         qdev_prop_set_uint8(display_dev, "row_major", 1);
+        qdev_prop_set_uint8(display_dev, "round_mask", 1);
     } else {
         assert(0);
     }
