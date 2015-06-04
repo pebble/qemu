@@ -35,13 +35,14 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       launchStyle = "0"
       useCustomWorkingDirectory = "YES"
-      customWorkingDirectory = "/Users/ronmarianetti/Projects/pebble/qemu/build"
+      customWorkingDirectory = "/Users/ronmarianetti/Projects/pebble/qemu-dev/build"
       buildConfiguration = "Debug"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       allowLocationSimulation = "YES">
       <PathRunnable
-         FilePath = "/Users/ronmarianetti/Projects/pebble/qemu/build/arm-softmmu/qemu-system-arm">
+         runnableDebuggingMode = "0"
+         FilePath = "/Users/ronmarianetti/Projects/pebble/qemu-dev/build/arm-softmmu/qemu-system-arm">
       </PathRunnable>
       <MacroExpansion>
          <BuildableReference
@@ -67,6 +68,10 @@
          </CommandLineArgument>
          <CommandLineArgument
             argument = "-machine pebble-snowy-bb  -cpu cortex-m4 -pflash ../test_images/qemu_micro_flash.bin -pflash ../test_images/qemu_spi_flash.bin"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-machine pebble-s4-bb  -cpu cortex-m4 -pflash ../test_images/qemu_micro_flash.bin -pflash ../test_images/qemu_spi_flash.bin"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument

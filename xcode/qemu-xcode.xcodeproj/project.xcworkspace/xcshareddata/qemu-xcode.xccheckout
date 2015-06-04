@@ -7,29 +7,21 @@
 	<key>IDESourceControlProjectIdentifier</key>
 	<string>7C0D1D10-8505-4087-9E1A-179B919912FF</string>
 	<key>IDESourceControlProjectName</key>
-	<string>project</string>
+	<string>qemu-xcode</string>
 	<key>IDESourceControlProjectOriginsDictionary</key>
 	<dict>
 		<key>659FBB4EF33075F514269B769A5496779B143D1B</key>
-		<string>github.com:pebble/qemu.git</string>
-		<key>E4DB51C7F6E76F3F64656933BC62516394893981</key>
-		<string>git://anongit.freedesktop.org/pixman</string>
-		<key>EE28877CF7B1A53929F7323C1467289D5DD6F218</key>
-		<string>git://git.qemu-project.org/dtc.git</string>
+		<string>github.com:pebble/qemu-dev.git</string>
 	</dict>
 	<key>IDESourceControlProjectPath</key>
-	<string>xcode/qemu-xcode.xcodeproj/project.xcworkspace</string>
+	<string>xcode/qemu-xcode.xcodeproj</string>
 	<key>IDESourceControlProjectRelativeInstallPathDictionary</key>
 	<dict>
 		<key>659FBB4EF33075F514269B769A5496779B143D1B</key>
 		<string>../../..</string>
-		<key>E4DB51C7F6E76F3F64656933BC62516394893981</key>
-		<string>../../..pixman</string>
-		<key>EE28877CF7B1A53929F7323C1467289D5DD6F218</key>
-		<string>../../..dtc</string>
 	</dict>
 	<key>IDESourceControlProjectURL</key>
-	<string>github.com:pebble/qemu.git</string>
+	<string>github.com:pebble/qemu-dev.git</string>
 	<key>IDESourceControlProjectVersion</key>
 	<integer>111</integer>
 	<key>IDESourceControlProjectWCCIdentifier</key>
@@ -42,23 +34,7 @@
 			<key>IDESourceControlWCCIdentifierKey</key>
 			<string>659FBB4EF33075F514269B769A5496779B143D1B</string>
 			<key>IDESourceControlWCCName</key>
-			<string>qemu</string>
-		</dict>
-		<dict>
-			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
-			<string>public.vcs.git</string>
-			<key>IDESourceControlWCCIdentifierKey</key>
-			<string>EE28877CF7B1A53929F7323C1467289D5DD6F218</string>
-			<key>IDESourceControlWCCName</key>
-			<string>qemudtc</string>
-		</dict>
-		<dict>
-			<key>IDESourceControlRepositoryExtensionIdentifierKey</key>
-			<string>public.vcs.git</string>
-			<key>IDESourceControlWCCIdentifierKey</key>
-			<string>E4DB51C7F6E76F3F64656933BC62516394893981</string>
-			<key>IDESourceControlWCCName</key>
-			<string>qemupixman</string>
+			<string>qemu-dev</string>
 		</dict>
 	</array>
 </dict>

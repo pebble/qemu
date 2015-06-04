@@ -8238,7 +8238,7 @@
 			buildPhases = (
 			);
 			buildToolPath = /usr/bin/make;
-			buildWorkingDirectory = /Users/ronmarianetti/Projects/pebble/qemu/build;
+			buildWorkingDirectory = "/Users/ronmarianetti/Projects/pebble/qemu-dev/build";
 			dependencies = (
 			);
 			name = qemu_target;
