@@ -46,19 +46,6 @@
  *
  * PDISPLAY_CMD_SET_1:
  * -------------------
- * The display expects columns to be sent through the SPI bus, from bottom to top. So, when we
- *  get a line of data from the SPI bus, the first byte is the column index and the remaining bytes
- *  are the bytes in the column, starting from the bottom.
- *
- * This display expects 206 bytes to be sent per line (column). Organized as follows:
- *  uint8_t column_index
- *  uint8_t padding[16]    // SNOWY_ROWS_SKIPPED_AT_BOTTOM
- *  uint8_t column_data[172]
- *  uint8_t padding[17]    // SNOWY_ROWS_SKIPPED_AT_TOP
- *
- *
- * PDISPLAY_CMD_SET_2:
- * -------------------
  * The display expects complete frames to be setn through the SPI bus, one column at a time 
  * starting from the left-most column, each column sent from bottom to top. The bits and bytes
  * in each column are scrambled however and need to be unscrambled before placing them into the
@@ -88,13 +75,6 @@
 #define SNOWY_BYTES_PER_ROW   SNOWY_NUM_COLS
 
 // The following defines are used by the PDisplayCmd1 command set, when in the
-//  PSDISPLAYSTATE_ACCEPTING_LINE_DATA state.
-#define SNOWY_ROWS_SKIPPED_AT_TOP     17
-#define SNOWY_ROWS_SKIPPED_AT_BOTTOM  16
-#define SNOWY_LINE_DATA_LEN   (SNOWY_ROWS_SKIPPED_AT_TOP + SNOWY_NUM_ROWS \
-                               + SNOWY_ROWS_SKIPPED_AT_BOTTOM)
-
-// The following defines are used by the PDisplayCmd2 command set, when in the
 // PSDISPLAYSTATE_ACCEPTING_FRAME_DATA state. The frame that we receive over the SPI bus when
 // in the PSDISPLAYSTATE_ACCEPTING_FRAME_DATA state does not include these border pixels.
 #define SNOWY_BORDER_ROWS     2       // on both top and bottom
@@ -115,12 +95,7 @@ typedef enum {
     PSDISPLAYSTATE_ACCEPTING_CMD,
     PSDISPLAYSTATE_ACCEPTING_PARAM,
     PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE,
-
-    PSDISPLAYSTATE_ACCEPTING_LINENO,      // used in PDisplayCmd1 command set
-    PSDISPLAYSTATE_ACCEPTING_LINE_DATA,   // used in PDisplayCmd1 command set
-
-    PSDISPLAYSTATE_ACCEPTING_FRAME_DATA,  // used in PDisplayCmd2 command set
-
+    PSDISPLAYSTATE_ACCEPTING_FRAME_DATA,  // used in PSDISPLAY_CMD_SET_1 command set
 } PSDisplayState;
 
 
@@ -128,13 +103,12 @@ typedef enum {
 typedef enum {
     PSDISPLAY_CMD_SET_UNKNOWN,
     PSDISPLAY_CMD_SET_0,   // Boot ROM built on Dec 10, 2014
-    PSDISPLAY_CMD_SET_1,   // FW ROM built on Sep 12, 2014
-    PSDISPLAY_CMD_SET_2,   // FW ROM built on Jan 9, 2015
+    PSDISPLAY_CMD_SET_1,   // FW ROM built on Jan 9, 2015
 } PDisplayCmdSet;
 
 
 /* Commands for PSDISPLAY_CMD_SET_0. We accept these while in the 
- * PSDISPLAYSTATE_ACCEPTING_CMD state. These are implemented in the first boot
+ * PSDISPLAYSTATE_ACCEPTING_CMD state. These are implemented in the first boot loader
  * ROM built Dec 2014 */
 typedef enum {
     PSDISPLAYCMD0_NULL = 0,
@@ -146,20 +120,11 @@ typedef enum {
 
 
 /* Commands for PSDISPLAY_CMD_SET_1. We accept these while in the
- * PSDISPLAYSTATE_ACCEPTING_CMD state. These are implemented in the early firmware
- * ROM buit Sep 2014 */
-typedef enum {
-    PSDISPLAYCMD1_FRAME_BEGIN = 0,
-    PSDISPLAYCMD1_FRAME_DATA = 1,
-    PSDISPLAYCMD1_FRAME_END = 2
-} PDisplayCmd1;
-
-/* Commands for PSDISPLAY_CMD_SET_2. We accept these while in the
  * PSDISPLAYSTATE_ACCEPTING_CMD state. These are implemented in the firmware
  * buit Jan 2015 */
 typedef enum {
-    PSDISPLAYCMD2_FRAME_BEGIN = 5,
-} PDisplayCmd2;
+    PSDISPLAYCMD1_FRAME_BEGIN = 5,
+} PDisplayCmd1;
 
 
 // Scene numbers put into cmd_parameter and used by the PSDISPLAYCMD0_DRAW_SCENE command.
@@ -303,10 +268,9 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s)
     } CommandSetInfo;
     static const CommandSetInfo cmd_sets[] = {
       {"Date: Dec 10 2014 08:30", PSDISPLAY_CMD_SET_0},
-      {"Date: Sep 12 2014 16:56:21", PSDISPLAY_CMD_SET_1},
-      {"Date: Jan 9 2015 10:49:47", PSDISPLAY_CMD_SET_2},
-      {"Date: Jan 30 2015 15:11:", PSDISPLAY_CMD_SET_2},
-      {"Date: Jan 30 2015 15:10:", PSDISPLAY_CMD_SET_2},
+      {"Date: Jan 9 2015 10:49:47", PSDISPLAY_CMD_SET_1},
+      {"Date: Jan 30 2015 15:11:", PSDISPLAY_CMD_SET_1},
+      {"Date: Jan 30 2015 15:10:", PSDISPLAY_CMD_SET_1},
     };
 
 
@@ -317,7 +281,7 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s)
     s->prog_header[s->prog_byte_offset] = 0;
 
     // Default one to use
-    s->cmd_set = PSDISPLAY_CMD_SET_2;
+    s->cmd_set = PSDISPLAY_CMD_SET_1;
 
     // Skip first two bytes which contain 0xFF 00
     int i;
@@ -457,42 +421,12 @@ static void ps_display_execute_current_cmd_set0(PSDisplayGlobals *s)
 }
 
 // -----------------------------------------------------------------------------
-// Implements command set PSDISPLAY_CMD_SET_1, used in the development firmware, built Sep 2014
+// Implements command set PSDISPLAY_CMD_SET_1, used in the firmware, built Jan 2015
 static void ps_display_execute_current_cmd_set1(PSDisplayGlobals *s)
 {
+
     switch (s->cmd) {
     case PSDISPLAYCMD1_FRAME_BEGIN:
-        DPRINTF("Executing command: FRAME_BEGIN\n");
-        // Basically ignore this, wait for the FRAME_DATA command to be sent
-        break;
-
-    case PSDISPLAYCMD1_FRAME_DATA:
-        DPRINTF("Executing command: FRAME_DATA\n");
-        s->state = PSDISPLAYSTATE_ACCEPTING_LINENO;
-        break;
-
-    case PSDISPLAYCMD1_FRAME_END:
-        DPRINTF("Executing command: FRAME_END\n");
-        // Go back to accepting command. This will also assert the done interrupt.
-        ps_set_redraw(s);
-        ps_display_reset_state(s, true /*assert_done*/);
-        break;
-
-    default:
-        fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported cmd: %d\n", s->cmd);
-        ps_display_reset_state(s, true /*assert_done*/);
-        break;
-    }
-}
-
-
-// -----------------------------------------------------------------------------
-// Implements command set PSDISPLAY_CMD_SET_2, used in the firmware, built Jan 2015
-static void ps_display_execute_current_cmd_set2(PSDisplayGlobals *s)
-{
-
-    switch (s->cmd) {
-    case PSDISPLAYCMD2_FRAME_BEGIN:
         DPRINTF("Executing command: FRAME_BEGIN\n");
         // Don't allow a redraw to occur in the middle of getting a new frame
         s->row_index = SNOWY_NUM_ROWS - SNOWY_BORDER_ROWS - 1;
@@ -601,8 +535,6 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
             ps_display_execute_current_cmd_set0(s);
         } else if (s->cmd_set == PSDISPLAY_CMD_SET_1) {
             ps_display_execute_current_cmd_set1(s);
-        } else if (s->cmd_set == PSDISPLAY_CMD_SET_2) {
-            ps_display_execute_current_cmd_set2(s);
         } else {
             fprintf(stderr, "Unimplemeneted command set\n");
             abort();
@@ -636,43 +568,6 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
         s->scene = data_byte;
         DPRINTF("received scene ID: %d\n", s->scene);
         ps_display_execute_current_cmd_set0(s);
-        break;
-
-    case PSDISPLAYSTATE_ACCEPTING_LINENO:
-        /* Check for invalid column index */
-        if (data >= SNOWY_NUM_COLS) {
-            fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Invalid column index %d received", data);
-            data = 0;
-        }
-        s->col_index = data;
-
-        /* The column data is sent from the bottom up */
-        s->row_index = SNOWY_NUM_ROWS + SNOWY_ROWS_SKIPPED_AT_BOTTOM - 1;
-        s->state = PSDISPLAYSTATE_ACCEPTING_LINE_DATA;
-
-        // We are not done, deassert the interrupt
-        qemu_set_irq(s->intn_output, true);
-        //DPRINTF("  new column no: %d\n", data);
-        break;
-
-    case PSDISPLAYSTATE_ACCEPTING_LINE_DATA:
-        //DPRINTF("0x%02X, row %d\n", data, s->row_index);
-        if (s->row_index >= SNOWY_NUM_ROWS) {
-          /* If this row index is in the bottom padding area, ignore it */
-          s->row_index--;
-        } else if (s->row_index >= 0) {
-          /* If this row index is in the viewable area, save to our frame buffer */
-          s->framebuffer[s->row_index * SNOWY_BYTES_PER_ROW + s->col_index] = data;
-          s->row_index--;
-        } else if (s->row_index > -SNOWY_ROWS_SKIPPED_AT_TOP) {
-          /* If this row index is in the top padding area, ignore it */
-          s->row_index--;
-        } else {
-          /* We just received the last byte in the line, change state */
-          s->state = PSDISPLAYSTATE_ACCEPTING_LINENO;
-          // We are done with this line, assert the interrupt
-          qemu_set_irq(s->intn_output, false);
-        }
         break;
 
     case PSDISPLAYSTATE_ACCEPTING_FRAME_DATA:

@@ -47,6 +47,11 @@
 
 
 typedef enum {
+  PBL_BOARD_SNOWY,
+  PBL_BOARD_S4
+} PblBoard;
+
+typedef enum {
   PBL_BUTTON_ID_NONE = -1,
   PBL_BUTTON_ID_BACK = 0,
   PBL_BUTTON_ID_UP = 1,
@@ -376,7 +381,8 @@ static void pebble_32f2_init(MachineState *machine, const PblButtonMap *map)
 
 // ------------------------------------------------------------------------------------------
 // Instantiate a 32f4xx based pebble
-static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map)
+static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map,
+                             const PblBoard board_id)
 {
     Stm32Gpio *gpio[STM32F4XX_GPIO_COUNT];
     Stm32Uart *uart[STM32F4XX_UART_COUNT];
@@ -556,7 +562,11 @@ static void pebble_bb_init(MachineState *machine) {
 }
 
 static void pebble_snowy_init(MachineState *machine) {
-    pebble_32f4_init(machine, s_button_map_snowy_bb);
+    pebble_32f4_init(machine, s_button_map_snowy_bb, PBL_BOARD_SNOWY);
+}
+
+static void pebble_s4_init(MachineState *machine) {
+    pebble_32f4_init(machine, s_button_map_snowy_bb, PBL_BOARD_S4);
 }
 
 
@@ -578,12 +588,18 @@ static QEMUMachine pebble_snowy_bb_machine = {
     .init = pebble_snowy_init
 };
 
+static QEMUMachine pebble_s4_bb_machine = {
+    .name = "pebble-s4-bb",
+    .desc = "Pebble smartwatch (s4)",
+    .init = pebble_s4_init
+};
 
 static void pebble_machine_init(void)
 {
     qemu_register_machine(&pebble_bb2_machine);
     qemu_register_machine(&pebble_bb_machine);
     qemu_register_machine(&pebble_snowy_bb_machine);
+    qemu_register_machine(&pebble_s4_bb_machine);
 }
 
 machine_init(pebble_machine_init);
