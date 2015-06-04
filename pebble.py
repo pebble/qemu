@@ -8,7 +8,7 @@ import argparse
 if __name__ == '__main__':
     # Collect our command line arguments
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--machine', choices=['bb2', 'snowy-bb'],
+    parser.add_argument('--machine', choices=['bb2', 'snowy-bb', 's4-bb'],
             default='bb2', help="Which machine to emulate ")
     parser.add_argument('-S', '--start_in_monitor', action='store_true',
             help="Start in the monitor. Enter 'cont' in the monitor to start emulation")
@@ -33,7 +33,7 @@ if __name__ == '__main__':
         "-monitor stdio "
     )
     cmd_line += "-machine pebble-%s " % (args.machine)
-    if args.machine.startswith('snowy'):
+    if args.machine in ('snowy-bb', 's4-bb'):
         cmd_line += "-cpu cortex-m4 "
         cmd_line += "-pflash ../test_images/qemu_micro_flash.bin "
         cmd_line += "-pflash ../test_images/qemu_spi_flash.bin "
