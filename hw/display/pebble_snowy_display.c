@@ -69,18 +69,6 @@
 #endif
 
 
-// Size of the framebuffer that we expose to QEMU
-#define SNOWY_NUM_ROWS        172
-#define SNOWY_NUM_COLS        148
-#define SNOWY_BYTES_PER_ROW   SNOWY_NUM_COLS
-
-// The following defines are used by the PDisplayCmd1 command set, when in the
-// PSDISPLAYSTATE_ACCEPTING_FRAME_DATA state. The frame that we receive over the SPI bus when
-// in the PSDISPLAYSTATE_ACCEPTING_FRAME_DATA state does not include these border pixels.
-#define SNOWY_BORDER_ROWS     2       // on both top and bottom
-#define SNOWY_BORDER_COLS     2       // on both left and right
-
-
 // Colors
 #define SNOWY_COLOR_BLACK     0
 #define SNOWY_COLOR_WHITE     0xFC
@@ -139,7 +127,8 @@ typedef enum {
 typedef struct {
     SSISlave ssidev;
 
-    /* Properties */
+    // -----------------------------------------------------------------
+    // Properties
     union {
         void *vdone_output;
         qemu_irq done_output;
@@ -152,10 +141,20 @@ typedef struct {
         qemu_irq intn_output;
     };
 
+    uint32_t num_rows;
+    uint32_t num_cols;
+    int32_t num_border_rows;
+    int32_t num_border_cols;
+    uint8_t row_major;
+
+    // -------------------------------------------------------------------
+    // Other state variables
     QemuConsole   *con;
     bool          redraw;
-    uint8_t       framebuffer[SNOWY_NUM_ROWS * SNOWY_BYTES_PER_ROW];
-    uint8_t       framebuffer_copy[SNOWY_NUM_ROWS * SNOWY_BYTES_PER_ROW];
+    uint32_t      bytes_per_row;
+    uint32_t      bytes_per_frame;
+    uint8_t       *framebuffer;
+    uint8_t       *framebuffer_copy;
     int           col_index;
     int           row_index;
     bool          backlight_enabled;
@@ -200,14 +199,14 @@ static uint8_t *get_url_image(int *width, int *height);
 // -----------------------------------------------------------------------------
 static void ps_set_redraw(PSDisplayGlobals *s) {
     s->redraw = true;
-    memmove(s->framebuffer_copy, s->framebuffer, SNOWY_NUM_ROWS * SNOWY_BYTES_PER_ROW);
+    memmove(s->framebuffer_copy, s->framebuffer, s->bytes_per_frame);
 }
 
 
 // -----------------------------------------------------------------------------
 static void ps_display_set_pixel(PSDisplayGlobals *s, uint32_t x, uint32_t y,
                             uint8_t pixel_byte) {
-    s->framebuffer[y * SNOWY_BYTES_PER_ROW + x] = pixel_byte;
+    s->framebuffer[y * s->bytes_per_row + x] = pixel_byte;
 }
 
 
@@ -371,33 +370,33 @@ static void ps_display_execute_current_cmd_set0(PSDisplayGlobals *s)
             DPRINTF("Executing command: DRAW_SCENE: %d\n", s->scene);
             switch (s->scene) {
             case PSDISPLAYSCENE_BLACK:
-                memset(s->framebuffer, SNOWY_COLOR_BLACK, sizeof(s->framebuffer));
+                memset(s->framebuffer, SNOWY_COLOR_BLACK, s->bytes_per_frame);
                 break;
             case PSDISPLAYSCENE_SPLASH:
                 pixels = get_pebble_logo_4colors_image(&width, &height);
-                x_offset = (SNOWY_NUM_COLS - width)/2;
-                y_offset = (SNOWY_NUM_ROWS - height)/2;
+                x_offset = (s->num_cols - width)/2;
+                y_offset = (s->num_rows - height)/2;
                 ps_display_draw_8bpp_bitmap(s, pixels, x_offset, y_offset, width, height);
                 break;
             case PSDISPLAYSCENE_UPDATE:
                 // NOTE: We do not yet support showing the progress bar, which should show
                 // the progress percent as indicated by s->parameter
                 pixels = get_small_pebble_logo_image(&width, &height);
-                x_offset = (SNOWY_NUM_COLS - width)/2;
-                y_offset = SNOWY_NUM_ROWS - height - 88;
+                x_offset = (s->num_cols - width)/2;
+                y_offset = s->num_rows - height - 88;
                 ps_display_draw_8bpp_bitmap(s, pixels, x_offset, y_offset, width, height);
                 break;
             case PSDISPLAYSCENE_ERROR:
                 // NOTE: We do not yet support showing the error code, which should show
                 // the error in hex as indicated by s->parameter
                 pixels = get_dead_face_image(&width, &height);
-                x_offset = (SNOWY_NUM_COLS - width)/2;
-                y_offset = SNOWY_NUM_ROWS - height - 92;
+                x_offset = (s->num_cols - width)/2;
+                y_offset = s->num_rows - height - 92;
                 ps_display_draw_8bpp_bitmap(s, pixels, x_offset, y_offset, width, height);
 
                 pixels = get_url_image(&width, &height);
-                x_offset = (SNOWY_NUM_COLS - width)/2;
-                y_offset = (SNOWY_NUM_ROWS - height - 10);
+                x_offset = (s->num_cols - width)/2;
+                y_offset = (s->num_rows - height - 10);
                 ps_display_draw_8bpp_bitmap(s, pixels, x_offset, y_offset, width, height);
                 break;
             default:
@@ -428,9 +427,15 @@ static void ps_display_execute_current_cmd_set1(PSDisplayGlobals *s)
     switch (s->cmd) {
     case PSDISPLAYCMD1_FRAME_BEGIN:
         DPRINTF("Executing command: FRAME_BEGIN\n");
-        // Don't allow a redraw to occur in the middle of getting a new frame
-        s->row_index = SNOWY_NUM_ROWS - SNOWY_BORDER_ROWS - 1;
-        s->col_index = SNOWY_BORDER_COLS;
+        if (s->row_major) {
+          // Expect to be sent rows, left to right
+          s->row_index = s->num_border_rows;
+          s->col_index = s->num_border_cols;
+        } else {
+          // Expect to be sent columns, from bottom-up
+          s->row_index = s->num_rows - s->num_border_rows - 1;
+          s->col_index = s->num_border_cols;
+        }
         s->state = PSDISPLAYSTATE_ACCEPTING_FRAME_DATA;
         // Just say we are done immediately. We can accept more data right away.
         qemu_set_irq(s->intn_output, false);
@@ -448,12 +453,12 @@ static void ps_display_execute_current_cmd_set1(PSDisplayGlobals *s)
 static void ps_display_cmd_set_2_unscramble_column(PSDisplayGlobals *s, uint32_t col_index)
 {
     int row_idx;
-    const int line_bytes = SNOWY_NUM_ROWS - 2*SNOWY_BORDER_ROWS;
+    const int line_bytes = s->num_rows - 2*s->num_border_rows;
     uint8_t col_buffer[line_bytes];
 
     // Copy the column into temp buffer first, without border pixels
     for (row_idx = 0; row_idx < line_bytes; row_idx++) {
-      col_buffer[row_idx] = s->framebuffer[(row_idx + SNOWY_BORDER_ROWS) * SNOWY_BYTES_PER_ROW
+      col_buffer[row_idx] = s->framebuffer[(row_idx + s->num_border_rows) * s->bytes_per_row
                                             + col_index];
     }
 
@@ -491,15 +496,68 @@ static void ps_display_cmd_set_2_unscramble_column(PSDisplayGlobals *s, uint32_t
         pixel_1 <<= 2;
 
         // Write them to the frame buffer
-        s->framebuffer[(row_idx + SNOWY_BORDER_ROWS) * SNOWY_BYTES_PER_ROW
+        s->framebuffer[(row_idx + s->num_border_rows) * s->bytes_per_row
                         + col_index] = pixel_0;
-        s->framebuffer[(row_idx + SNOWY_BORDER_ROWS + 1) * SNOWY_BYTES_PER_ROW
+        s->framebuffer[(row_idx + s->num_border_rows + 1) * s->bytes_per_row
                         + col_index] = pixel_1;
     }
 }
 
 
 // ----------------------------------------------------------------------------- 
+static void ps_display_cmd_set_2_unscramble_row(PSDisplayGlobals *s, uint32_t row_index)
+{
+    int col_idx;
+    const int line_bytes = s->num_cols - 2*s->num_border_cols;
+    uint8_t row_buffer[line_bytes];
+
+    // Copy the row into temp buffer first, without border pixels
+    for (col_idx = 0; col_idx < line_bytes; col_idx++) {
+      row_buffer[col_idx] = s->framebuffer[row_index * s->bytes_per_row + col_idx
+                          +  s->num_border_cols];
+    }
+
+    // Unscramble the bytes in the scanline.
+    //
+    // In the desription below, the bits in the first pixel in a column are
+    // identified as follows:
+    //  r0_msb r0_lsb g0_msb g0_lsb b0_msb b0_lsb 0 0
+    // The second pixel:
+    //  r1_msb r1_lsb g1_msb g1_lsb b1_msb b1_lsb 0 0
+    //
+    // Each scan line contains N bytes of data for the N pixels.
+    // [LSB0 LSB2 .................LSBN MSB0 MSB2 ....................MSBN]
+    //
+    // LSB0 contains the following bits:
+    //  0 0 r1_lsb r0_lsb g1_lsb g0_lsb b1_lsb b0_lsb
+    // MSB0 contains the following bits:
+    //  0 0 r1_msb r0_msb g1_msb g0_msb b1_msb b0_msb
+
+    // LSB2 contains the following bits:
+    //  0 0 r3_lsb r2_lsb g3_lsb g2_lsb b3_lsb b2_lsb
+    // MSB2 contains the following bits:
+    //  0 0 r3_msb r2_msb g3_msb g2_msb b3_msb b2_msb
+    //
+    uint8_t ms_bits, ls_bits;
+    for (col_idx = 0; col_idx < line_bytes; col_idx += 2) {
+        ls_bits = row_buffer[col_idx/2];
+        ms_bits = row_buffer[col_idx/2 + line_bytes/2];
+
+        // Form the 2 pixels whose data is found in ls_bits and ms_bits
+        uint8_t pixel_0, pixel_1;
+        pixel_0 = ((ms_bits & 0b00010101) << 1) |  (ls_bits & 0b00010101);
+        pixel_0 <<= 2;
+        pixel_1 =  (ms_bits & 0b00101010)       | ((ls_bits & 0b00101010) >> 1);
+        pixel_1 <<= 2;
+
+        // Write them to the frame buffer
+        s->framebuffer[row_index * s->bytes_per_row + col_idx + s->num_border_cols + 1] = pixel_0;
+        s->framebuffer[row_index * s->bytes_per_row + col_idx + s->num_border_cols + 0] = pixel_1;
+    }
+}
+
+
+// -----------------------------------------------------------------------------
 static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
 {
     PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, dev);
@@ -572,19 +630,37 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
 
     case PSDISPLAYSTATE_ACCEPTING_FRAME_DATA:
         //DPRINTF("0x%02X,  row %d, col %d\n", data, s->row_index, s->col_index);
-        s->framebuffer[s->row_index * SNOWY_BYTES_PER_ROW + s->col_index] = data;
-        s->row_index--;
-        if (s->row_index < SNOWY_BORDER_ROWS) {
-            // Reached top of column, unscrambe the one we just received and go onto the
-            // next column
-            ps_display_cmd_set_2_unscramble_column(s, s->col_index);
-            s->row_index = SNOWY_NUM_ROWS - SNOWY_BORDER_ROWS - 1;
-            s->col_index += 1;
-            if (s->col_index >= SNOWY_NUM_COLS - SNOWY_BORDER_COLS) {
-                //DPRINTF("Got last byte in frame\n");
-                s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
-                ps_set_redraw(s);
-            }
+        s->framebuffer[s->row_index * s->bytes_per_row + s->col_index] = data;
+        if (s->row_major) {
+          // We get sent one row at a time
+          s->col_index++;
+          if (s->col_index >= s->num_cols - s->num_border_cols) {
+              // Reached end of row, unscrambe the one we just received and go onto the
+              // next row
+              ps_display_cmd_set_2_unscramble_row(s, s->row_index);
+              s->col_index = s->num_border_cols;
+              s->row_index += 1;
+              if (s->row_index >= s->num_rows - s->num_border_rows) {
+                  //DPRINTF("Got last byte in frame\n");
+                  s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
+                  ps_set_redraw(s);
+              }
+          }
+        } else {
+          // We get sent one column at a time
+          s->row_index--;
+          if (s->row_index < s->num_border_rows) {
+              // Reached top of column, unscrambe the one we just received and go onto the
+              // next column
+              ps_display_cmd_set_2_unscramble_column(s, s->col_index);
+              s->row_index = s->num_rows - s->num_border_rows - 1;
+              s->col_index += 1;
+              if (s->col_index >= s->num_cols - s->num_border_cols) {
+                  //DPRINTF("Got last byte in frame\n");
+                  s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
+                  ps_set_redraw(s);
+              }
+          }
         }
         break;
     }
@@ -655,7 +731,7 @@ static void ps_display_update_display(void *arg)
             default:
                 abort();
         }
-        int total_bytes = SNOWY_NUM_ROWS * SNOWY_NUM_COLS * bytes_per_pixel
+        int total_bytes = s->num_rows * s->num_cols * bytes_per_pixel
                         - abs(s->vibrate_offset) * bytes_per_pixel;
         if (s->vibrate_offset > 0) {
             memmove(d, d + s->vibrate_offset * bytes_per_pixel, total_bytes);
@@ -663,7 +739,7 @@ static void ps_display_update_display(void *arg)
             memmove(d - s->vibrate_offset * bytes_per_pixel, d, total_bytes);
         }
         s->vibrate_offset *= -1;
-        dpy_gfx_update(s->con, 0, 0, SNOWY_NUM_COLS, SNOWY_NUM_ROWS);
+        dpy_gfx_update(s->con, 0, 0, s->num_cols, s->num_rows);
         return;
     }
 
@@ -671,9 +747,9 @@ static void ps_display_update_display(void *arg)
         return;
     }
 
-    for (y = 0; y < SNOWY_NUM_ROWS; y++) {
-        for (x = 0; x < SNOWY_NUM_COLS; x++) {
-            uint8_t pixel = s->framebuffer_copy[y * SNOWY_BYTES_PER_ROW + x];
+    for (y = 0; y < s->num_rows; y++) {
+        for (x = 0; x < s->num_cols; x++) {
+            uint8_t pixel = s->framebuffer_copy[y * s->bytes_per_row + x];
 
             PSDisplayPixelColor color = ps_display_get_rgb(s, pixel);
 
@@ -704,7 +780,7 @@ static void ps_display_update_display(void *arg)
         }
     }
 
-    dpy_gfx_update(s->con, 0, 0, SNOWY_NUM_COLS, SNOWY_NUM_ROWS);
+    dpy_gfx_update(s->con, 0, 0, s->num_cols, s->num_rows);
     s->redraw = false;
 }
 
@@ -833,7 +909,7 @@ static void ps_display_power_ctl(void *opaque, int n, int level)
     assert(n == 0);
 
     if (!level && s->power_on) {
-        memset(&s->framebuffer, 0, sizeof(s->framebuffer));
+        memset(s->framebuffer, 0, s->bytes_per_frame);
         ps_set_redraw(s);
         s->power_on = false;
     }
@@ -845,7 +921,7 @@ static void ps_display_power_ctl(void *opaque, int n, int level)
 static void ps_display_reset(DeviceState *dev)
 {
     PSDisplayGlobals *s = (PSDisplayGlobals *)dev;
-    memset(&s->framebuffer, 0, sizeof(s->framebuffer));
+    memset(s->framebuffer, 0, s->bytes_per_frame);
     ps_set_redraw(s);
 }
 
@@ -854,13 +930,20 @@ static void ps_display_reset(DeviceState *dev)
 static int ps_display_init(SSISlave *dev)
 {
     PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, dev);
+
     s->brightness = 0.0;
     s->backlight_enabled = false;
     s->cmd_set = PSDISPLAY_CMD_SET_0;
     s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
 
+    // Allocate the frame buffer
+    s->bytes_per_row = s->num_cols;
+    s->bytes_per_frame = s->bytes_per_row * s->num_rows;
+    s->framebuffer = g_malloc(s->num_rows * s->bytes_per_row);
+    s->framebuffer_copy = g_malloc(s->num_rows * s->bytes_per_row);
+
     s->con = graphic_console_init(DEVICE(dev), 0, &ps_display_ops, s);
-    qemu_console_resize(s->con, SNOWY_NUM_COLS, SNOWY_NUM_ROWS);
+    qemu_console_resize(s->con, s->num_cols, s->num_rows);
 
     /* Create our inputs that will be connected to GPIOs from the STM32 */
     qdev_init_gpio_in_named(DEVICE(dev), ps_display_set_reset_pin_cb,
@@ -896,6 +979,13 @@ static Property ps_display_init_properties[] = {
     // NOTE: The "done" flag, asserted low. If unasserted (high), the MPU asssumes the
     //  display is busy.
     DEFINE_PROP_PTR("intn_output", PSDisplayGlobals, vintn_output),
+
+    DEFINE_PROP_UINT32("num_rows", PSDisplayGlobals, num_rows, 172),
+    DEFINE_PROP_UINT32("num_cols", PSDisplayGlobals, num_cols, 168),
+    DEFINE_PROP_INT32("num_border_rows", PSDisplayGlobals, num_border_rows, 2),
+    DEFINE_PROP_INT32("num_border_cols", PSDisplayGlobals, num_border_cols, 2),
+    DEFINE_PROP_UINT8("row_major", PSDisplayGlobals, row_major, 0),
+
     DEFINE_PROP_END_OF_LIST()
 };
 

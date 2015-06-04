@@ -431,6 +431,23 @@ static void pebble_32f4_init(MachineState *machine, const PblButtonMap *map,
     qdev_prop_set_ptr(display_dev, "done_output", display_done_irq);
     qemu_irq display_intn_irq = qdev_get_gpio_in((DeviceState *)gpio[STM32_GPIOG_INDEX], 10);
     qdev_prop_set_ptr(display_dev, "intn_output", display_intn_irq);
+
+    if (board_id == PBL_BOARD_SNOWY) {
+        qdev_prop_set_int32(display_dev, "num_rows", 172);
+        qdev_prop_set_int32(display_dev, "num_cols", 148);
+        qdev_prop_set_int32(display_dev, "num_border_rows", 2);
+        qdev_prop_set_int32(display_dev, "num_border_cols", 2);
+        qdev_prop_set_uint8(display_dev, "row_major", 0);
+    } else if (board_id == PBL_BOARD_S4) {
+        qdev_prop_set_int32(display_dev, "num_rows", 180);
+        qdev_prop_set_int32(display_dev, "num_cols", 180);
+        qdev_prop_set_int32(display_dev, "num_border_rows", 0);
+        qdev_prop_set_int32(display_dev, "num_border_cols", 0);
+        qdev_prop_set_uint8(display_dev, "row_major", 1);
+    } else {
+        assert(0);
+    }
+
     qdev_init_nofail(display_dev);
 
     /* Connect the correct MCU GPIO outputs to the inputs on the display */
