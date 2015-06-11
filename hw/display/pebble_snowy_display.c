@@ -543,8 +543,8 @@ static void ps_display_cmd_set_2_unscramble_row(PSDisplayGlobals *s, uint32_t ro
     //
     uint8_t ms_bits, ls_bits;
     for (col_idx = 0; col_idx < line_bytes; col_idx += 2) {
-        ls_bits = row_buffer[col_idx/2];
-        ms_bits = row_buffer[col_idx/2 + line_bytes/2];
+        ms_bits = row_buffer[col_idx/2];
+        ls_bits = row_buffer[col_idx/2 + line_bytes/2];
 
         // Form the 2 pixels whose data is found in ls_bits and ms_bits
         uint8_t pixel_0, pixel_1;
