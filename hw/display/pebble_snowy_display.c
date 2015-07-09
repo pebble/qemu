@@ -197,7 +197,7 @@ static uint8_t *get_pebble_logo_4colors_image(int *width, int *height);
 static uint8_t *get_dead_face_image(int *width, int *height);
 static uint8_t *get_small_pebble_logo_image(int *width, int *height);
 static uint8_t *get_url_image(int *width, int *height);
-
+static uint8_t *get_pixel_mask(void);
 
 // -----------------------------------------------------------------------------
 static void ps_set_redraw(PSDisplayGlobals *s) {
@@ -750,14 +750,18 @@ static void ps_display_update_display(void *arg)
         return;
     }
 
+    uint8_t *pixel_mask = get_pixel_mask();
     for (y = 0; y < s->num_rows; y++) {
         for (x = 0; x < s->num_cols; x++) {
             uint8_t pixel = s->framebuffer_copy[y * s->bytes_per_row + x];
             if (s->round_mask) {
-                float dx = (float)x - s->num_cols/2.0;
-                float dy = (float)y - s->num_rows/2.0;
-                float radius = sqrt(dx * dx + dy * dy);
-                if (radius > s->num_cols/2) {
+                // Compute the vertical distance from top or bottom edge, whichever is closest
+                int vert_distance = y;
+                if (vert_distance >= s->num_rows/2) {
+                  vert_distance = s->num_rows - 1 - y ;
+                }
+                int mask_width = pixel_mask[vert_distance];
+                if (x < mask_width || x >= s->num_cols - mask_width) {
                   pixel = 0;
                 }
             }
@@ -1033,6 +1037,30 @@ static void ps_display_register(void)
 // ----------------------------------------------------------------------------- 
 type_init(ps_display_register);
 
+
+// -------------------------------------------------------------------------
+// The Spalding round display is logically a square 180x180 display with
+// some of the pixels hidden under a mask or missing entirely. The mask
+// is symmetrical both horizontally and vertically: the masks on the
+// left and right side of a line are equal, and the mask on the top half
+// of the display is a mirror image of the bottom half.
+//
+// This array maps the number of pixels masked off for one quadrant of
+// the display. Array element zero is the number of masked pixels from
+// a display corner inwards. Subsequent array elements contain the mask
+// for the adjacent rows or columns moving inwards towards the center
+// of the display.
+static uint8_t *get_pixel_mask(void) {
+
+    static uint8_t pixel_mask[] = {
+        76, 71, 66, 63, 60, 57, 55, 52, 50, 48, 46, 45, 43, 41, 40, 38, 37,
+        36, 34, 33, 32, 31, 29, 28, 27, 26, 25, 24, 23, 22, 22, 21, 20, 19,
+        18, 18, 17, 16, 15, 15, 14, 13, 13, 12, 12, 11, 10, 10, 9, 9, 8, 8, 7,
+        7, 7, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    };
+    return pixel_mask;
+}
 
 
 static uint8_t *get_pebble_logo_4colors_image(int *width, int *height) {
