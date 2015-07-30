@@ -1005,7 +1005,7 @@ static void stm32_rcc_init_clk(Stm32f2xxRcc *s)
     s->PLLCLK = clktree_create_clk("PLLCLK", 1, 2, false, 120000000, 0, s->PLLM, NULL);
     s->PLL48CLK = clktree_create_clk("PLL48CLK", 1, 1, false, 48000000, 0, s->PLLM, NULL);
 
-    s->PLLI2SM = clktree_create_clk("PLLI2SM", 1, 16, true, CLKTREE_NO_MAX_FREQ, 0);
+    s->PLLI2SM = clktree_create_clk("PLLI2SM", 1, 16, true, CLKTREE_NO_MAX_FREQ, 0, s->PLLM, NULL);
     s->PLLI2SCLK = clktree_create_clk("PLLI2SCLK", 1, 2, false, 120000000, 0, s->PLLI2SM, NULL);
 
     s->SYSCLK = clktree_create_clk("SYSCLK", 1, 1, true, 168000000, CLKTREE_NO_INPUT,
