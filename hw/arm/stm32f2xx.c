@@ -136,6 +136,7 @@ void stm32f2xx_init(
     DeviceState *rcc_dev = qdev_create(NULL, "stm32f2xx_rcc");
     qdev_prop_set_uint32(rcc_dev, "osc_freq", osc_freq);
     qdev_prop_set_uint32(rcc_dev, "osc32_freq", osc32_freq);
+    object_property_add_child(stm32_container, "rcc", OBJECT(rcc_dev), NULL);
     stm32_init_periph(rcc_dev, STM32_RCC_PERIPH, 0x40023800, pic[STM32_RCC_IRQ]);
 
     DeviceState **gpio_dev = (DeviceState **)g_malloc0(sizeof(DeviceState *) * STM32F2XX_GPIO_COUNT);

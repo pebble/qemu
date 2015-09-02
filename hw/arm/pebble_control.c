@@ -498,28 +498,29 @@ PebbleControl *pebble_control_create(CharDriverState *chr, Stm32Uart *uart)
     PebbleControl *s = malloc(sizeof(PebbleControl));
     memset(s, 0, sizeof(*s));
 
-    s->chr = chr;
-    s->uart = uart;
+    if (chr) {
+		s->chr = chr;
+		s->uart = uart;
 
-    // The timer we use to pump more data to the uart
-    s->target_send_timer = timer_new_ms(QEMU_CLOCK_HOST,
-                  (QEMUTimerCB *)pebble_control_forward_to_target, s);
+		// The timer we use to pump more data to the uart
+		s->target_send_timer = timer_new_ms(QEMU_CLOCK_HOST,
+					  (QEMUTimerCB *)pebble_control_forward_to_target, s);
 
 
-    // Have the UART send writes to us
-    stm32_uart_set_write_handler(uart, s, pebble_control_write);
+		// Have the UART send writes to us
+		stm32_uart_set_write_handler(uart, s, pebble_control_write);
 
-    // Save away the receive handlers that the uart installed into chr
-    stm32_uart_get_rcv_handlers(uart, &s->uart_chr_can_read, &s->uart_chr_read, &s->uart_chr_event);
+		// Save away the receive handlers that the uart installed into chr
+		stm32_uart_get_rcv_handlers(uart, &s->uart_chr_can_read, &s->uart_chr_read, &s->uart_chr_event);
 
-    // Install our own receive handlers into the CharDriver
-    qemu_chr_add_handlers(
-            chr,
-            pebble_control_can_receive,
-            pebble_control_receive,
-            pebble_control_event,
-            (void *)s);
-
+		// Install our own receive handlers into the CharDriver
+		qemu_chr_add_handlers(
+				chr,
+				pebble_control_can_receive,
+				pebble_control_receive,
+				pebble_control_event,
+				(void *)s);
+    }
 
     return s;
 }

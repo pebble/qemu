@@ -39,6 +39,8 @@
 
 typedef struct {
         Stm32 *stm32;
+        Stm32Gpio *stm32_gpio[STM32F1XX_GPIO_COUNT];
+        Stm32Uart *stm32_uart[STM32_UART_COUNT];
         bool last_button_pressed;
         qemu_irq button_irq;
 } Stm32Maple;
@@ -120,8 +122,6 @@ static void stm32_maple_init(MachineState *machine)
         const char *kernel_filename = machine->kernel_filename;
         qemu_irq *led_irq, *led_err_irq;
         Stm32Maple *s;
-        Stm32Gpio *stm32_gpio[STM32F1XX_GPIO_COUNT];
-        Stm32Uart *stm32_uart[STM32_UART_COUNT];
 
 
         s = (Stm32Maple *) g_malloc0(sizeof(Stm32Maple));
@@ -131,8 +131,8 @@ static void stm32_maple_init(MachineState *machine)
                     0x0001ffff,
                     0x00004fff,
                     kernel_filename,
-                    stm32_gpio,
-                    stm32_uart,
+                    s->stm32_gpio,
+                    s->stm32_uart,
                     8000000,
                     32768);
 
@@ -140,8 +140,8 @@ static void stm32_maple_init(MachineState *machine)
         DeviceState *gpio_a = DEVICE(object_resolve_path("/machine/stm32/gpio[a]", NULL));
         DeviceState *gpio_c = DEVICE(object_resolve_path("/machine/stm32/gpio[c]", NULL));
 
-        DeviceState *uart1 = DEVICE(object_resolve_path("/machine/stm32/uart[1]", NULL));
-        DeviceState *uart2 = DEVICE(object_resolve_path("/machine/stm32/uart[2]", NULL));
+        DeviceState *uart1 = DEVICE(s->stm32_uart[0]);
+        DeviceState *uart2 = DEVICE(s->stm32_uart[1]);
 
         assert(gpio_a);
         assert(gpio_c);
