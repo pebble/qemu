@@ -141,8 +141,10 @@ void stm32f4xx_init(
 
     /* Setup the RCC */
     DeviceState *rcc_dev = qdev_create(NULL, "stm32f2xx_rcc");
+    //DeviceState *rcc_dev = qdev_create(NULL, "stm32-rcc");
     qdev_prop_set_uint32(rcc_dev, "osc_freq", osc_freq);
     qdev_prop_set_uint32(rcc_dev, "osc32_freq", osc32_freq);
+    object_property_add_child(stm32_container, "rcc", OBJECT(rcc_dev), NULL);
     stm32_init_periph(rcc_dev,
         STM32_RCC_PERIPH,        /* periph index, not used */
         0x40023800,           /* base address */

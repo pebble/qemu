@@ -107,4 +107,5 @@ TAGS
 *~
 build
 .DS_Store
-
+.cproject
+.project

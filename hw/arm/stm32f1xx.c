@@ -76,8 +76,8 @@ void stm32f1xx_init(
             ram_addr_t flash_size,
             ram_addr_t ram_size,
             const char *kernel_filename,
-            Stm32Gpio **stm32_gpio,
-            Stm32Uart **stm32_uart,
+            Stm32Gpio *stm32_gpio[],
+            Stm32Uart *stm32_uart[],
             uint32_t osc_freq,
             uint32_t osc32_freq)
 {
@@ -116,13 +116,14 @@ void stm32f1xx_init(
             flash_size);
     memory_region_add_subregion(address_space_mem, 0x08000000, flash_alias_mem);
 
-    DeviceState *rcc_dev = qdev_create(NULL, "stm32-rcc");
+    DeviceState *rcc_dev = qdev_create(NULL, "stm32f1xx_rcc");
     qdev_prop_set_uint32(rcc_dev, "osc_freq", osc_freq);
     qdev_prop_set_uint32(rcc_dev, "osc32_freq", osc32_freq);
-    object_property_add_child(stm32_container, "rcc", OBJECT(rcc_dev), NULL);
+    object_property_add_child(stm32_container, "stm32f1xx_rcc", OBJECT(rcc_dev), NULL);
     stm32_init_periph(rcc_dev, STM32_RCC_PERIPH, 0x40021000, pic[STM32_RCC_IRQ]);
 
-    DeviceState **gpio_dev = (DeviceState **)g_malloc0(sizeof(DeviceState *) * STM32_GPIO_COUNT);
+    //DeviceState **gpio_dev = (DeviceState **)g_malloc0(sizeof(DeviceState *) * STM32F1XX_GPIO_COUNT);
+    DeviceState **gpio_dev = (DeviceState **)stm32_gpio;
     for(i = 0; i < STM32F1XX_GPIO_COUNT; i++) {
         char child_name[8];
         stm32_periph_t periph = STM32_GPIOA + i;
@@ -176,7 +177,7 @@ void stm32f1xx_init(
     };
     for (i = 0; i < ARRAY_LENGTH(uart_desc); ++i) {
         const stm32_periph_t periph = STM32F1XX_UART1 + i;
-        DeviceState *uart_dev = qdev_create(NULL, "stm32_uart");
+        DeviceState *uart_dev = qdev_create(NULL, "stm32-uart");
         uart_dev->id = stm32f1xx_periph_name_arr[periph];
         qdev_prop_set_int32(uart_dev, "periph", periph);
         qdev_prop_set_ptr(uart_dev, "stm32_rcc", rcc_dev);
@@ -184,8 +185,8 @@ void stm32f1xx_init(
         qdev_prop_set_ptr(uart_dev, "stm32_afio", afio_dev);
         qdev_prop_set_ptr(uart_dev, "stm32_check_tx_pin_callback", (void *)stm32_afio_uart_check_tx_pin_callback);
         stm32_init_periph(uart_dev, periph, uart_desc[i].addr, pic[uart_desc[i].irq_idx]);
+        stm32_uart[i] = (Stm32Uart*)uart_dev;
     }
-
     /*
     stm32_create_uart_dev(stm32_container, STM32_UART1, 1, rcc_dev, gpio_dev, afio_dev, 0x40013800, pic[STM32_UART1_IRQ]);
     stm32_create_uart_dev(stm32_container, STM32_UART2, 2, rcc_dev, gpio_dev, afio_dev, 0x40004400, pic[STM32_UART2_IRQ]);

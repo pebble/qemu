@@ -31,6 +31,8 @@
 
 typedef struct {
     Stm32 *stm32;
+    Stm32Gpio *stm32_gpio[STM32F1XX_GPIO_COUNT];
+    Stm32Uart *stm32_uart[STM32_UART_COUNT];
 
     bool last_button_pressed;
     qemu_irq button_irq;
@@ -97,30 +99,28 @@ static void stm32_p103_init(MachineState *machine) {
     const char* kernel_filename = machine->kernel_filename;
     qemu_irq *led_irq;
     Stm32P103 *s;
-    Stm32Gpio *stm32_gpio[STM32F1XX_GPIO_COUNT];
-    Stm32Uart *stm32_uart[STM32_UART_COUNT];
 
     s = (Stm32P103 *)g_malloc0(sizeof(Stm32P103));
 
     stm32f1xx_init(/*flash_size*/ 128,
                /*ram_size*/ 20,
                kernel_filename,
-               stm32_gpio,
-               stm32_uart,
+               s->stm32_gpio,
+               s->stm32_uart,
                8000000,
                32768);
 
     /* Connect LED to GPIO C pin 12 */
     led_irq = qemu_allocate_irqs(led_irq_handler, NULL, 1);
-    qdev_connect_gpio_out((DeviceState *)stm32_gpio[STM32_GPIOC_INDEX], 12, led_irq[0]);
+    qdev_connect_gpio_out((DeviceState *)s->stm32_gpio[STM32_GPIOC_INDEX], 12, led_irq[0]);
 
     /* Connect button to GPIO A pin 0 */
-    s->button_irq = qdev_get_gpio_in((DeviceState *)stm32_gpio[STM32_GPIOA_INDEX], 0);
+    s->button_irq = qdev_get_gpio_in((DeviceState *)s->stm32_gpio[STM32_GPIOA_INDEX], 0);
     qemu_add_kbd_event_handler(stm32_p103_key_event, s);
 
     /* Connect RS232 to UART */
     stm32_uart_connect(
-            stm32_uart[STM32_UART2_INDEX],
+            s->stm32_uart[STM32_UART2_INDEX],
             serial_hds[0],
             STM32_USART2_NO_REMAP);
  }
