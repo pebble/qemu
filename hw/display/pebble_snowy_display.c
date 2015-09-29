@@ -58,6 +58,8 @@
 #include "ui/console.h"
 #include "ui/pixel_ops.h"
 #include "hw/ssi.h"
+#include "pebble_snowy_display.h"
+#include "pebble_snowy_display_overlays.h"
 
 //#define DEBUG_PEBBLE_SNOWY_DISPLAY
 #ifdef DEBUG_PEBBLE_SNOWY_DISPLAY
@@ -186,12 +188,6 @@ typedef struct {
     PDisplayCmdSet cmd_set;
 
 } PSDisplayGlobals;
-
-
-typedef struct {
-  uint8_t red, green, blue;
-} PSDisplayPixelColor;
-
 
 static uint8_t *get_pebble_logo_4colors_image(int *width, int *height);
 static uint8_t *get_dead_face_image(int *width, int *height);
@@ -750,10 +746,13 @@ static void ps_display_update_display(void *arg)
         return;
     }
 
+    const bool is_spalding =  s->round_mask;
+    const PSDisplayPixelColorWithAlpha *overlay = is_spalding ? g_spalding_overlay : NULL;
     uint8_t *pixel_mask = get_pixel_mask();
     for (y = 0; y < s->num_rows; y++) {
         for (x = 0; x < s->num_cols; x++) {
-            uint8_t pixel = s->framebuffer_copy[y * s->bytes_per_row + x];
+          uint32_t offset = y * s->bytes_per_row + x;
+          uint8_t pixel = s->framebuffer_copy[offset];
             if (s->round_mask) {
                 // Compute the vertical distance from top or bottom edge, whichever is closest
                 int vert_distance = y;
@@ -767,6 +766,14 @@ static void ps_display_update_display(void *arg)
             }
 
             PSDisplayPixelColor color = ps_display_get_rgb(s, pixel);
+            if (overlay) {
+              const PSDisplayPixelColorWithAlpha blend_color = overlay[offset];
+              const int32_t factor_over = blend_color.alpha;
+              const int32_t factor_dest = 255 - blend_color.alpha;
+              color.red = MIN(255, (factor_over * blend_color.color.red + factor_dest * color.red) / 255);
+              color.green = MIN(255,(factor_over * blend_color.color.green + factor_dest * color.green) / 255);
+              color.blue = MIN(255, (factor_over * blend_color.color.blue + factor_dest * color.blue) / 255);
+            }                                      
 
             switch(bpp) {
             case 8:
