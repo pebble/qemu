@@ -3,7 +3,7 @@
 #include "pebble_snowy_display.h"
 
 // from PIL import Image
-// im = Image.open('qemu-overlay.png')
+// im = Image.open('qemu-spalding-overlay.png')
 // px = im.load()
 // print "const PSDisplayPixelColorWithAlpha *g_spalding_overlay = (PSDisplayPixelColorWithAlpha[]){"
 // for y in range(im.size[1]):
