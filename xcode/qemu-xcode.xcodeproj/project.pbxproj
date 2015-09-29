@@ -3843,6 +3843,8 @@
 		0A9FB26C1A5CA7CE00508B50 /* pebble_control.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pebble_control.c; sourceTree = "<group>"; };
 		0A9FB26E1A5CB32400508B50 /* pebble_control.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pebble_control.h; sourceTree = "<group>"; };
 		0A9FB26F1A5DD65300508B50 /* pebble.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pebble.h; sourceTree = "<group>"; };
+		F26B0021A196F59247CDE2A3 /* pebble_snowy_display.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pebble_snowy_display.h; sourceTree = "<group>"; };
+		F26B0184FF47D47293F9BDC4 /* pebble_snowy_display_overlays.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pebble_snowy_display_overlays.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -4853,6 +4855,8 @@
 				0A068BEC1A1C2417009BB34B /* vga_template.h */,
 				0A068BED1A1C2417009BB34B /* vmware_vga.c */,
 				0A068BEE1A1C2417009BB34B /* xenfb.c */,
+				F26B0021A196F59247CDE2A3 /* pebble_snowy_display.h */,
+				F26B0184FF47D47293F9BDC4 /* pebble_snowy_display_overlays.h */,
 			);
 			path = display;
 			sourceTree = "<group>";
