@@ -504,7 +504,7 @@ PebbleControl *pebble_control_create(CharDriverState *chr, Stm32Uart *uart)
 
         // The timer we use to pump more data to the uart
         s->target_send_timer = timer_new_ms(QEMU_CLOCK_HOST,
-                                  (QEMUTimerCB *)pebble_control_forward_to_target, s);
+                                  (QEMUTimerCB *)pebble_control_parse_receive_buffer, s);
 
 
         // Have the UART send writes to us
