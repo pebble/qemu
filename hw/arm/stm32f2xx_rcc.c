@@ -32,7 +32,7 @@
 
 #ifdef DEBUG_STM32_RCC
 #define DPRINTF(fmt, ...)                                       \
-do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
+do { printf("STM32F2XX_RCC: " fmt , ## __VA_ARGS__); } while (0)
 #else
 #define DPRINTF(fmt, ...)
 #endif
@@ -953,15 +953,11 @@ static void stm32_rcc_hclk_upd_irq_handler(void *opaque, int n, int level)
          * system/external clock ticks.
          */
         system_clock_scale = get_ticks_per_sec() / hclk_freq;
-        external_ref_clock_scale = get_ticks_per_sec() / ext_ref_freq;
     }
 
 #ifdef DEBUG_STM32_RCC
     DPRINTF("Cortex SYSTICK frequency set to %lu Hz (scale set to %d).\n",
             (unsigned long)hclk_freq, system_clock_scale);
-    DPRINTF("Cortex SYSTICK ext ref frequency set to %lu Hz "
-            "(scale set to %d).\n",
-            (unsigned long)ext_ref_freq, external_ref_clock_scale);
 #endif
 }
 

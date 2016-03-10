@@ -12,9 +12,9 @@
 #ifndef QEMU_COMMON_H
 #define QEMU_COMMON_H
 
-#include "qemu/compiler.h"
-#include "config-host.h"
+#include "qemu/osdep.h"
 #include "qemu/typedefs.h"
+#include "qemu/fprintf-fn.h"
 
 #if defined(__arm__) || defined(__sparc__) || defined(__mips__) || defined(__hppa__) || defined(__ia64__)
 #define WORDS_ALIGNED
@@ -22,71 +22,9 @@
 
 #define TFR(expr) do { if ((expr) != -1) break; } while (errno == EINTR)
 
-/* we put basic includes here to avoid repeating them in device drivers */
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <string.h>
-#include <strings.h>
-#include <inttypes.h>
-#include <limits.h>
-#include <time.h>
-#include <ctype.h>
-#include <errno.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <assert.h>
-#include <signal.h>
 #include "glib-compat.h"
-
-#if defined(__GLIBC__)
-# include <pty.h>
-#elif defined CONFIG_BSD
-# include <termios.h>
-# if defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__DragonFly__)
-#  include <libutil.h>
-# else
-#  include <util.h>
-# endif
-#elif defined CONFIG_SOLARIS
-# include <stropts.h>
-#endif
-
-#ifdef _WIN32
-#include "sysemu/os-win32.h"
-#endif
-
-#ifdef CONFIG_POSIX
-#include "sysemu/os-posix.h"
-#endif
-
-#ifndef O_LARGEFILE
-#define O_LARGEFILE 0
-#endif
-#ifndef O_BINARY
-#define O_BINARY 0
-#endif
-#ifndef MAP_ANONYMOUS
-#define MAP_ANONYMOUS MAP_ANON
-#endif
-#ifndef ENOMEDIUM
-#define ENOMEDIUM ENODEV
-#endif
-#if !defined(ENOTSUP)
-#define ENOTSUP 4096
-#endif
-#if !defined(ECANCELED)
-#define ECANCELED 4097
-#endif
-#if !defined(EMEDIUMTYPE)
-#define EMEDIUMTYPE 4098
-#endif
-#ifndef TIME_MAX
-#define TIME_MAX LONG_MAX
-#endif
+#include "qemu/option.h"
+#include "qemu/host-utils.h"
 
 /* HOST_LONG_BITS is the size of a native pointer in bits. */
 #if UINTPTR_MAX == UINT32_MAX
@@ -97,31 +35,17 @@
 # error Unknown pointer size
 #endif
 
-typedef int (*fprintf_function)(FILE *f, const char *fmt, ...)
-    GCC_FMT_ATTR(2, 3);
-
-#ifdef _WIN32
-#define fsync _commit
-#if !defined(lseek)
-# define lseek _lseeki64
-#endif
-int qemu_ftruncate64(int, int64_t);
-#if !defined(ftruncate)
-# define ftruncate qemu_ftruncate64
-#endif
-
-static inline char *realpath(const char *path, char *resolved_path)
-{
-    _fullpath(resolved_path, path, _MAX_PATH);
-    return resolved_path;
-}
-#endif
+void cpu_ticks_init(void);
 
 /* icount */
-void configure_icount(const char *option);
+void configure_icount(QemuOpts *opts, Error **errp);
 extern int use_icount;
+extern int icount_align_option;
+/* drift information for info jit command */
+extern int64_t max_delay;
+extern int64_t max_advance;
+void dump_drift_info(FILE *f, fprintf_function cpu_fprintf);
 
-#include "qemu/osdep.h"
 #include "qemu/bswap.h"
 
 /* FIXME: Remove NEED_CPU_H.  */
@@ -155,45 +79,182 @@ static inline bool is_help_option(const char *s)
     return !strcmp(s, "?") || !strcmp(s, "help");
 }
 
-/* cutils.c */
+/* util/cutils.c */
+/**
+ * pstrcpy:
+ * @buf: buffer to copy string into
+ * @buf_size: size of @buf in bytes
+ * @str: string to copy
+ *
+ * Copy @str into @buf, including the trailing NUL, but do not
+ * write more than @buf_size bytes. The resulting buffer is
+ * always NUL terminated (even if the source string was too long).
+ * If @buf_size is zero or negative then no bytes are copied.
+ *
+ * This function is similar to strncpy(), but avoids two of that
+ * function's problems:
+ *  * if @str fits in the buffer, pstrcpy() does not zero-fill the
+ *    remaining space at the end of @buf
+ *  * if @str is too long, pstrcpy() will copy the first @buf_size-1
+ *    bytes and then add a NUL
+ */
 void pstrcpy(char *buf, int buf_size, const char *str);
+/**
+ * strpadcpy:
+ * @buf: buffer to copy string into
+ * @buf_size: size of @buf in bytes
+ * @str: string to copy
+ * @pad: character to pad the remainder of @buf with
+ *
+ * Copy @str into @buf (but *not* its trailing NUL!), and then pad the
+ * rest of the buffer with the @pad character. If @str is too large
+ * for the buffer then it is truncated, so that @buf contains the
+ * first @buf_size characters of @str, with no terminator.
+ */
 void strpadcpy(char *buf, int buf_size, const char *str, char pad);
+/**
+ * pstrcat:
+ * @buf: buffer containing existing string
+ * @buf_size: size of @buf in bytes
+ * @s: string to concatenate to @buf
+ *
+ * Append a copy of @s to the string already in @buf, but do not
+ * allow the buffer to overflow. If the existing contents of @buf
+ * plus @str would total more than @buf_size bytes, then write
+ * as much of @str as will fit followed by a NUL terminator.
+ *
+ * @buf must already contain a NUL-terminated string, or the
+ * behaviour is undefined.
+ *
+ * Returns: @buf.
+ */
 char *pstrcat(char *buf, int buf_size, const char *s);
+/**
+ * strstart:
+ * @str: string to test
+ * @val: prefix string to look for
+ * @ptr: NULL, or pointer to be written to indicate start of
+ *       the remainder of the string
+ *
+ * Test whether @str starts with the prefix @val.
+ * If it does (including the degenerate case where @str and @val
+ * are equal) then return true. If @ptr is not NULL then a
+ * pointer to the first character following the prefix is written
+ * to it. If @val is not a prefix of @str then return false (and
+ * @ptr is not written to).
+ *
+ * Returns: true if @str starts with prefix @val, false otherwise.
+ */
 int strstart(const char *str, const char *val, const char **ptr);
+/**
+ * stristart:
+ * @str: string to test
+ * @val: prefix string to look for
+ * @ptr: NULL, or pointer to be written to indicate start of
+ *       the remainder of the string
+ *
+ * Test whether @str starts with the case-insensitive prefix @val.
+ * This function behaves identically to strstart(), except that the
+ * comparison is made after calling qemu_toupper() on each pair of
+ * characters.
+ *
+ * Returns: true if @str starts with case-insensitive prefix @val,
+ *          false otherwise.
+ */
 int stristart(const char *str, const char *val, const char **ptr);
+/**
+ * qemu_strnlen:
+ * @s: string
+ * @max_len: maximum number of bytes in @s to scan
+ *
+ * Return the length of the string @s, like strlen(), but do not
+ * examine more than @max_len bytes of the memory pointed to by @s.
+ * If no NUL terminator is found within @max_len bytes, then return
+ * @max_len instead.
+ *
+ * This function has the same behaviour as the POSIX strnlen()
+ * function.
+ *
+ * Returns: length of @s in bytes, or @max_len, whichever is smaller.
+ */
 int qemu_strnlen(const char *s, int max_len);
+/**
+ * qemu_strsep:
+ * @input: pointer to string to parse
+ * @delim: string containing delimiter characters to search for
+ *
+ * Locate the first occurrence of any character in @delim within
+ * the string referenced by @input, and replace it with a NUL.
+ * The location of the next character after the delimiter character
+ * is stored into @input.
+ * If the end of the string was reached without finding a delimiter
+ * character, then NULL is stored into @input.
+ * If @input points to a NULL pointer on entry, return NULL.
+ * The return value is always the original value of *@input (and
+ * so now points to a NUL-terminated string corresponding to the
+ * part of the input up to the first delimiter).
+ *
+ * This function has the same behaviour as the BSD strsep() function.
+ *
+ * Returns: the pointer originally in @input.
+ */
 char *qemu_strsep(char **input, const char *delim);
 time_t mktimegm(struct tm *tm);
-int qemu_fls(int i);
 int qemu_fdatasync(int fd);
 int fcntl_setfl(int fd, int flag);
 int qemu_parse_fd(const char *param);
+int qemu_strtol(const char *nptr, const char **endptr, int base,
+                long *result);
+int qemu_strtoul(const char *nptr, const char **endptr, int base,
+                 unsigned long *result);
+int qemu_strtoll(const char *nptr, const char **endptr, int base,
+                 int64_t *result);
+int qemu_strtoull(const char *nptr, const char **endptr, int base,
+                  uint64_t *result);
 
 int parse_uint(const char *s, unsigned long long *value, char **endptr,
                int base);
 int parse_uint_full(const char *s, unsigned long long *value, int base);
 
 /*
- * strtosz() suffixes used to specify the default treatment of an
- * argument passed to strtosz() without an explicit suffix.
+ * qemu_strtosz() suffixes used to specify the default treatment of an
+ * argument passed to qemu_strtosz() without an explicit suffix.
  * These should be defined using upper case characters in the range
- * A-Z, as strtosz() will use qemu_toupper() on the given argument
+ * A-Z, as qemu_strtosz() will use qemu_toupper() on the given argument
  * prior to comparison.
  */
-#define STRTOSZ_DEFSUFFIX_EB	'E'
-#define STRTOSZ_DEFSUFFIX_PB	'P'
-#define STRTOSZ_DEFSUFFIX_TB	'T'
-#define STRTOSZ_DEFSUFFIX_GB	'G'
-#define STRTOSZ_DEFSUFFIX_MB	'M'
-#define STRTOSZ_DEFSUFFIX_KB	'K'
-#define STRTOSZ_DEFSUFFIX_B	'B'
-int64_t strtosz(const char *nptr, char **end);
-int64_t strtosz_suffix(const char *nptr, char **end, const char default_suffix);
-int64_t strtosz_suffix_unit(const char *nptr, char **end,
+#define QEMU_STRTOSZ_DEFSUFFIX_EB 'E'
+#define QEMU_STRTOSZ_DEFSUFFIX_PB 'P'
+#define QEMU_STRTOSZ_DEFSUFFIX_TB 'T'
+#define QEMU_STRTOSZ_DEFSUFFIX_GB 'G'
+#define QEMU_STRTOSZ_DEFSUFFIX_MB 'M'
+#define QEMU_STRTOSZ_DEFSUFFIX_KB 'K'
+#define QEMU_STRTOSZ_DEFSUFFIX_B 'B'
+int64_t qemu_strtosz(const char *nptr, char **end);
+int64_t qemu_strtosz_suffix(const char *nptr, char **end,
+                            const char default_suffix);
+int64_t qemu_strtosz_suffix_unit(const char *nptr, char **end,
                             const char default_suffix, int64_t unit);
+#define K_BYTE     (1ULL << 10)
+#define M_BYTE     (1ULL << 20)
+#define G_BYTE     (1ULL << 30)
+#define T_BYTE     (1ULL << 40)
+#define P_BYTE     (1ULL << 50)
+#define E_BYTE     (1ULL << 60)
 
 /* used to print char* safely */
 #define STR_OR_NULL(str) ((str) ? (str) : "null")
+
+/* id.c */
+
+typedef enum IdSubSystems {
+    ID_QDEV,
+    ID_BLOCK,
+    ID_MAX      /* last element, used as array size */
+} IdSubSystems;
+
+char *id_generate(IdSubSystems id);
+bool id_wellformed(const char *id);
 
 /* path.c */
 void init_paths(const char *prefix);
@@ -218,10 +279,6 @@ const char *path(const char *pathname);
 void *qemu_oom_check(void *ptr);
 
 ssize_t qemu_write_full(int fd, const void *buf, size_t count)
-    QEMU_WARN_UNUSED_RESULT;
-ssize_t qemu_send_full(int fd, const void *buf, size_t count, int flags)
-    QEMU_WARN_UNUSED_RESULT;
-ssize_t qemu_recv_full(int fd, void *buf, size_t count, int flags)
     QEMU_WARN_UNUSED_RESULT;
 
 #ifndef _WIN32
@@ -359,7 +416,6 @@ char *qemu_find_file(int type, const char *name);
 void os_setup_early_signal_handling(void);
 char *os_find_datadir(void);
 void os_parse_cmd_args(int index, const char *optarg);
-void os_pidfile_error(void);
 
 /* Convert a byte between binary and BCD.  */
 static inline uint8_t to_bcd(uint8_t val)
@@ -372,47 +428,11 @@ static inline uint8_t from_bcd(uint8_t val)
     return ((val >> 4) * 10) + (val & 0x0f);
 }
 
-/* compute with 96 bit intermediate result: (a*b)/c */
-static inline uint64_t muldiv64(uint64_t a, uint32_t b, uint32_t c)
-{
-    union {
-        uint64_t ll;
-        struct {
-#ifdef HOST_WORDS_BIGENDIAN
-            uint32_t high, low;
-#else
-            uint32_t low, high;
-#endif
-        } l;
-    } u, res;
-    uint64_t rl, rh;
-
-    u.ll = a;
-    rl = (uint64_t)u.l.low * (uint64_t)b;
-    rh = (uint64_t)u.l.high * (uint64_t)b;
-    rh += (rl >> 32);
-    res.l.high = rh / c;
-    res.l.low = (((rh % c) << 32) + (rl & 0xffffffff)) / c;
-    return res.ll;
-}
-
 /* Round number down to multiple */
 #define QEMU_ALIGN_DOWN(n, m) ((n) / (m) * (m))
 
 /* Round number up to multiple */
 #define QEMU_ALIGN_UP(n, m) QEMU_ALIGN_DOWN((n) + (m) - 1, (m))
-
-static inline bool is_power_of_2(uint64_t value)
-{
-    if (!value) {
-        return 0;
-    }
-
-    return !(value & (value - 1));
-}
-
-/* round down to the nearest power of 2*/
-int64_t pow2floor(int64_t value);
 
 #include "qemu/module.h"
 
@@ -446,6 +466,7 @@ void qemu_hexdump(const char *buf, FILE *fp, const char *prefix, size_t size);
 #define VECTYPE        __vector unsigned char
 #define SPLAT(p)       vec_splat(vec_ld(0, p), 0)
 #define ALL_EQ(v1, v2) vec_all_eq(v1, v2)
+#define VEC_OR(v1, v2) ((v1) | (v2))
 /* altivec.h may redefine the bool macro as vector type.
  * Reset it to POSIX semantics. */
 #define bool _Bool
@@ -454,10 +475,12 @@ void qemu_hexdump(const char *buf, FILE *fp, const char *prefix, size_t size);
 #define VECTYPE        __m128i
 #define SPLAT(p)       _mm_set1_epi8(*(p))
 #define ALL_EQ(v1, v2) (_mm_movemask_epi8(_mm_cmpeq_epi8(v1, v2)) == 0xFFFF)
+#define VEC_OR(v1, v2) (_mm_or_si128(v1, v2))
 #else
 #define VECTYPE        unsigned long
 #define SPLAT(p)       (*(p) * (~0UL / 255))
 #define ALL_EQ(v1, v2) ((v1) == (v2))
+#define VEC_OR(v1, v2) ((v1) | (v2))
 #endif
 
 #define BUFFER_FIND_NONZERO_OFFSET_UNROLL_FACTOR 8
@@ -476,5 +499,6 @@ size_t buffer_find_nonzero_offset(const void *buf, size_t len);
 int parse_debug_env(const char *name, int max, int initial);
 
 const char *qemu_ether_ntoa(const MACAddr *mac);
+void page_size_init(void);
 
 #endif

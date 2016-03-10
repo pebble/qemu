@@ -9,6 +9,7 @@
 #include "qemu/timer.h"
 #include "hw/ptimer.h"
 #include "qemu/host-utils.h"
+#include "sysemu/replay.h"
 
 struct ptimer_state
 {
@@ -27,7 +28,7 @@ struct ptimer_state
 static void ptimer_trigger(ptimer_state *s)
 {
     if (s->bh) {
-        qemu_bh_schedule(s->bh);
+        replay_bh_schedule_event(s->bh);
     }
 }
 
@@ -189,7 +190,7 @@ void ptimer_set_limit(ptimer_state *s, uint64_t limit, int reload)
      * on the current generation of host machines.
      */
 
-    if (limit * s->period < 10000 && s->period) {
+    if (!use_icount && limit * s->period < 10000 && s->period) {
         limit = 10000 / s->period;
     }
 
@@ -214,7 +215,7 @@ const VMStateDescription vmstate_ptimer = {
         VMSTATE_INT64(period, ptimer_state),
         VMSTATE_INT64(last_event, ptimer_state),
         VMSTATE_INT64(next_event, ptimer_state),
-        VMSTATE_TIMER(timer, ptimer_state),
+        VMSTATE_TIMER_PTR(timer, ptimer_state),
         VMSTATE_END_OF_LIST()
     }
 };

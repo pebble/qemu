@@ -28,6 +28,7 @@
 #include "qmp-commands.h"
 #include "sysemu/char.h"
 #include "trace.h"
+#include "exec/memory.h"
 
 #define DEFAULT_BACKSCROLL 512
 #define CONSOLE_CURSOR_PERIOD 500
@@ -120,11 +121,13 @@ struct QemuConsole {
     DisplayState *ds;
     DisplaySurface *surface;
     int dcls;
+    DisplayChangeListener *gl;
 
     /* Graphic console state.  */
     Object *device;
     uint32_t head;
     QemuUIInfo ui_info;
+    QEMUTimer *ui_timer;
     const GraphicHwOps *hw_ops;
     void *hw;
 
@@ -268,7 +271,7 @@ void graphic_hw_invalidate(QemuConsole *con)
     }
 }
 
-static void ppm_save(const char *filename, struct DisplaySurface *ds,
+static void ppm_save(const char *filename, DisplaySurface *ds,
                      Error **errp)
 {
     int width = pixman_image_get_width(ds->image);
@@ -447,7 +450,7 @@ static void text_console_resize(QemuConsole *s)
     if (s->width < w1)
         w1 = s->width;
 
-    cells = g_malloc(s->width * s->total_height * sizeof(TextCell));
+    cells = g_new(TextCell, s->width * s->total_height);
     for(y = 0; y < s->total_height; y++) {
         c = &cells[y * s->width];
         if (w1 > 0) {
@@ -1224,61 +1227,77 @@ static QemuConsole *new_console(DisplayState *ds, console_type_t console_type,
     return s;
 }
 
-static void qemu_alloc_display(DisplaySurface *surface, int width, int height,
-                               int linesize, PixelFormat pf, int newflags)
+static void qemu_alloc_display(DisplaySurface *surface, int width, int height)
 {
-    surface->pf = pf;
-
     qemu_pixman_image_unref(surface->image);
     surface->image = NULL;
 
-    surface->format = qemu_pixman_get_format(&pf);
-    assert(surface->format != 0);
+    surface->format = PIXMAN_x8r8g8b8;
     surface->image = pixman_image_create_bits(surface->format,
                                               width, height,
-                                              NULL, linesize);
+                                              NULL, width * 4);
     assert(surface->image != NULL);
 
-    surface->flags = newflags | QEMU_ALLOCATED_FLAG;
-#ifdef HOST_WORDS_BIGENDIAN
-    surface->flags |= QEMU_BIG_ENDIAN_FLAG;
-#endif
+    surface->flags = QEMU_ALLOCATED_FLAG;
 }
 
 DisplaySurface *qemu_create_displaysurface(int width, int height)
 {
     DisplaySurface *surface = g_new0(DisplaySurface, 1);
-    int linesize = width * 4;
 
     trace_displaysurface_create(surface, width, height);
-    qemu_alloc_display(surface, width, height, linesize,
-                       qemu_default_pixelformat(32), 0);
+    qemu_alloc_display(surface, width, height);
     return surface;
 }
 
-DisplaySurface *qemu_create_displaysurface_from(int width, int height, int bpp,
-                                                int linesize, uint8_t *data,
-                                                bool byteswap)
+DisplaySurface *qemu_create_displaysurface_from(int width, int height,
+                                                pixman_format_code_t format,
+                                                int linesize, uint8_t *data)
 {
     DisplaySurface *surface = g_new0(DisplaySurface, 1);
 
-    trace_displaysurface_create_from(surface, width, height, bpp, byteswap);
-    if (byteswap) {
-        surface->pf = qemu_different_endianness_pixelformat(bpp);
-    } else {
-        surface->pf = qemu_default_pixelformat(bpp);
-    }
-
-    surface->format = qemu_pixman_get_format(&surface->pf);
-    assert(surface->format != 0);
+    trace_displaysurface_create_from(surface, width, height, format);
+    surface->format = format;
     surface->image = pixman_image_create_bits(surface->format,
                                               width, height,
                                               (void *)data, linesize);
     assert(surface->image != NULL);
 
-#ifdef HOST_WORDS_BIGENDIAN
-    surface->flags = QEMU_BIG_ENDIAN_FLAG;
-#endif
+    return surface;
+}
+
+static void qemu_unmap_displaysurface_guestmem(pixman_image_t *image,
+                                               void *unused)
+{
+    void *data = pixman_image_get_data(image);
+    uint32_t size = pixman_image_get_stride(image) *
+        pixman_image_get_height(image);
+    cpu_physical_memory_unmap(data, size, 0, 0);
+}
+
+DisplaySurface *qemu_create_displaysurface_guestmem(int width, int height,
+                                                    pixman_format_code_t format,
+                                                    int linesize, uint64_t addr)
+{
+    DisplaySurface *surface;
+    hwaddr size;
+    void *data;
+
+    if (linesize == 0) {
+        linesize = width * PIXMAN_FORMAT_BPP(format) / 8;
+    }
+
+    size = (hwaddr)linesize * height;
+    data = cpu_physical_memory_map(addr, &size, 0);
+    if (size != (hwaddr)linesize * height) {
+        cpu_physical_memory_unmap(data, size, 0, 0);
+        return NULL;
+    }
+
+    surface = qemu_create_displaysurface_from
+        (width, height, format, linesize, data);
+    pixman_image_set_destroy_function
+        (surface->image, qemu_unmap_displaysurface_guestmem, NULL);
 
     return surface;
 }
@@ -1314,12 +1333,28 @@ void qemu_free_displaysurface(DisplaySurface *surface)
     g_free(surface);
 }
 
+bool console_has_gl(QemuConsole *con)
+{
+    return con->gl != NULL;
+}
+
 void register_displaychangelistener(DisplayChangeListener *dcl)
 {
     static const char nodev[] =
         "This VM has no graphic display device.";
     static DisplaySurface *dummy;
     QemuConsole *con;
+
+    if (dcl->ops->dpy_gl_ctx_create) {
+        /* display has opengl support */
+        assert(dcl->con);
+        if (dcl->con->gl) {
+            fprintf(stderr, "can't register two opengl displays (%s, %s)\n",
+                    dcl->ops->dpy_name, dcl->con->gl->ops->dpy_name);
+            exit(1);
+        }
+        dcl->con->gl = dcl;
+    }
 
     trace_displaychangelistener_register(dcl, dcl->ops->dpy_name);
     dcl->ds = get_alloc_displaystate();
@@ -1366,23 +1401,46 @@ void unregister_displaychangelistener(DisplayChangeListener *dcl)
     gui_setup_refresh(ds);
 }
 
+static void dpy_set_ui_info_timer(void *opaque)
+{
+    QemuConsole *con = opaque;
+
+    con->hw_ops->ui_info(con->hw, con->head, &con->ui_info);
+}
+
+bool dpy_ui_info_supported(QemuConsole *con)
+{
+    return con->hw_ops->ui_info != NULL;
+}
+
 int dpy_set_ui_info(QemuConsole *con, QemuUIInfo *info)
 {
     assert(con != NULL);
     con->ui_info = *info;
-    if (con->hw_ops->ui_info) {
-        return con->hw_ops->ui_info(con->hw, con->head, info);
+    if (!dpy_ui_info_supported(con)) {
+        return -1;
     }
-    return -1;
+
+    /*
+     * Typically we get a flood of these as the user resizes the window.
+     * Wait until the dust has settled (one second without updates), then
+     * go notify the guest.
+     */
+    timer_mod(con->ui_timer, qemu_clock_get_ms(QEMU_CLOCK_REALTIME) + 1000);
+    return 0;
 }
 
 void dpy_gfx_update(QemuConsole *con, int x, int y, int w, int h)
 {
     DisplayState *s = con->ds;
     DisplayChangeListener *dcl;
-    int width = surface_width(con->surface);
-    int height = surface_height(con->surface);
+    int width = w;
+    int height = h;
 
+    if (con->surface) {
+        width = surface_width(con->surface);
+        height = surface_height(con->surface);
+    }
     x = MAX(x, 0);
     y = MAX(y, 0);
     x = MIN(x, width);
@@ -1420,6 +1478,31 @@ void dpy_gfx_replace_surface(QemuConsole *con,
         }
     }
     qemu_free_displaysurface(old_surface);
+}
+
+bool dpy_gfx_check_format(QemuConsole *con,
+                          pixman_format_code_t format)
+{
+    DisplayChangeListener *dcl;
+    DisplayState *s = con->ds;
+
+    QLIST_FOREACH(dcl, &s->listeners, next) {
+        if (dcl->con && dcl->con != con) {
+            /* dcl bound to another console -> skip */
+            continue;
+        }
+        if (dcl->ops->dpy_gfx_check_format) {
+            if (!dcl->ops->dpy_gfx_check_format(dcl, format)) {
+                return false;
+            }
+        } else {
+            /* default is to whitelist native 32 bpp only */
+            if (format != qemu_default_pixman_format(32, true)) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 static void dpy_refresh(DisplayState *s)
@@ -1493,7 +1576,7 @@ void dpy_text_update(QemuConsole *con, int x, int y, int w, int h)
 void dpy_text_resize(QemuConsole *con, int w, int h)
 {
     DisplayState *s = con->ds;
-    struct DisplayChangeListener *dcl;
+    DisplayChangeListener *dcl;
 
     if (!qemu_console_is_visible(con)) {
         return;
@@ -1557,6 +1640,48 @@ bool dpy_cursor_define_supported(QemuConsole *con)
     return false;
 }
 
+QEMUGLContext dpy_gl_ctx_create(QemuConsole *con,
+                                struct QEMUGLParams *qparams)
+{
+    assert(con->gl);
+    return con->gl->ops->dpy_gl_ctx_create(con->gl, qparams);
+}
+
+void dpy_gl_ctx_destroy(QemuConsole *con, QEMUGLContext ctx)
+{
+    assert(con->gl);
+    con->gl->ops->dpy_gl_ctx_destroy(con->gl, ctx);
+}
+
+int dpy_gl_ctx_make_current(QemuConsole *con, QEMUGLContext ctx)
+{
+    assert(con->gl);
+    return con->gl->ops->dpy_gl_ctx_make_current(con->gl, ctx);
+}
+
+QEMUGLContext dpy_gl_ctx_get_current(QemuConsole *con)
+{
+    assert(con->gl);
+    return con->gl->ops->dpy_gl_ctx_get_current(con->gl);
+}
+
+void dpy_gl_scanout(QemuConsole *con,
+                    uint32_t backing_id, bool backing_y_0_top,
+                    uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+{
+    assert(con->gl);
+    con->gl->ops->dpy_gl_scanout(con->gl, backing_id,
+                                 backing_y_0_top,
+                                 x, y, width, height);
+}
+
+void dpy_gl_update(QemuConsole *con,
+                   uint32_t x, uint32_t y, uint32_t w, uint32_t h)
+{
+    assert(con->gl);
+    con->gl->ops->dpy_gl_update(con->gl, x, y, w, h);
+}
+
 /***********************************************************/
 /* register display */
 
@@ -1599,6 +1724,14 @@ DisplayState *init_displaystate(void)
     return display_state;
 }
 
+void graphic_console_set_hwops(QemuConsole *con,
+                               const GraphicHwOps *hw_ops,
+                               void *opaque)
+{
+    con->hw_ops = hw_ops;
+    con->hw = opaque;
+}
+
 QemuConsole *graphic_console_init(DeviceState *dev, uint32_t head,
                                   const GraphicHwOps *hw_ops,
                                   void *opaque)
@@ -1613,8 +1746,8 @@ QemuConsole *graphic_console_init(DeviceState *dev, uint32_t head,
     ds = get_alloc_displaystate();
     trace_console_gfx_new();
     s = new_console(ds, GRAPHIC_CONSOLE, head);
-    s->hw_ops = hw_ops;
-    s->hw = opaque;
+    s->ui_timer = timer_new_ms(QEMU_CLOCK_REALTIME, dpy_set_ui_info_timer, s);
+    graphic_console_set_hwops(s, hw_ops, opaque);
     if (dev) {
         object_property_set_link(OBJECT(s), OBJECT(dev), "device",
                                  &error_abort);
@@ -1676,6 +1809,21 @@ bool qemu_console_is_fixedsize(QemuConsole *con)
         con = active_console;
     }
     return con && (con->console_type != TEXT_CONSOLE);
+}
+
+char *qemu_console_get_label(QemuConsole *con)
+{
+    if (con->console_type == GRAPHIC_CONSOLE) {
+        if (con->device) {
+            return g_strdup(object_get_typename(con->device));
+        }
+        return g_strdup("VGA");
+    } else {
+        if (con->chr && con->chr->label) {
+            return g_strdup(con->chr->label);
+        }
+        return g_strdup_printf("vc%d", con->index);
+    }
 }
 
 int qemu_console_get_index(QemuConsole *con)
@@ -1814,7 +1962,7 @@ static void text_console_do_init(CharDriverState *chr, DisplayState *ds)
         chr->init(chr);
 }
 
-static CharDriverState *text_console_init(ChardevVC *vc)
+static CharDriverState *text_console_init(ChardevVC *vc, Error **errp)
 {
     CharDriverState *chr;
     QemuConsole *s;
@@ -1845,6 +1993,7 @@ static CharDriverState *text_console_init(ChardevVC *vc)
 
     if (!s) {
         g_free(chr);
+        error_setg(errp, "cannot create text console");
         return NULL;
     }
 
@@ -1864,9 +2013,10 @@ static CharDriverState *text_console_init(ChardevVC *vc)
 
 static VcHandler *vc_handler = text_console_init;
 
-CharDriverState *vc_init(ChardevVC *vc)
+static CharDriverState *vc_init(const char *id, ChardevBackend *backend,
+                                ChardevReturn *ret, Error **errp)
 {
-    return vc_handler(vc);
+    return vc_handler(backend->u.vc, errp);
 }
 
 void register_vc_handler(VcHandler *handler)
@@ -1895,131 +2045,10 @@ DisplaySurface *qemu_console_surface(QemuConsole *console)
     return console->surface;
 }
 
-DisplayState *qemu_console_displaystate(QemuConsole *console)
-{
-    return console->ds;
-}
-
-PixelFormat qemu_different_endianness_pixelformat(int bpp)
-{
-    PixelFormat pf;
-
-    memset(&pf, 0x00, sizeof(PixelFormat));
-
-    pf.bits_per_pixel = bpp;
-    pf.bytes_per_pixel = DIV_ROUND_UP(bpp, 8);
-    pf.depth = bpp == 32 ? 24 : bpp;
-
-    switch (bpp) {
-        case 24:
-            pf.rmask = 0x000000FF;
-            pf.gmask = 0x0000FF00;
-            pf.bmask = 0x00FF0000;
-            pf.rmax = 255;
-            pf.gmax = 255;
-            pf.bmax = 255;
-            pf.rshift = 0;
-            pf.gshift = 8;
-            pf.bshift = 16;
-            pf.rbits = 8;
-            pf.gbits = 8;
-            pf.bbits = 8;
-            break;
-        case 32:
-            pf.rmask = 0x0000FF00;
-            pf.gmask = 0x00FF0000;
-            pf.bmask = 0xFF000000;
-            pf.amask = 0x00000000;
-            pf.amax = 255;
-            pf.rmax = 255;
-            pf.gmax = 255;
-            pf.bmax = 255;
-            pf.ashift = 0;
-            pf.rshift = 8;
-            pf.gshift = 16;
-            pf.bshift = 24;
-            pf.rbits = 8;
-            pf.gbits = 8;
-            pf.bbits = 8;
-            pf.abits = 8;
-            break;
-        default:
-            break;
-    }
-    return pf;
-}
-
 PixelFormat qemu_default_pixelformat(int bpp)
 {
-    PixelFormat pf;
-
-    memset(&pf, 0x00, sizeof(PixelFormat));
-
-    pf.bits_per_pixel = bpp;
-    pf.bytes_per_pixel = DIV_ROUND_UP(bpp, 8);
-    pf.depth = bpp == 32 ? 24 : bpp;
-
-    switch (bpp) {
-        case 15:
-            pf.bits_per_pixel = 16;
-            pf.rmask = 0x00007c00;
-            pf.gmask = 0x000003E0;
-            pf.bmask = 0x0000001F;
-            pf.rmax = 31;
-            pf.gmax = 31;
-            pf.bmax = 31;
-            pf.rshift = 10;
-            pf.gshift = 5;
-            pf.bshift = 0;
-            pf.rbits = 5;
-            pf.gbits = 5;
-            pf.bbits = 5;
-            break;
-        case 16:
-            pf.rmask = 0x0000F800;
-            pf.gmask = 0x000007E0;
-            pf.bmask = 0x0000001F;
-            pf.rmax = 31;
-            pf.gmax = 63;
-            pf.bmax = 31;
-            pf.rshift = 11;
-            pf.gshift = 5;
-            pf.bshift = 0;
-            pf.rbits = 5;
-            pf.gbits = 6;
-            pf.bbits = 5;
-            break;
-        case 24:
-            pf.rmask = 0x00FF0000;
-            pf.gmask = 0x0000FF00;
-            pf.bmask = 0x000000FF;
-            pf.rmax = 255;
-            pf.gmax = 255;
-            pf.bmax = 255;
-            pf.rshift = 16;
-            pf.gshift = 8;
-            pf.bshift = 0;
-            pf.rbits = 8;
-            pf.gbits = 8;
-            pf.bbits = 8;
-            break;
-        case 32:
-            pf.rmask = 0x00FF0000;
-            pf.gmask = 0x0000FF00;
-            pf.bmask = 0x000000FF;
-            pf.rmax = 255;
-            pf.gmax = 255;
-            pf.bmax = 255;
-            pf.rshift = 16;
-            pf.gshift = 8;
-            pf.bshift = 0;
-            pf.rbits = 8;
-            pf.gbits = 8;
-            pf.bbits = 8;
-            break;
-        default:
-            break;
-    }
+    pixman_format_code_t fmt = qemu_default_pixman_format(bpp, true);
+    PixelFormat pf = qemu_pixelformat_from_pixman(fmt);
     return pf;
 }
 
@@ -2028,30 +2057,30 @@ static void qemu_chr_parse_vc(QemuOpts *opts, ChardevBackend *backend,
 {
     int val;
 
-    backend->vc = g_new0(ChardevVC, 1);
+    backend->u.vc = g_new0(ChardevVC, 1);
 
     val = qemu_opt_get_number(opts, "width", 0);
     if (val != 0) {
-        backend->vc->has_width = true;
-        backend->vc->width = val;
+        backend->u.vc->has_width = true;
+        backend->u.vc->width = val;
     }
 
     val = qemu_opt_get_number(opts, "height", 0);
     if (val != 0) {
-        backend->vc->has_height = true;
-        backend->vc->height = val;
+        backend->u.vc->has_height = true;
+        backend->u.vc->height = val;
     }
 
     val = qemu_opt_get_number(opts, "cols", 0);
     if (val != 0) {
-        backend->vc->has_cols = true;
-        backend->vc->cols = val;
+        backend->u.vc->has_cols = true;
+        backend->u.vc->cols = val;
     }
 
     val = qemu_opt_get_number(opts, "rows", 0);
     if (val != 0) {
-        backend->vc->has_rows = true;
-        backend->vc->rows = val;
+        backend->u.vc->has_rows = true;
+        backend->u.vc->rows = val;
     }
 }
 
@@ -2066,8 +2095,8 @@ static const TypeInfo qemu_console_info = {
 static void register_types(void)
 {
     type_register_static(&qemu_console_info);
-    register_char_driver_qapi("vc", CHARDEV_BACKEND_KIND_VC,
-                              qemu_chr_parse_vc);
+    register_char_driver("vc", CHARDEV_BACKEND_KIND_VC, qemu_chr_parse_vc,
+                         vc_init);
 }
 
 type_init(register_types);

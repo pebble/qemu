@@ -39,7 +39,8 @@
 #include "hw/hw.h"
 #include "hw/block/flash.h"
 #include "block/block.h"
-#include "qemu/timer.h"
+#include "block/block_int.h"
+#include "sysemu/block-backend.h"
 #include "qemu/bitops.h"
 #include "exec/address-spaces.h"
 #include "qemu/host-utils.h"
@@ -66,21 +67,25 @@ do {                                                        \
 #define TYPE_CFI_PFLASH_JEDEC_424 "cfi.pflash.jedec-42.4"
 #define CFI_PFLASH_JEDEC(obj) OBJECT_CHECK(pflash_t, (obj), TYPE_CFI_PFLASH_JEDEC_424)
 
+#define PFLASH_MAX_BANKS 8
+
 struct pflash_t {
     /*< private >*/
     SysBusDevice parent_obj;
     /*< public >*/
 
-    BlockDriverState *bs;
+    BlockBackend *blk;
     uint32_t nb_blocs;
     uint64_t sector_len;
     uint8_t bank_width;
     uint8_t device_width; /* If 0, device width not specified. */
     uint8_t max_device_width;  /* max device width in bytes */
+    uint32_t bank_size;  /* size of each bank */
     uint8_t be;
-    uint8_t wcycle; /* if 0, the flash is read normally */
     int ro;
-    uint8_t cmd;
+    uint8_t wcycle[PFLASH_MAX_BANKS];  // which write-cycle this bank is in
+    uint8_t cmd[PFLASH_MAX_BANKS];  // which command we're processing
+    uint8_t global_cmd;  // some operations don't have separate bank states
     uint8_t status;
     uint16_t ident0;
     uint16_t ident1;
@@ -90,7 +95,6 @@ struct pflash_t {
     uint8_t cfi_table[0x60];
     uint64_t counter;
     unsigned int writeblock_size;
-    QEMUTimer *timer;
     MemoryRegion mem;
     char *name;
     void *storage;
@@ -99,27 +103,23 @@ struct pflash_t {
 
 static const VMStateDescription vmstate_pflash = {
     .name = "pflash_jedec_424",
-    .version_id = 1,
-    .minimum_version_id = 1,
+    .version_id = 2,
+    .minimum_version_id = 2,
     .fields = (VMStateField[]) {
-        VMSTATE_UINT8(wcycle, pflash_t),
-        VMSTATE_UINT8(cmd, pflash_t),
+        VMSTATE_UINT8_ARRAY(wcycle, pflash_t, PFLASH_MAX_BANKS),
+        VMSTATE_UINT8_ARRAY(cmd, pflash_t, PFLASH_MAX_BANKS),
+        VMSTATE_UINT8(global_cmd, pflash_t),
         VMSTATE_UINT8(status, pflash_t),
         VMSTATE_UINT64(counter, pflash_t),
         VMSTATE_END_OF_LIST()
     }
 };
 
-static void pflash_timer (void *opaque)
+static void pflash_reset_state(struct pflash_t* pfl)
 {
-    pflash_t *pfl = opaque;
-
-    DPRINTF("%s: command %02x done\n", __func__, pfl->cmd);
-    /* Reset flash */
-    pfl->status ^= 0x80;
-    memory_region_rom_device_set_romd(&pfl->mem, true);
-    pfl->wcycle = 0;
-    pfl->cmd = 0;
+    memset(pfl->wcycle, 0, sizeof(pfl->wcycle));
+    memset(pfl->cmd, 0, sizeof(pfl->cmd));
+    pfl->global_cmd = 0;
 }
 
 /* Perform a CFI query based on the bank width of the flash.
@@ -244,15 +244,18 @@ static uint32_t pflash_read (pflash_t *pfl, hwaddr offset,
 
     ret = -1;
 
-    //DPRINTF("%s: reading offset " TARGET_FMT_plx " under cmd %02x width %d\n",
-    //        __func__, offset, pfl->cmd, width);
+    uint8_t bank = offset / pfl->bank_size;
 
-    switch (pfl->cmd) {
+    //DPRINTF("%s: reading offset " TARGET_FMT_plx " under cmd %02x width %d\n",
+    //        __func__, offset, pfl->cmd[bank], width);
+
+    switch (pfl->cmd[bank]) {
     default:
         /* This should never happen : reset state & treat it as a read */
-        DPRINTF("%s: unknown command state: %x\n", __func__, pfl->cmd);
-        pfl->wcycle = 0;
-        pfl->cmd = 0;
+        fprintf(stderr, "%s: unknown command state: %x\n", __func__, pfl->cmd[bank]);
+        pfl->wcycle[bank] = 0;
+        pfl->cmd[bank] = 0;
+        pfl->global_cmd = 0;
         /* fall through to read code */
     case 0x00:
         /* Flash area read */
@@ -312,7 +315,7 @@ static uint32_t pflash_read (pflash_t *pfl, hwaddr offset,
             ret |= pfl->status << 16;
         }
         DPRINTF("%s: status %x\n", __func__, ret);
-        pfl->cmd = 0;
+        pfl->cmd[bank] = 0;
         break;
     case 0x90:
         if (!pfl->device_width) {
@@ -394,12 +397,12 @@ static void pflash_update(pflash_t *pfl, int offset,
                           int size)
 {
     int offset_end;
-    if (pfl->bs) {
+    if (pfl->blk) {
         offset_end = offset + size;
         /* round to sectors */
         offset = offset >> 9;
         offset_end = (offset_end + 511) >> 9;
-        bdrv_write(pfl->bs, offset, pfl->storage + (offset << 9),
+        blk_write(pfl->blk, offset, pfl->storage + (offset << 9),
                    offset_end - offset);
     }
 }
@@ -455,28 +458,31 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
 
     cmd = value;
 
+    uint8_t bank = pfl->global_cmd ? 0 : offset / pfl->bank_size;
     uint32_t sector_offset = offset & (pfl->sector_len - 1);
     sector_offset = sector_offset >> (pfl->bank_width - 1);
 
-    DPRINTF("%s: writing sector offset 0x%x value 0x%x width %d"
-            "wcycle %d\n", __func__, sector_offset, value, width,
-            pfl->wcycle);
+    DPRINTF("%s: writing offset 0x%llx sector offset 0x%x value 0x%x width %d "
+            "pfl->wcycle %d pfl->cmd 0x%x\n", __func__, offset, sector_offset, value, width,
+            pfl->wcycle[bank], pfl->cmd[bank]);
 
-    if (!pfl->wcycle) {
+    if (!pfl->wcycle[bank]) {
         /* Set the device in I/O access mode */
         memory_region_rom_device_set_romd(&pfl->mem, false);
     }
 
-    switch (pfl->wcycle) {
+    switch (pfl->wcycle[bank]) {
     case 0:
         /* read mode */
         switch (cmd) {
         case 0x00: /* ??? */
-            goto reset_flash;
+            goto reset_bank;
         case 0x25:
             DPRINTF("%s: Program to buffer\n", __func__);
             pfl->status |= 0x80; /* Ready! */
             break;
+        // Not implemented: 0x29 Buffer to Flash
+        // Not implemented: 0x30 Erase Resume
         case 0x33:
             DPRINTF("%s: Blank check\n", __func__);
             // Is it blank?
@@ -491,60 +497,68 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
                     break;
                 }
             }
-            goto reset_flash;
-        case 0x60: /* Block (un)lock */
-            DPRINTF("%s: Block unlock\n", __func__);
+            goto reset_bank;
+        // Not implemented: 0x40 SSR Lock Entry
+        // Not implemented: 0x50 Program Resume
+        // Not implemented: 0x51 Program Suspend
+        case 0x60: /* Sector Lock/Unlock */
+            pfl->global_cmd = 0x60;
+            bank = 0;
+            DPRINTF("%s: Sector Lock/Unlock\n", __func__);
             break;
         case 0x70: /* Status Register */
             DPRINTF("%s: Read status register\n", __func__);
-            pfl->cmd = cmd;
+            pfl->cmd[bank] = cmd;
             return;
         case 0x71: /* Clear status bits */
             DPRINTF("%s: Clear status bits\n", __func__);
             pfl->status = 0x80;   // set device ready bit
-            goto reset_flash;
+            goto reset_bank;
         case 0x80: /* Erase setup */
             DPRINTF("%s: Erase setup\n", __func__);
             break;
+        // Not implemented: 0x88 Secure Silicon Region Entry
         case 0x90: /* Read Device ID */
             DPRINTF("%s: Read Device information\n", __func__);
-            pfl->cmd = cmd;
+            pfl->cmd[bank] = cmd;
             return;
         case 0x98: /* CFI query */
             DPRINTF("%s: CFI query\n", __func__);
             break;
+        // Not implemented: 0xB0 Erase Suspend
         case 0xd0: /* Enter configuration register */
             DPRINTF("%s: Configuration register enter\n", __func__);
             break;
         case 0xf0: /* Reset */
             DPRINTF("%s: Reset\n", __func__);
-            goto reset_flash;
+            pflash_reset_state(pfl);
+            goto reset_bank;
         case 0xff: /* Read array mode */
             DPRINTF("%s: Read array mode\n", __func__);
-            goto reset_flash;
+            goto reset_bank;
         default:
             goto error_flash;
         }
-        pfl->wcycle++;
-        pfl->cmd = cmd;
+        pfl->wcycle[bank]++;
+        pfl->cmd[bank] = cmd;
         break;
 
     case 1:
-        switch (pfl->cmd) {
+        switch (pfl->cmd[bank]) {
         case 0x25:
             /* Mask writeblock size based on device width, or bank width if
              * device width not specified.
              */
             pfl->counter = value + 1;
             DPRINTF("%s: Program to buffer of %lld words\n", __func__, pfl->counter);
-            pfl->wcycle++;
+            pfl->wcycle[bank]++;
             break;
-        case 0x60:
-            if (cmd == 0x61) {
-                pfl->cmd = 0x61;
-                pfl->wcycle++;
-            } else if (sector_offset != 0x2aa) {
-                goto reset_flash;
+        case 0x60: /* Sector Lock... Expecting 0x288 = 60 */
+            if (cmd == 0x60) {
+                pfl->cmd[bank] = 0x60;
+                pfl->wcycle[bank]++;
+            } else {
+                goto reset_bank;
             }
             break;
         case 0x80:
@@ -576,31 +590,31 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
             } else {
                 DPRINTF("%s: Unexpected command byte: 0x%x\n", __func__, cmd);
             }
-            goto reset_flash;
+            goto reset_bank;
             break;
         case 0x98:
             if (cmd == 0xf0) {
                 DPRINTF("%s: leaving query mode\n", __func__);
-                goto reset_flash;
+                goto reset_bank;
             } else {
                 DPRINTF("%s: Unexpected command byte: 0x%x\n", __func__, cmd);
-                goto reset_flash;
+                goto reset_bank;
             }
         case 0xd0:
             if (cmd == 0xf0) {
                 DPRINTF("%s: leaving configuration register mode\n", __func__);
                 pfl->status |= 0x80;
-                goto reset_flash;
+                goto reset_bank;
             } else if (cmd == 0x25) {
                 /* program to buffer */
                 DPRINTF("%s: 2nd byte of program to config register buffer\n", __func__);
-                pfl->wcycle++;
+                pfl->wcycle[bank]++;
             } else if (cmd == 0x29) {
                 DPRINTF("%s: program config register buffer to flash \n", __func__);
-                pfl->wcycle = 1;
+                pfl->wcycle[bank] = 1;
             } else {
                 DPRINTF("%s: Unexpected command byte: 0x%x\n", __func__, cmd);
-                goto reset_flash;
+                goto reset_bank;
             }
             break;
         default:
@@ -609,7 +623,7 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
         break;
 
     case 2:
-        switch (pfl->cmd) {
+        switch (pfl->cmd[bank]) {
         case 0x25: /* Program to buffer  */
             if (!pfl->ro) {
                 DPRINTF("%s: Programming %d bytes at " TARGET_FMT_plx " to 0x%x\n", __func__,
@@ -626,7 +640,7 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
                 mask = ~mask;
 
                 DPRINTF("%s: Programming finished\n", __func__);
-                pfl->wcycle++;
+                pfl->wcycle[bank]++;
                 if (!pfl->ro) {
                     /* Flush the entire write buffer onto backing storage.  */
                     pflash_update(pfl, offset & mask, pfl->writeblock_size);
@@ -639,39 +653,56 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
         case 0xd0:
             if (sector_offset == 0x2aa && cmd == 0) {
                 DPRINTF("%s: 3rd byte of program to config register buffer\n", __func__);
-                pfl->wcycle++;
+                pfl->wcycle[bank]++;
             } else {
                 DPRINTF("%s: Unexpected command byte: 0x%x\n", __func__, cmd);
-                goto reset_flash;
+                goto reset_bank;
             }
             break;
-        case 0x61:
-            // Sector Lock Range protection is not implemented
-            goto reset_flash;
+        case 0x60: /* Sector Lock... expecting SLA = 0x60 (lock/unlock) or SLA = 0x61 (range) */
+            // we don't implement locking but we should at least accept the command
+            if (cmd == 0x60) {
+                DPRINTF("%s: 3rd byte of Sector Lock\n", __func__);
+                goto reset_bank;  // command is finished
+            } else if (cmd == 0x61) {  // 0X61 multi sector lock
+                pfl->wcycle[bank]++;
+                pfl->cmd[bank] = 0x61;
+            } else {
+              goto error_flash;
+            }
+            break;
         default:
             goto error_flash;
         }
         break;
 
     case 3: /* Confirm mode */
-        switch (pfl->cmd) {
+        switch (pfl->cmd[bank]) {
         case 0x25: /* Block write */
             if (cmd == 0x29 && sector_offset == 0x555) {
-                pfl->wcycle = 0;
+                pfl->wcycle[bank] = 0;
                 pfl->status |= 0x80;
             } else {
                 PFLASH_BUG("%s: unknown command for Programming\n", __func__);
-                goto reset_flash;
+                goto reset_bank;
             }
+            break;
+        case 0x61: /* Sector Lock... expecting SLA = 0x61 */
+            // we don't implement locking but we should at least accept the command
+            if (cmd == 0x61) {
+                DPRINTF("%s: 4th byte of Sector Lock\n", __func__);
+                goto reset_bank;  // command is finished
+            }
+            goto error_flash;
             break;
         case 0xd0:
             if (sector_offset == 0) {
                 pfl->configuration_register = value;
                 DPRINTF("%s: setting new config regsistr: 0x%x\n", __func__, value);
-                pfl->wcycle = 1;
+                pfl->wcycle[bank] = 1;
             } else {
                 DPRINTF("%s: Unexpected command byte: 0x%x\n", __func__, cmd);
-                goto reset_flash;
+                goto reset_bank;
             }
             break;
         default:
@@ -681,20 +712,21 @@ static void pflash_write(pflash_t *pfl, hwaddr offset,
     default:
         /* Should never happen */
         DPRINTF("%s: invalid write state\n",  __func__);
-        goto reset_flash;
+        goto reset_bank;
     }
     return;
 
  error_flash:
     fprintf(stderr, "PFLASH %s: Unimplemented flash cmd sequence "
-                  "(offset 0x%x, wcycle %d cmd 0x%x value 0x%x)"
-                  "\n", __func__, sector_offset, pfl->wcycle, pfl->cmd, value);
+                  "(offset 0x%llx sector offset 0x%x, bank %u pfl->wcycle %d pfl->cmd 0x%x value 0x%x)"
+                  "\n", __func__, offset, sector_offset, bank, pfl->wcycle[bank], pfl->cmd[bank], value);
 
- reset_flash:
+ reset_bank:
     memory_region_rom_device_set_romd(&pfl->mem, true);
 
-    pfl->wcycle = 0;
-    pfl->cmd = 0;
+    pfl->wcycle[bank] = 0;
+    pfl->cmd[bank] = 0;
+    pfl->global_cmd = 0;
 }
 
 
@@ -816,25 +848,24 @@ static void pflash_jedec_realize(DeviceState *dev, Error **errp)
     memory_region_init_rom_device(
         &pfl->mem, OBJECT(dev),
         pfl->be ? &pflash_jedec_ops_be : &pflash_jedec_ops_le, pfl,
-        pfl->name, total_len);
+        pfl->name, total_len, errp);
     vmstate_register_ram(&pfl->mem, DEVICE(pfl));
     pfl->storage = memory_region_get_ram_ptr(&pfl->mem);
     sysbus_init_mmio(SYS_BUS_DEVICE(dev), &pfl->mem);
 
-    if (pfl->bs) {
+    if (pfl->blk) {
         /* read the initial flash content */
-        ret = bdrv_read(pfl->bs, 0, pfl->storage, total_len >> 9);
+        ret = blk_read(pfl->blk, 0, pfl->storage, total_len >> 9);
 
         if (ret < 0) {
             vmstate_unregister_ram(&pfl->mem, DEVICE(pfl));
-            memory_region_destroy(&pfl->mem);
             error_setg(errp, "failed to read the initial flash content");
             return;
         }
     }
 
-    if (pfl->bs) {
-        pfl->ro = bdrv_is_read_only(pfl->bs);
+    if (pfl->blk) {
+        pfl->ro = blk_is_read_only(pfl->blk);
     } else {
         pfl->ro = 0;
     }
@@ -848,9 +879,7 @@ static void pflash_jedec_realize(DeviceState *dev, Error **errp)
 
     pfl->configuration_register = 0xdf48;
 
-    pfl->timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, pflash_timer, pfl);
-    pfl->wcycle = 0;
-    pfl->cmd = 0;
+    pflash_reset_state(pfl);
     pfl->status = 0;
     /* Hardcoded CFI table */
     pfl->cfi_len = 0x52;
@@ -947,7 +976,7 @@ static void pflash_jedec_realize(DeviceState *dev, Error **errp)
 }
 
 static Property pflash_jedec_properties[] = {
-    DEFINE_PROP_DRIVE("drive", struct pflash_t, bs),
+    DEFINE_PROP_DRIVE("drive", struct pflash_t, blk),
     /* num-blocks is the number of blocks actually visible to the guest,
      * ie the total size of the device divided by the sector length.
      * If we're emulating flash devices wired in parallel the actual
@@ -974,6 +1003,7 @@ static Property pflash_jedec_properties[] = {
     DEFINE_PROP_UINT8("width", struct pflash_t, bank_width, 0),
     DEFINE_PROP_UINT8("device-width", struct pflash_t, device_width, 0),
     DEFINE_PROP_UINT8("max-device-width", struct pflash_t, max_device_width, 0),
+    DEFINE_PROP_UINT32("bank-size", struct pflash_t, bank_size, 0),
     DEFINE_PROP_UINT8("big-endian", struct pflash_t, be, 0),
     DEFINE_PROP_UINT16("id0", struct pflash_t, ident0, 0),
     DEFINE_PROP_UINT16("id1", struct pflash_t, ident1, 0),
@@ -1011,19 +1041,20 @@ type_init(pflash_jedec_register_types)
 pflash_t *pflash_jedec_424_register(hwaddr base,
                                 DeviceState *qdev, const char *name,
                                 hwaddr size,
-                                BlockDriverState *bs,
-                                uint32_t sector_len, int nb_blocs,
+                                BlockBackend *blk,
+                                uint32_t sector_len, int nb_blocs, uint32_t bank_size,
                                 int bank_width, uint16_t id0, uint16_t id1,
                                 uint16_t id2, uint16_t id3, int be)
 {
     DeviceState *dev = qdev_create(NULL, TYPE_CFI_PFLASH_JEDEC_424);
 
-    if (bs && qdev_prop_set_drive(dev, "drive", bs)) {
-        abort();
+    if (blk) {
+    	qdev_prop_set_drive_nofail(dev, "drive", blk);
     }
     qdev_prop_set_uint32(dev, "num-blocks", nb_blocs);
     qdev_prop_set_uint64(dev, "sector-length", sector_len);
     qdev_prop_set_uint8(dev, "width", bank_width);
+    qdev_prop_set_uint32(dev, "bank-size", bank_size);
     qdev_prop_set_uint8(dev, "big-endian", !!be);
     qdev_prop_set_uint16(dev, "id0", id0);
     qdev_prop_set_uint16(dev, "id1", id1);

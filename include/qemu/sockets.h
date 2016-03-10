@@ -28,7 +28,6 @@ int inet_aton(const char *cp, struct in_addr *ia);
 
 #include "qemu/option.h"
 #include "qapi/error.h"
-#include "qapi/qmp/qerror.h"
 #include "qapi-types.h"
 
 extern QemuOptsList socket_optslist;
@@ -44,10 +43,17 @@ int socket_set_fast_reuse(int fd);
 int send_all(int fd, const void *buf, int len1);
 int recv_all(int fd, void *buf, int len1, bool single_read);
 
+#ifdef WIN32
+/* Windows has different names for the same constants with the same values */
+#define SHUT_RD   0
+#define SHUT_WR   1
+#define SHUT_RDWR 2
+#endif
+
 /* callback function for nonblocking connect
  * valid fd on success, negative error code on failure
  */
-typedef void NonBlockingConnectHandler(int fd, void *opaque);
+typedef void NonBlockingConnectHandler(int fd, Error *errp, void *opaque);
 
 InetSocketAddress *inet_parse(const char *str, Error **errp);
 int inet_listen_opts(QemuOpts *opts, int port_offset, Error **errp);
@@ -81,5 +87,39 @@ int socket_dgram(SocketAddress *remote, SocketAddress *local, Error **errp);
 /* Old, ipv4 only bits.  Don't use for new code. */
 int parse_host_port(struct sockaddr_in *saddr, const char *str);
 int socket_init(void);
+
+/**
+ * socket_local_address:
+ * @fd: the socket file handle
+ * @errp: pointer to uninitialized error object
+ *
+ * Get the string representation of the local socket
+ * address. A pointer to the allocated address information
+ * struct will be returned, which the caller is required to
+ * release with a call qapi_free_SocketAddress when no
+ * longer required.
+ *
+ * Returns: the socket address struct, or NULL on error
+ */
+SocketAddress *socket_local_address(int fd, Error **errp);
+
+/**
+ * socket_remote_address:
+ * @fd: the socket file handle
+ * @errp: pointer to uninitialized error object
+ *
+ * Get the string representation of the remote socket
+ * address. A pointer to the allocated address information
+ * struct will be returned, which the caller is required to
+ * release with a call qapi_free_SocketAddress when no
+ * longer required.
+ *
+ * Returns: the socket address struct, or NULL on error
+ */
+SocketAddress *socket_remote_address(int fd, Error **errp);
+
+
+void qapi_copy_SocketAddress(SocketAddress **p_dest,
+                             SocketAddress *src);
 
 #endif /* QEMU_SOCKET_H */

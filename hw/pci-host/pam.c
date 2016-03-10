@@ -1,12 +1,12 @@
 /*
- * QEMU i440FX/PIIX3 PCI Bridge Emulation
+ * QEMU Smram/pam logic implementation
  *
  * Copyright (c) 2006 Fabrice Bellard
  * Copyright (c) 2011 Isaku Yamahata <yamahata at valinux co jp>
  *                    VA Linux Systems Japan K.K.
  * Copyright (c) 2012 Jason Baron <jbaron@redhat.com>
  *
- * Split out from piix_pci.c
+ * Split out from piix.c
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,26 +30,6 @@
 #include "qom/object.h"
 #include "sysemu/sysemu.h"
 #include "hw/pci-host/pam.h"
-
-void smram_update(MemoryRegion *smram_region, uint8_t smram,
-                  uint8_t smm_enabled)
-{
-    bool smram_enabled;
-
-    smram_enabled = ((smm_enabled && (smram & SMRAM_G_SMRAME)) ||
-                        (smram & SMRAM_D_OPEN));
-    memory_region_set_enabled(smram_region, !smram_enabled);
-}
-
-void smram_set_smm(uint8_t *host_smm_enabled, int smm, uint8_t smram,
-                   MemoryRegion *smram_region)
-{
-    uint8_t smm_enabled = (smm != 0);
-    if (*host_smm_enabled != smm_enabled) {
-        *host_smm_enabled = smm_enabled;
-        smram_update(smram_region, smram, *host_smm_enabled);
-    }
-}
 
 void init_pam(DeviceState *dev, MemoryRegion *ram_memory,
               MemoryRegion *system_memory, MemoryRegion *pci_address_space,

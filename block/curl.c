@@ -22,11 +22,13 @@
  * THE SOFTWARE.
  */
 #include "qemu-common.h"
+#include "qemu/error-report.h"
 #include "block/block_int.h"
 #include "qapi/qmp/qbool.h"
+#include "qapi/qmp/qstring.h"
 #include <curl/curl.h>
 
-// #define DEBUG
+// #define DEBUG_CURL
 // #define DEBUG_VERBOSE
 
 #ifdef DEBUG_CURL
@@ -63,6 +65,8 @@ static CURLMcode __curl_multi_socket_action(CURLM *multi_handle,
 #define CURL_NUM_ACB    8
 #define SECTOR_SIZE     512
 #define READ_AHEAD_DEFAULT (256 * 1024)
+#define CURL_TIMEOUT_DEFAULT 5
+#define CURL_TIMEOUT_MAX 10000
 
 #define FIND_RET_NONE   0
 #define FIND_RET_OK     1
@@ -71,11 +75,13 @@ static CURLMcode __curl_multi_socket_action(CURLM *multi_handle,
 #define CURL_BLOCK_OPT_URL       "url"
 #define CURL_BLOCK_OPT_READAHEAD "readahead"
 #define CURL_BLOCK_OPT_SSLVERIFY "sslverify"
+#define CURL_BLOCK_OPT_TIMEOUT "timeout"
+#define CURL_BLOCK_OPT_COOKIE    "cookie"
 
 struct BDRVCURLState;
 
 typedef struct CURLAIOCB {
-    BlockDriverAIOCB common;
+    BlockAIOCB common;
     QEMUBH *bh;
     QEMUIOVector *qiov;
 
@@ -109,6 +115,8 @@ typedef struct BDRVCURLState {
     char *url;
     size_t readahead_size;
     bool sslverify;
+    uint64_t timeout;
+    char *cookie;
     bool accept_range;
     AioContext *aio_context;
 } BDRVCURLState;
@@ -146,18 +154,20 @@ static int curl_sock_cb(CURL *curl, curl_socket_t fd, int action,
     DPRINTF("CURL (AIO): Sock action %d on fd %d\n", action, fd);
     switch (action) {
         case CURL_POLL_IN:
-            aio_set_fd_handler(s->aio_context, fd, curl_multi_read,
-                               NULL, state);
+            aio_set_fd_handler(s->aio_context, fd, false,
+                               curl_multi_read, NULL, state);
             break;
         case CURL_POLL_OUT:
-            aio_set_fd_handler(s->aio_context, fd, NULL, curl_multi_do, state);
+            aio_set_fd_handler(s->aio_context, fd, false,
+                               NULL, curl_multi_do, state);
             break;
         case CURL_POLL_INOUT:
-            aio_set_fd_handler(s->aio_context, fd, curl_multi_read,
-                               curl_multi_do, state);
+            aio_set_fd_handler(s->aio_context, fd, false,
+                               curl_multi_read, curl_multi_do, state);
             break;
         case CURL_POLL_REMOVE:
-            aio_set_fd_handler(s->aio_context, fd, NULL, NULL, NULL);
+            aio_set_fd_handler(s->aio_context, fd, false,
+                               NULL, NULL, NULL);
             break;
     }
 
@@ -207,7 +217,7 @@ static size_t curl_read_cb(void *ptr, size_t size, size_t nmemb, void *opaque)
             qemu_iovec_from_buf(acb->qiov, 0, s->orig_buf + acb->start,
                                 acb->end - acb->start);
             acb->common.cb(acb->common.opaque, 0);
-            qemu_aio_release(acb);
+            qemu_aio_unref(acb);
             s->acb[i] = NULL;
         }
     }
@@ -291,6 +301,18 @@ static void curl_multi_check_completion(BDRVCURLState *s)
             /* ACBs for successful messages get completed in curl_read_cb */
             if (msg->data.result != CURLE_OK) {
                 int i;
+                static int errcount = 100;
+
+                /* Don't lose the original error message from curl, since
+                 * it contains extra data.
+                 */
+                if (errcount > 0) {
+                    error_report("curl: %s", state->errmsg);
+                    if (--errcount == 0) {
+                        error_report("curl: further errors suppressed");
+                    }
+                }
+
                 for (i = 0; i < CURL_NUM_ACB; i++) {
                     CURLAIOCB *acb = state->acb[i];
 
@@ -298,8 +320,8 @@ static void curl_multi_check_completion(BDRVCURLState *s)
                         continue;
                     }
 
-                    acb->common.cb(acb->common.opaque, -EIO);
-                    qemu_aio_release(acb);
+                    acb->common.cb(acb->common.opaque, -EPROTO);
+                    qemu_aio_unref(acb);
                     state->acb[i] = NULL;
                 }
             }
@@ -352,7 +374,7 @@ static void curl_multi_timeout_do(void *arg)
 #endif
 }
 
-static CURLState *curl_init_state(BDRVCURLState *s)
+static CURLState *curl_init_state(BlockDriverState *bs, BDRVCURLState *s)
 {
     CURLState *state = NULL;
     int i, j;
@@ -370,7 +392,7 @@ static CURLState *curl_init_state(BDRVCURLState *s)
             break;
         }
         if (!state) {
-            aio_poll(state->s->aio_context, true);
+            aio_poll(bdrv_get_aio_context(bs), true);
         }
     } while(!state);
 
@@ -382,7 +404,10 @@ static CURLState *curl_init_state(BDRVCURLState *s)
         curl_easy_setopt(state->curl, CURLOPT_URL, s->url);
         curl_easy_setopt(state->curl, CURLOPT_SSL_VERIFYPEER,
                          (long) s->sslverify);
-        curl_easy_setopt(state->curl, CURLOPT_TIMEOUT, 5);
+        if (s->cookie) {
+            curl_easy_setopt(state->curl, CURLOPT_COOKIE, s->cookie);
+        }
+        curl_easy_setopt(state->curl, CURLOPT_TIMEOUT, (long)s->timeout);
         curl_easy_setopt(state->curl, CURLOPT_WRITEFUNCTION,
                          (void *)curl_read_cb);
         curl_easy_setopt(state->curl, CURLOPT_WRITEDATA, (void *)state);
@@ -489,6 +514,16 @@ static QemuOptsList runtime_opts = {
             .type = QEMU_OPT_BOOL,
             .help = "Verify SSL certificate"
         },
+        {
+            .name = CURL_BLOCK_OPT_TIMEOUT,
+            .type = QEMU_OPT_NUMBER,
+            .help = "Curl timeout"
+        },
+        {
+            .name = CURL_BLOCK_OPT_COOKIE,
+            .type = QEMU_OPT_STRING,
+            .help = "Pass the cookie or list of cookies with each request"
+        },
         { /* end of list */ }
     },
 };
@@ -501,6 +536,7 @@ static int curl_open(BlockDriverState *bs, QDict *options, int flags,
     QemuOpts *opts;
     Error *local_err = NULL;
     const char *file;
+    const char *cookie;
     double d;
 
     static int inited = 0;
@@ -525,7 +561,17 @@ static int curl_open(BlockDriverState *bs, QDict *options, int flags,
         goto out_noclean;
     }
 
+    s->timeout = qemu_opt_get_number(opts, CURL_BLOCK_OPT_TIMEOUT,
+                                     CURL_TIMEOUT_DEFAULT);
+    if (s->timeout > CURL_TIMEOUT_MAX) {
+        error_setg(errp, "timeout parameter is too large or negative");
+        goto out_noclean;
+    }
+
     s->sslverify = qemu_opt_get_bool(opts, CURL_BLOCK_OPT_SSLVERIFY, true);
+
+    cookie = qemu_opt_get(opts, CURL_BLOCK_OPT_COOKIE);
+    s->cookie = g_strdup(cookie);
 
     file = qemu_opt_get(opts, CURL_BLOCK_OPT_URL);
     if (file == NULL) {
@@ -541,7 +587,7 @@ static int curl_open(BlockDriverState *bs, QDict *options, int flags,
     DPRINTF("CURL: Opening %s\n", file);
     s->aio_context = bdrv_get_aio_context(bs);
     s->url = g_strdup(file);
-    state = curl_init_state(s);
+    state = curl_init_state(bs, s);
     if (!state)
         goto out_noclean;
 
@@ -582,19 +628,14 @@ out:
     curl_easy_cleanup(state->curl);
     state->curl = NULL;
 out_noclean:
+    g_free(s->cookie);
     g_free(s->url);
     qemu_opts_del(opts);
     return -EINVAL;
 }
 
-static void curl_aio_cancel(BlockDriverAIOCB *blockacb)
-{
-    // Do we have to implement canceling? Seems to work without...
-}
-
 static const AIOCBInfo curl_aiocb_info = {
     .aiocb_size         = sizeof(CURLAIOCB),
-    .cancel             = curl_aio_cancel,
 };
 
 
@@ -616,7 +657,7 @@ static void curl_readv_bh_cb(void *p)
     // we can just call the callback and be done.
     switch (curl_find_buf(s, start, acb->nb_sectors * SECTOR_SIZE, acb)) {
         case FIND_RET_OK:
-            qemu_aio_release(acb);
+            qemu_aio_unref(acb);
             // fall through
         case FIND_RET_WAIT:
             return;
@@ -625,10 +666,10 @@ static void curl_readv_bh_cb(void *p)
     }
 
     // No cache found, so let's start a new request
-    state = curl_init_state(s);
+    state = curl_init_state(acb->common.bs, s);
     if (!state) {
         acb->common.cb(acb->common.opaque, -EIO);
-        qemu_aio_release(acb);
+        qemu_aio_unref(acb);
         return;
     }
 
@@ -640,7 +681,13 @@ static void curl_readv_bh_cb(void *p)
     state->buf_start = start;
     state->buf_len = acb->end + s->readahead_size;
     end = MIN(start + state->buf_len, s->len) - 1;
-    state->orig_buf = g_malloc(state->buf_len);
+    state->orig_buf = g_try_malloc(state->buf_len);
+    if (state->buf_len && state->orig_buf == NULL) {
+        curl_clean_state(state);
+        acb->common.cb(acb->common.opaque, -ENOMEM);
+        qemu_aio_unref(acb);
+        return;
+    }
     state->acb[0] = acb;
 
     snprintf(state->range, 127, "%zd-%zd", start, end);
@@ -654,9 +701,9 @@ static void curl_readv_bh_cb(void *p)
     curl_multi_socket_action(s->multi, CURL_SOCKET_TIMEOUT, 0, &running);
 }
 
-static BlockDriverAIOCB *curl_aio_readv(BlockDriverState *bs,
+static BlockAIOCB *curl_aio_readv(BlockDriverState *bs,
         int64_t sector_num, QEMUIOVector *qiov, int nb_sectors,
-        BlockDriverCompletionFunc *cb, void *opaque)
+        BlockCompletionFunc *cb, void *opaque)
 {
     CURLAIOCB *acb;
 
@@ -678,6 +725,7 @@ static void curl_close(BlockDriverState *bs)
     DPRINTF("CURL: Close\n");
     curl_detach_aio_context(bs);
 
+    g_free(s->cookie);
     g_free(s->url);
 }
 

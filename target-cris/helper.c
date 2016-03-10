@@ -84,8 +84,8 @@ int cris_cpu_handle_mmu_fault(CPUState *cs, vaddr address, int rw,
     int r = -1;
     target_ulong phy;
 
-    D(printf("%s addr=%" VADDR_PRIx " pc=%x rw=%x\n",
-             __func__, address, env->pc, rw));
+    qemu_log_mask(CPU_LOG_MMU, "%s addr=%" VADDR_PRIx " pc=%x rw=%x\n",
+            __func__, address, env->pc, rw);
     miss = cris_mmu_translate(&res, env, address & TARGET_PAGE_MASK,
                               rw, mmu_idx, 0);
     if (miss) {
@@ -112,9 +112,10 @@ int cris_cpu_handle_mmu_fault(CPUState *cs, vaddr address, int rw,
         r = 0;
     }
     if (r > 0) {
-        D_LOG("%s returns %d irqreq=%x addr=%" VADDR_PRIx " phy=%x vec=%x"
-              " pc=%x\n", __func__, r, cs->interrupt_request, address, res.phy,
-              res.bf_vec, env->pc);
+        qemu_log_mask(CPU_LOG_MMU,
+                "%s returns %d irqreq=%x addr=%" VADDR_PRIx " phy=%x vec=%x"
+                " pc=%x\n", __func__, r, cs->interrupt_request, address,
+                res.phy, res.bf_vec, env->pc);
     }
     return r;
 }
@@ -283,3 +284,34 @@ hwaddr cris_cpu_get_phys_page_debug(CPUState *cs, vaddr addr)
     return phy;
 }
 #endif
+
+bool cris_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
+{
+    CPUClass *cc = CPU_GET_CLASS(cs);
+    CRISCPU *cpu = CRIS_CPU(cs);
+    CPUCRISState *env = &cpu->env;
+    bool ret = false;
+
+    if (interrupt_request & CPU_INTERRUPT_HARD
+        && (env->pregs[PR_CCS] & I_FLAG)
+        && !env->locked_irq) {
+        cs->exception_index = EXCP_IRQ;
+        cc->do_interrupt(cs);
+        ret = true;
+    }
+    if (interrupt_request & CPU_INTERRUPT_NMI) {
+        unsigned int m_flag_archval;
+        if (env->pregs[PR_VR] < 32) {
+            m_flag_archval = M_FLAG_V10;
+        } else {
+            m_flag_archval = M_FLAG_V32;
+        }
+        if ((env->pregs[PR_CCS] & m_flag_archval)) {
+            cs->exception_index = EXCP_NMI;
+            cc->do_interrupt(cs);
+            ret = true;
+        }
+    }
+
+    return ret;
+}

@@ -35,11 +35,12 @@ static inline bool qemu_log_enabled(void)
 #define CPU_LOG_INT        (1 << 4)
 #define CPU_LOG_EXEC       (1 << 5)
 #define CPU_LOG_PCALL      (1 << 6)
-#define CPU_LOG_IOPORT     (1 << 7)
 #define CPU_LOG_TB_CPU     (1 << 8)
 #define CPU_LOG_RESET      (1 << 9)
 #define LOG_UNIMP          (1 << 10)
 #define LOG_GUEST_ERROR    (1 << 11)
+#define CPU_LOG_MMU        (1 << 12)
+#define CPU_LOG_TB_NOCHAIN (1 << 13)
 
 /* Returns true if a bit is set in the current loglevel mask
  */
@@ -103,10 +104,10 @@ static inline void log_cpu_state_mask(int mask, CPUState *cpu, int flags)
 
 #ifdef NEED_CPU_H
 /* disas() and target_disas() to qemu_logfile: */
-static inline void log_target_disas(CPUArchState *env, target_ulong start,
+static inline void log_target_disas(CPUState *cpu, target_ulong start,
                                     target_ulong len, int flags)
 {
-    target_disas(qemu_logfile, env, start, len, flags);
+    target_disas(qemu_logfile, cpu, start, len, flags);
 }
 
 static inline void log_disas(void *code, unsigned long size)

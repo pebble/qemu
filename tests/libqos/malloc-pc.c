@@ -21,51 +21,32 @@
 
 #define PAGE_SIZE (4096)
 
-typedef struct PCAlloc
+/*
+ * Mostly for valgrind happiness, but it does offer
+ * a chokepoint for debugging guest memory leaks, too.
+ */
+void pc_alloc_uninit(QGuestAllocator *allocator)
 {
-    QGuestAllocator alloc;
-
-    uint64_t start;
-    uint64_t end;
-} PCAlloc;
-
-static uint64_t pc_alloc(QGuestAllocator *allocator, size_t size)
-{
-    PCAlloc *s = container_of(allocator, PCAlloc, alloc);
-    uint64_t addr;
-
-
-    size += (PAGE_SIZE - 1);
-    size &= PAGE_SIZE;
-
-    g_assert_cmpint((s->start + size), <=, s->end);
-
-    addr = s->start;
-    s->start += size;
-
-    return addr;
+    alloc_uninit(allocator);
 }
 
-static void pc_free(QGuestAllocator *allocator, uint64_t addr)
+QGuestAllocator *pc_alloc_init_flags(QAllocOpts flags)
 {
-}
-
-QGuestAllocator *pc_alloc_init(void)
-{
-    PCAlloc *s = g_malloc0(sizeof(*s));
+    QGuestAllocator *s;
     uint64_t ram_size;
     QFWCFG *fw_cfg = pc_fw_cfg_init();
 
-    s->alloc.alloc = pc_alloc;
-    s->alloc.free = pc_free;
-
     ram_size = qfw_cfg_get_u64(fw_cfg, FW_CFG_RAM_SIZE);
+    s = alloc_init_flags(flags, 1 << 20, MIN(ram_size, 0xE0000000));
+    alloc_set_page_size(s, PAGE_SIZE);
 
-    /* Start at 1MB */
-    s->start = 1 << 20;
+    /* clean-up */
+    g_free(fw_cfg);
 
-    /* Respect PCI hole */
-    s->end = MIN(ram_size, 0xE0000000);
+    return s;
+}
 
-    return &s->alloc;
+inline QGuestAllocator *pc_alloc_init(void)
+{
+    return pc_alloc_init_flags(ALLOC_NO_FLAGS);
 }

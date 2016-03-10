@@ -30,7 +30,6 @@
 
 #define ALIGNED_ONLY
 #define TARGET_LONG_BITS 32
-#define ELF_MACHINE EM_XTENSA
 
 #define CPUArchState struct CPUXtensaState
 
@@ -38,8 +37,6 @@
 #include "qemu-common.h"
 #include "exec/cpu-defs.h"
 #include "fpu/softfloat.h"
-
-#define TARGET_HAS_ICE 1
 
 #define NB_MMU_MODES 4
 
@@ -67,6 +64,7 @@ enum {
     XTENSA_OPTION_MP_SYNCHRO,
     XTENSA_OPTION_CONDITIONAL_STORE,
     XTENSA_OPTION_ATOMCTL,
+    XTENSA_OPTION_DEPBITS,
 
     /* Interrupts and exceptions */
     XTENSA_OPTION_EXCEPTION,
@@ -266,6 +264,7 @@ typedef enum {
     INTTYPE_TIMER,
     INTTYPE_DEBUG,
     INTTYPE_WRITE_ERR,
+    INTTYPE_PROFILING,
     INTTYPE_MAX
 } interrupt_type;
 
@@ -288,6 +287,7 @@ typedef struct XtensaGdbReg {
     int targno;
     int type;
     int group;
+    unsigned size;
 } XtensaGdbReg;
 
 typedef struct XtensaGdbRegmap {
@@ -337,6 +337,18 @@ typedef struct XtensaConfigList {
     struct XtensaConfigList *next;
 } XtensaConfigList;
 
+#ifdef HOST_WORDS_BIGENDIAN
+enum {
+    FP_F32_HIGH,
+    FP_F32_LOW,
+};
+#else
+enum {
+    FP_F32_LOW,
+    FP_F32_HIGH,
+};
+#endif
+
 typedef struct CPUXtensaState {
     const XtensaConfig *config;
     uint32_t regs[16];
@@ -344,7 +356,10 @@ typedef struct CPUXtensaState {
     uint32_t sregs[256];
     uint32_t uregs[256];
     uint32_t phys_regs[MAX_NAREG];
-    float32 fregs[16];
+    union {
+        float32 f32[2];
+        float64 f64;
+    } fregs[16];
     float_status fp_status;
 
     xtensa_tlb_entry itlb[7][MAX_TLB_WAY_SIZE];
@@ -368,7 +383,6 @@ typedef struct CPUXtensaState {
 #include "cpu-qom.h"
 
 #define cpu_exec cpu_xtensa_exec
-#define cpu_gen_code cpu_xtensa_gen_code
 #define cpu_signal_handler cpu_xtensa_signal_handler
 #define cpu_list xtensa_cpu_list
 
@@ -380,18 +394,12 @@ typedef struct CPUXtensaState {
 
 XtensaCPU *cpu_xtensa_init(const char *cpu_model);
 
-static inline CPUXtensaState *cpu_init(const char *cpu_model)
-{
-    XtensaCPU *cpu = cpu_xtensa_init(cpu_model);
-    if (cpu == NULL) {
-        return NULL;
-    }
-    return &cpu->env;
-}
+#define cpu_init(cpu_model) CPU(cpu_xtensa_init(cpu_model))
 
 void xtensa_translate_init(void);
-void xtensa_breakpoint_handler(CPUXtensaState *env);
-int cpu_xtensa_exec(CPUXtensaState *s);
+void xtensa_breakpoint_handler(CPUState *cs);
+int cpu_xtensa_exec(CPUState *cpu);
+void xtensa_finalize_config(XtensaConfig *config);
 void xtensa_register_core(XtensaConfigList *node);
 void check_interrupts(CPUXtensaState *s);
 void xtensa_irq_init(CPUXtensaState *env);
@@ -471,13 +479,19 @@ static inline xtensa_tlb_entry *xtensa_tlb_get_entry(CPUXtensaState *env,
         env->itlb[wi] + ei;
 }
 
+static inline uint32_t xtensa_replicate_windowstart(CPUXtensaState *env)
+{
+    return env->sregs[WINDOW_START] |
+        (env->sregs[WINDOW_START] << env->config->nareg / 4);
+}
+
 /* MMU modes definitions */
 #define MMU_MODE0_SUFFIX _ring0
 #define MMU_MODE1_SUFFIX _ring1
 #define MMU_MODE2_SUFFIX _ring2
 #define MMU_MODE3_SUFFIX _ring3
 
-static inline int cpu_mmu_index(CPUXtensaState *env)
+static inline int cpu_mmu_index(CPUXtensaState *env, bool ifetch)
 {
     return xtensa_get_cring(env);
 }
@@ -490,6 +504,8 @@ static inline int cpu_mmu_index(CPUXtensaState *env)
 #define XTENSA_TBFLAG_CPENABLE_MASK 0x3fc0
 #define XTENSA_TBFLAG_CPENABLE_SHIFT 6
 #define XTENSA_TBFLAG_EXCEPTION 0x4000
+#define XTENSA_TBFLAG_WINDOW_MASK 0x18000
+#define XTENSA_TBFLAG_WINDOW_SHIFT 15
 
 static inline void cpu_get_tb_cpu_state(CPUXtensaState *env, target_ulong *pc,
         target_ulong *cs_base, int *flags)
@@ -520,6 +536,16 @@ static inline void cpu_get_tb_cpu_state(CPUXtensaState *env, target_ulong *pc,
     }
     if (cs->singlestep_enabled && env->exception_taken) {
         *flags |= XTENSA_TBFLAG_EXCEPTION;
+    }
+    if (xtensa_option_enabled(env->config, XTENSA_OPTION_WINDOWED_REGISTER) &&
+        (env->sregs[PS] & (PS_WOE | PS_EXCM)) == PS_WOE) {
+        uint32_t windowstart = xtensa_replicate_windowstart(env) >>
+            (env->sregs[WINDOW_BASE] + 1);
+        uint32_t w = ctz32(windowstart | 0x8);
+
+        *flags |= w << XTENSA_TBFLAG_WINDOW_SHIFT;
+    } else {
+        *flags |= 3 << XTENSA_TBFLAG_WINDOW_SHIFT;
     }
 }
 

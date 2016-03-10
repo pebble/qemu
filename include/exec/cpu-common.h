@@ -13,6 +13,8 @@
 
 #include "qemu/bswap.h"
 #include "qemu/queue.h"
+#include "qemu/fprintf-fn.h"
+#include "qemu/typedefs.h"
 
 /**
  * CPUListState:
@@ -25,6 +27,12 @@ typedef struct CPUListState {
     fprintf_function cpu_fprintf;
     FILE *file;
 } CPUListState;
+
+typedef enum MMUAccessType {
+    MMU_DATA_LOAD  = 0,
+    MMU_DATA_STORE = 1,
+    MMU_INST_FETCH = 2
+} MMUAccessType;
 
 #if !defined(CONFIG_USER_ONLY)
 
@@ -46,6 +54,7 @@ typedef uintptr_t ram_addr_t;
 #endif
 
 extern ram_addr_t ram_size;
+ram_addr_t get_current_ram_size(void);
 
 /* memory API */
 
@@ -55,8 +64,12 @@ typedef uint32_t CPUReadMemoryFunc(void *opaque, hwaddr addr);
 void qemu_ram_remap(ram_addr_t addr, ram_addr_t length);
 /* This should not be used by devices.  */
 MemoryRegion *qemu_ram_addr_from_host(void *ptr, ram_addr_t *ram_addr);
+RAMBlock *qemu_ram_block_by_name(const char *name);
+RAMBlock *qemu_ram_block_from_host(void *ptr, bool round_offset,
+                                   ram_addr_t *ram_addr, ram_addr_t *offset);
 void qemu_ram_set_idstr(ram_addr_t addr, const char *name, DeviceState *dev);
 void qemu_ram_unset_idstr(ram_addr_t addr);
+const char *qemu_ram_get_idstr(RAMBlock *rb);
 
 void cpu_physical_memory_rw(hwaddr addr, uint8_t *buf,
                             int len, int is_write);
@@ -75,7 +88,8 @@ void *cpu_physical_memory_map(hwaddr addr,
                               int is_write);
 void cpu_physical_memory_unmap(void *buffer, hwaddr len,
                                int is_write, hwaddr access_len);
-void *cpu_register_map_client(void *opaque, void (*callback)(void *opaque));
+void cpu_register_map_client(QEMUBH *bh);
+void cpu_unregister_map_client(QEMUBH *bh);
 
 bool cpu_physical_memory_is_io(hwaddr phys_addr);
 
@@ -118,10 +132,10 @@ void cpu_flush_icache_range(hwaddr start, int len);
 extern struct MemoryRegion io_mem_rom;
 extern struct MemoryRegion io_mem_notdirty;
 
-typedef void (RAMBlockIterFunc)(void *host_addr,
+typedef int (RAMBlockIterFunc)(const char *block_name, void *host_addr,
     ram_addr_t offset, ram_addr_t length, void *opaque);
 
-void qemu_ram_foreach_block(RAMBlockIterFunc func, void *opaque);
+int qemu_ram_foreach_block(RAMBlockIterFunc func, void *opaque);
 
 #endif
 

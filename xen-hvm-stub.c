@@ -30,10 +30,6 @@ void xen_hvm_inject_msi(uint64_t addr, uint32_t data)
 {
 }
 
-void xen_cmos_set_s3_resume(void *opaque, int irq, int level)
-{
-}
-
 void xen_ram_alloc(ram_addr_t ram_addr, ram_addr_t size, MemoryRegion *mr)
 {
 }
@@ -51,8 +47,7 @@ void xen_modified_memory(ram_addr_t start, ram_addr_t length)
 {
 }
 
-int xen_hvm_init(ram_addr_t *below_4g_mem_size, ram_addr_t *above_4g_mem_size,
-                 MemoryRegion **ram_memory)
+int xen_hvm_init(PCMachineState *pcms, MemoryRegion **ram_memory)
 {
     return 0;
 }

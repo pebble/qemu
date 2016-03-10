@@ -27,7 +27,7 @@
 #include <hw/i386/pc.h>
 #include <hw/pci/pci.h>
 #include <hw/isa/isa.h>
-#include "sysemu/blockdev.h"
+#include "sysemu/block-backend.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/dma.h"
 
@@ -143,12 +143,11 @@ static void pci_piix_init_ports(PCIIDEState *d) {
 
         bmdma_init(&d->bus[i], &d->bmdma[i], d);
         d->bmdma[i].bus = &d->bus[i];
-        qemu_add_vm_change_state_handler(d->bus[i].dma->ops->restart_cb,
-                                         &d->bmdma[i].dma);
+        ide_register_restart_cb(&d->bus[i]);
     }
 }
 
-static int pci_piix_ide_initfn(PCIDevice *dev)
+static void pci_piix_ide_realize(PCIDevice *dev, Error **errp)
 {
     PCIIDEState *d = PCI_IDE(dev);
     uint8_t *pci_conf = dev->config;
@@ -163,28 +162,33 @@ static int pci_piix_ide_initfn(PCIDevice *dev)
     vmstate_register(DEVICE(dev), 0, &vmstate_ide_pci, d);
 
     pci_piix_init_ports(d);
-
-    return 0;
 }
 
 int pci_piix3_xen_ide_unplug(DeviceState *dev)
 {
     PCIIDEState *pci_ide;
     DriveInfo *di;
-    int i = 0;
+    int i;
+    IDEDevice *idedev;
 
     pci_ide = PCI_IDE(dev);
 
-    for (; i < 3; i++) {
+    for (i = 0; i < 4; i++) {
         di = drive_get_by_index(IF_IDE, i);
         if (di != NULL && !di->media_cd) {
-            DeviceState *ds = bdrv_get_attached_dev(di->bdrv);
+            BlockBackend *blk = blk_by_legacy_dinfo(di);
+            DeviceState *ds = blk_get_attached_dev(blk);
             if (ds) {
-                bdrv_detach_dev(di->bdrv, ds);
+                blk_detach_dev(blk, ds);
             }
-            bdrv_close(di->bdrv);
-            pci_ide->bus[di->bus].ifs[di->unit].bs = NULL;
-            drive_del(di);
+            pci_ide->bus[di->bus].ifs[di->unit].blk = NULL;
+            if (!(i % 2)) {
+                idedev = pci_ide->bus[di->bus].master;
+            } else {
+                idedev = pci_ide->bus[di->bus].slave;
+            }
+            idedev->conf.blk = NULL;
+            blk_unref(blk);
         }
     }
     qdev_reset_all(DEVICE(dev));
@@ -207,11 +211,8 @@ static void pci_piix_ide_exitfn(PCIDevice *dev)
 
     for (i = 0; i < 2; ++i) {
         memory_region_del_subregion(&d->bmdma_bar, &d->bmdma[i].extra_io);
-        memory_region_destroy(&d->bmdma[i].extra_io);
         memory_region_del_subregion(&d->bmdma_bar, &d->bmdma[i].addr_ioport);
-        memory_region_destroy(&d->bmdma[i].addr_ioport);
     }
-    memory_region_destroy(&d->bmdma_bar);
 }
 
 /* hd_table must contain 4 block drivers */
@@ -241,7 +242,7 @@ static void piix3_ide_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = pci_piix_ide_initfn;
+    k->realize = pci_piix_ide_realize;
     k->exit = pci_piix_ide_exitfn;
     k->vendor_id = PCI_VENDOR_ID_INTEL;
     k->device_id = PCI_DEVICE_ID_INTEL_82371SB_1;
@@ -261,7 +262,7 @@ static void piix3_ide_xen_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = pci_piix_ide_initfn;
+    k->realize = pci_piix_ide_realize;
     k->vendor_id = PCI_VENDOR_ID_INTEL;
     k->device_id = PCI_DEVICE_ID_INTEL_82371SB_1;
     k->class_id = PCI_CLASS_STORAGE_IDE;
@@ -279,7 +280,7 @@ static void piix4_ide_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = pci_piix_ide_initfn;
+    k->realize = pci_piix_ide_realize;
     k->exit = pci_piix_ide_exitfn;
     k->vendor_id = PCI_VENDOR_ID_INTEL;
     k->device_id = PCI_DEVICE_ID_INTEL_82371AB;

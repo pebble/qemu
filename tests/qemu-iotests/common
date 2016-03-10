@@ -32,6 +32,7 @@ check=${check-true}
 
 diff="diff -u"
 verbose=false
+debug=false
 group=false
 xgroup=false
 imgopts=false
@@ -40,7 +41,6 @@ sortme=false
 expunge=true
 have_test_arg=false
 randomize=false
-valgrind=false
 cachemode=false
 rm -f $tmp.list $tmp.tmp $tmp.sed
 
@@ -51,6 +51,8 @@ export IMGOPTS=""
 export CACHEMODE="writeback"
 export QEMU_IO_OPTIONS=""
 export CACHEMODE_IS_DEFAULT=true
+export QEMU_OPTIONS="-nodefaults"
+export VALGRIND_QEMU=
 
 for r
 do
@@ -132,11 +134,11 @@ s/ .*//p
 
 common options
     -v                  verbose
+    -d                  debug
 
 check options
     -raw                test raw (default)
     -bochs              test bochs
-    -cow                test cow
     -cloop              test cloop
     -parallels          test parallels
     -qcow               test qcow
@@ -152,6 +154,7 @@ check options
     -nbd                test nbd
     -ssh                test ssh
     -nfs                test nfs
+    -archipelago        test archipelago
     -xdiff              graphical mode diff
     -nocache            use O_DIRECT on backing file
     -misalign           misalign memory allocations
@@ -178,11 +181,6 @@ testlist options
         -bochs)
             IMGFMT=bochs
             IMGFMT_GENERIC=false
-            xpand=false
-            ;;
-
-        -cow)
-            IMGFMT=cow
             xpand=false
             ;;
 
@@ -263,6 +261,11 @@ testlist options
             xpand=false
             ;;
 
+        -archipelago)
+            IMGPROTO=archipelago
+            xpand=false
+            ;;
+
         -nocache)
             CACHEMODE="none"
             CACHEMODE_IS_DEFAULT=false
@@ -275,7 +278,7 @@ testlist options
             ;;
 
         -valgrind)
-            valgrind=true
+            VALGRIND_QEMU='y'
             xpand=false
             ;;
 
@@ -289,10 +292,10 @@ testlist options
 
             if [ ! -z "$DISPLAY" ]
             then
-                which xdiff >/dev/null 2>&1 && diff=xdiff
-                which gdiff >/dev/null 2>&1 && diff=gdiff
-                which tkdiff >/dev/null 2>&1 && diff=tkdiff
-                which xxdiff >/dev/null 2>&1 && diff=xxdiff
+                command -v xdiff >/dev/null 2>&1 && diff=xdiff
+                command -v gdiff >/dev/null 2>&1 && diff=gdiff
+                command -v tkdiff >/dev/null 2>&1 && diff=tkdiff
+                command -v xxdiff >/dev/null 2>&1 && diff=xxdiff
             fi
             ;;
 
@@ -320,6 +323,10 @@ testlist options
 
         -v)
             verbose=true
+            xpand=false
+            ;;
+        -d)
+            debug=true
             xpand=false
             ;;
         -x)        # -x group ... exclude from group file
@@ -376,16 +383,22 @@ BEGIN        { for (t='$start'; t<='$end'; t++) printf "%03d\n",t }' \
                     echo $id >>$tmp.list
                 else
                     # oops
-                    echo "$id - unknown test, ignored"
+                    if [ "$start" == "$end" -a "$id" == "$end" ]
+                    then
+                        echo "$id - unknown test"
+                        exit 1
+                    else
+                        echo "$id - unknown test, ignored"
+                    fi
                 fi
             fi
-        done
+        done || exit 1
     fi
 
 done
 
 # Set qemu-io cache mode with $CACHEMODE we have
-QEMU_IO_OPTIONS="$QEMU_IO_OPTIONS --cache $CACHEMODE"
+QEMU_IO_OPTIONS="$QEMU_IO_OPTIONS -f $IMGFMT --cache $CACHEMODE"
 
 # Set default options for qemu-img create -o if they were not specified
 _set_default_imgopts
@@ -422,9 +435,4 @@ fi
 
 if [ "$IMGPROTO" = "nbd" ] ; then
     [ "$QEMU_NBD" = "" ] && _fatal "qemu-nbd not found"
-fi
-
-if $valgrind; then
-    export REAL_QEMU_IO="$QEMU_IO_PROG"
-    export QEMU_IO_PROG=valgrind_qemu_io
 fi

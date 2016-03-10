@@ -103,6 +103,9 @@ typedef struct {
     CharDriverState *cs;
 } USBSerialState;
 
+#define TYPE_USB_SERIAL "usb-serial-dev"
+#define USB_SERIAL_DEV(obj) OBJECT_CHECK(USBSerialState, (obj), TYPE_USB_SERIAL)
+
 enum {
     STR_MANUFACTURER = 1,
     STR_PRODUCT_SERIAL,
@@ -460,7 +463,7 @@ static void usb_serial_event(void *opaque, int event)
             break;
         case CHR_EVENT_OPENED:
             if (!s->dev.attached) {
-                usb_device_attach(&s->dev);
+                usb_device_attach(&s->dev, &error_abort);
             }
             break;
         case CHR_EVENT_CLOSED:
@@ -471,17 +474,24 @@ static void usb_serial_event(void *opaque, int event)
     }
 }
 
-static int usb_serial_initfn(USBDevice *dev)
+static void usb_serial_realize(USBDevice *dev, Error **errp)
 {
-    USBSerialState *s = DO_UPCAST(USBSerialState, dev, dev);
+    USBSerialState *s = USB_SERIAL_DEV(dev);
+    Error *local_err = NULL;
 
     usb_desc_create_serial(dev);
     usb_desc_init(dev);
     dev->auto_attach = 0;
 
     if (!s->cs) {
-        error_report("Property chardev is required");
-        return -1;
+        error_setg(errp, "Property chardev is required");
+        return;
+    }
+
+    usb_check_attach(dev, &local_err);
+    if (local_err) {
+        error_propagate(errp, local_err);
+        return;
     }
 
     qemu_chr_add_handlers(s->cs, usb_serial_can_read, usb_serial_read,
@@ -489,9 +499,8 @@ static int usb_serial_initfn(USBDevice *dev)
     usb_serial_handle_reset(dev);
 
     if (s->cs->be_open && !dev->attached) {
-        usb_device_attach(dev);
+        usb_device_attach(dev, &error_abort);
     }
-    return 0;
 }
 
 static USBDevice *usb_serial_init(USBBus *bus, const char *filename)
@@ -538,16 +547,11 @@ static USBDevice *usb_serial_init(USBBus *bus, const char *filename)
         return NULL;
 
     dev = usb_create(bus, "usb-serial");
-    if (!dev) {
-        return NULL;
-    }
     qdev_prop_set_chr(&dev->qdev, "chardev", cdrv);
     if (vendorid)
         qdev_prop_set_uint16(&dev->qdev, "vendorid", vendorid);
     if (productid)
         qdev_prop_set_uint16(&dev->qdev, "productid", productid);
-    qdev_init_nofail(&dev->qdev);
-
     return dev;
 }
 
@@ -562,8 +566,6 @@ static USBDevice *usb_braille_init(USBBus *bus, const char *unused)
 
     dev = usb_create(bus, "usb-braille");
     qdev_prop_set_chr(&dev->qdev, "chardev", cdrv);
-    qdev_init_nofail(&dev->qdev);
-
     return dev;
 }
 
@@ -577,26 +579,40 @@ static Property serial_properties[] = {
     DEFINE_PROP_END_OF_LIST(),
 };
 
+static void usb_serial_dev_class_init(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    USBDeviceClass *uc = USB_DEVICE_CLASS(klass);
+
+    uc->realize        = usb_serial_realize;
+    uc->handle_reset   = usb_serial_handle_reset;
+    uc->handle_control = usb_serial_handle_control;
+    uc->handle_data    = usb_serial_handle_data;
+    dc->vmsd = &vmstate_usb_serial;
+    set_bit(DEVICE_CATEGORY_INPUT, dc->categories);
+}
+
+static const TypeInfo usb_serial_dev_type_info = {
+    .name = TYPE_USB_SERIAL,
+    .parent = TYPE_USB_DEVICE,
+    .instance_size = sizeof(USBSerialState),
+    .abstract = true,
+    .class_init = usb_serial_dev_class_init,
+};
+
 static void usb_serial_class_initfn(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     USBDeviceClass *uc = USB_DEVICE_CLASS(klass);
 
-    uc->init = usb_serial_initfn;
     uc->product_desc   = "QEMU USB Serial";
     uc->usb_desc       = &desc_serial;
-    uc->handle_reset   = usb_serial_handle_reset;
-    uc->handle_control = usb_serial_handle_control;
-    uc->handle_data    = usb_serial_handle_data;
-    dc->vmsd = &vmstate_usb_serial;
     dc->props = serial_properties;
-    set_bit(DEVICE_CATEGORY_INPUT, dc->categories);
 }
 
 static const TypeInfo serial_info = {
     .name          = "usb-serial",
-    .parent        = TYPE_USB_DEVICE,
-    .instance_size = sizeof(USBSerialState),
+    .parent        = TYPE_USB_SERIAL,
     .class_init    = usb_serial_class_initfn,
 };
 
@@ -610,26 +626,20 @@ static void usb_braille_class_initfn(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     USBDeviceClass *uc = USB_DEVICE_CLASS(klass);
 
-    uc->init           = usb_serial_initfn;
     uc->product_desc   = "QEMU USB Braille";
     uc->usb_desc       = &desc_braille;
-    uc->handle_reset   = usb_serial_handle_reset;
-    uc->handle_control = usb_serial_handle_control;
-    uc->handle_data    = usb_serial_handle_data;
-    dc->vmsd = &vmstate_usb_serial;
     dc->props = braille_properties;
-    set_bit(DEVICE_CATEGORY_INPUT, dc->categories);
 }
 
 static const TypeInfo braille_info = {
     .name          = "usb-braille",
-    .parent        = TYPE_USB_DEVICE,
-    .instance_size = sizeof(USBSerialState),
+    .parent        = TYPE_USB_SERIAL,
     .class_init    = usb_braille_class_initfn,
 };
 
 static void usb_serial_register_types(void)
 {
+    type_register_static(&usb_serial_dev_type_info);
     type_register_static(&serial_info);
     usb_legacy_register("usb-serial", "serial", usb_serial_init);
     type_register_static(&braille_info);

@@ -51,17 +51,17 @@ bool kvm_arm_get_host_cpu_features(ARMHostCPUClass *ahcc)
     struct kvm_one_reg idregs[] = {
         {
             .id = KVM_REG_ARM | KVM_REG_SIZE_U32
-            | ENCODE_CP_REG(15, 0, 0, 0, 0, 0),
+            | ENCODE_CP_REG(15, 0, 0, 0, 0, 0, 0),
             .addr = (uintptr_t)&midr,
         },
         {
             .id = KVM_REG_ARM | KVM_REG_SIZE_U32
-            | ENCODE_CP_REG(15, 0, 0, 1, 0, 0),
+            | ENCODE_CP_REG(15, 0, 0, 0, 1, 0, 0),
             .addr = (uintptr_t)&id_pfr0,
         },
         {
             .id = KVM_REG_ARM | KVM_REG_SIZE_U32
-            | ENCODE_CP_REG(15, 0, 0, 2, 0, 0),
+            | ENCODE_CP_REG(15, 0, 0, 0, 2, 0, 0),
             .addr = (uintptr_t)&id_isar0,
         },
         {
@@ -138,7 +138,7 @@ bool kvm_arm_get_host_cpu_features(ARMHostCPUClass *ahcc)
     return true;
 }
 
-static bool reg_syncs_via_tuple_list(uint64_t regidx)
+bool kvm_arm_reg_syncs_via_cpreg_list(uint64_t regidx)
 {
     /* Return true if the regidx is a register we should synchronize
      * via the cpreg_tuples array (ie is not a core reg we sync by
@@ -153,24 +153,42 @@ static bool reg_syncs_via_tuple_list(uint64_t regidx)
     }
 }
 
-static int compare_u64(const void *a, const void *b)
+typedef struct CPRegStateLevel {
+    uint64_t regidx;
+    int level;
+} CPRegStateLevel;
+
+/* All coprocessor registers not listed in the following table are assumed to
+ * be of the level KVM_PUT_RUNTIME_STATE. If a register should be written less
+ * often, you must add it to this table with a state of either
+ * KVM_PUT_RESET_STATE or KVM_PUT_FULL_STATE.
+ */
+static const CPRegStateLevel non_runtime_cpregs[] = {
+    { KVM_REG_ARM_TIMER_CNT, KVM_PUT_FULL_STATE },
+};
+
+int kvm_arm_cpreg_level(uint64_t regidx)
 {
-    if (*(uint64_t *)a > *(uint64_t *)b) {
-        return 1;
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(non_runtime_cpregs); i++) {
+        const CPRegStateLevel *l = &non_runtime_cpregs[i];
+        if (l->regidx == regidx) {
+            return l->level;
+        }
     }
-    if (*(uint64_t *)a < *(uint64_t *)b) {
-        return -1;
-    }
-    return 0;
+
+    return KVM_PUT_RUNTIME_STATE;
 }
+
+#define ARM_CPU_ID_MPIDR       0, 0, 0, 5
 
 int kvm_arch_init_vcpu(CPUState *cs)
 {
-    int i, ret, arraylen;
+    int ret;
     uint64_t v;
+    uint32_t mpidr;
     struct kvm_one_reg r;
-    struct kvm_reg_list rl;
-    struct kvm_reg_list *rlp;
     ARMCPU *cpu = ARM_CPU(cs);
 
     if (cpu->kvm_target == QEMU_KVM_ARM_TARGET_NONE) {
@@ -206,73 +224,18 @@ int kvm_arch_init_vcpu(CPUState *cs)
         return -EINVAL;
     }
 
-    /* Populate the cpreg list based on the kernel's idea
-     * of what registers exist (and throw away the TCG-created list).
+    /*
+     * When KVM is in use, PSCI is emulated in-kernel and not by qemu.
+     * Currently KVM has its own idea about MPIDR assignment, so we
+     * override our defaults with what we get from KVM.
      */
-    rl.n = 0;
-    ret = kvm_vcpu_ioctl(cs, KVM_GET_REG_LIST, &rl);
-    if (ret != -E2BIG) {
+    ret = kvm_get_one_reg(cs, ARM_CP15_REG32(ARM_CPU_ID_MPIDR), &mpidr);
+    if (ret) {
         return ret;
     }
-    rlp = g_malloc(sizeof(struct kvm_reg_list) + rl.n * sizeof(uint64_t));
-    rlp->n = rl.n;
-    ret = kvm_vcpu_ioctl(cs, KVM_GET_REG_LIST, rlp);
-    if (ret) {
-        goto out;
-    }
-    /* Sort the list we get back from the kernel, since cpreg_tuples
-     * must be in strictly ascending order.
-     */
-    qsort(&rlp->reg, rlp->n, sizeof(rlp->reg[0]), compare_u64);
+    cpu->mp_affinity = mpidr & ARM32_AFFINITY_MASK;
 
-    for (i = 0, arraylen = 0; i < rlp->n; i++) {
-        if (!reg_syncs_via_tuple_list(rlp->reg[i])) {
-            continue;
-        }
-        switch (rlp->reg[i] & KVM_REG_SIZE_MASK) {
-        case KVM_REG_SIZE_U32:
-        case KVM_REG_SIZE_U64:
-            break;
-        default:
-            fprintf(stderr, "Can't handle size of register in kernel list\n");
-            ret = -EINVAL;
-            goto out;
-        }
-
-        arraylen++;
-    }
-
-    cpu->cpreg_indexes = g_renew(uint64_t, cpu->cpreg_indexes, arraylen);
-    cpu->cpreg_values = g_renew(uint64_t, cpu->cpreg_values, arraylen);
-    cpu->cpreg_vmstate_indexes = g_renew(uint64_t, cpu->cpreg_vmstate_indexes,
-                                         arraylen);
-    cpu->cpreg_vmstate_values = g_renew(uint64_t, cpu->cpreg_vmstate_values,
-                                        arraylen);
-    cpu->cpreg_array_len = arraylen;
-    cpu->cpreg_vmstate_array_len = arraylen;
-
-    for (i = 0, arraylen = 0; i < rlp->n; i++) {
-        uint64_t regidx = rlp->reg[i];
-        if (!reg_syncs_via_tuple_list(regidx)) {
-            continue;
-        }
-        cpu->cpreg_indexes[arraylen] = regidx;
-        arraylen++;
-    }
-    assert(cpu->cpreg_array_len == arraylen);
-
-    if (!write_kvmstate_to_list(cpu)) {
-        /* Shouldn't happen unless kernel is inconsistent about
-         * what registers exist.
-         */
-        fprintf(stderr, "Initial read of kernel register state failed\n");
-        ret = -EINVAL;
-        goto out;
-    }
-
-out:
-    g_free(rlp);
-    return ret;
+    return kvm_arm_init_cpreg_list(cpu);
 }
 
 typedef struct Reg {
@@ -317,30 +280,30 @@ static const Reg regs[] = {
     COREREG(usr_regs.uregs[10], usr_regs[2]),
     COREREG(usr_regs.uregs[11], usr_regs[3]),
     COREREG(usr_regs.uregs[12], usr_regs[4]),
-    COREREG(usr_regs.uregs[13], banked_r13[0]),
-    COREREG(usr_regs.uregs[14], banked_r14[0]),
+    COREREG(usr_regs.uregs[13], banked_r13[BANK_USRSYS]),
+    COREREG(usr_regs.uregs[14], banked_r14[BANK_USRSYS]),
     /* R13, R14, SPSR for SVC, ABT, UND, IRQ banks */
-    COREREG(svc_regs[0], banked_r13[1]),
-    COREREG(svc_regs[1], banked_r14[1]),
-    COREREG64(svc_regs[2], banked_spsr[1]),
-    COREREG(abt_regs[0], banked_r13[2]),
-    COREREG(abt_regs[1], banked_r14[2]),
-    COREREG64(abt_regs[2], banked_spsr[2]),
-    COREREG(und_regs[0], banked_r13[3]),
-    COREREG(und_regs[1], banked_r14[3]),
-    COREREG64(und_regs[2], banked_spsr[3]),
-    COREREG(irq_regs[0], banked_r13[4]),
-    COREREG(irq_regs[1], banked_r14[4]),
-    COREREG64(irq_regs[2], banked_spsr[4]),
+    COREREG(svc_regs[0], banked_r13[BANK_SVC]),
+    COREREG(svc_regs[1], banked_r14[BANK_SVC]),
+    COREREG64(svc_regs[2], banked_spsr[BANK_SVC]),
+    COREREG(abt_regs[0], banked_r13[BANK_ABT]),
+    COREREG(abt_regs[1], banked_r14[BANK_ABT]),
+    COREREG64(abt_regs[2], banked_spsr[BANK_ABT]),
+    COREREG(und_regs[0], banked_r13[BANK_UND]),
+    COREREG(und_regs[1], banked_r14[BANK_UND]),
+    COREREG64(und_regs[2], banked_spsr[BANK_UND]),
+    COREREG(irq_regs[0], banked_r13[BANK_IRQ]),
+    COREREG(irq_regs[1], banked_r14[BANK_IRQ]),
+    COREREG64(irq_regs[2], banked_spsr[BANK_IRQ]),
     /* R8_fiq .. R14_fiq and SPSR_fiq */
     COREREG(fiq_regs[0], fiq_regs[0]),
     COREREG(fiq_regs[1], fiq_regs[1]),
     COREREG(fiq_regs[2], fiq_regs[2]),
     COREREG(fiq_regs[3], fiq_regs[3]),
     COREREG(fiq_regs[4], fiq_regs[4]),
-    COREREG(fiq_regs[5], banked_r13[5]),
-    COREREG(fiq_regs[6], banked_r14[5]),
-    COREREG64(fiq_regs[7], banked_spsr[5]),
+    COREREG(fiq_regs[5], banked_r13[BANK_FIQ]),
+    COREREG(fiq_regs[6], banked_r14[BANK_FIQ]),
+    COREREG64(fiq_regs[7], banked_spsr[BANK_FIQ]),
     /* R15 */
     COREREG(usr_regs.uregs[15], regs[15]),
     /* VFP system registers */
@@ -431,9 +394,11 @@ int kvm_arch_put_registers(CPUState *cs, int level)
      * managed to update the CPUARMState with, and only allowing those
      * to be written back up into the kernel).
      */
-    if (!write_list_to_kvmstate(cpu)) {
+    if (!write_list_to_kvmstate(cpu, level)) {
         return EINVAL;
     }
+
+    kvm_arm_sync_mpstate_to_kvm(cpu);
 
     return ret;
 }
@@ -506,14 +471,7 @@ int kvm_arch_get_registers(CPUState *cs)
      */
     write_list_to_cpustate(cpu);
 
-    return 0;
-}
+    kvm_arm_sync_mpstate_to_qemu(cpu);
 
-void kvm_arm_reset_vcpu(ARMCPU *cpu)
-{
-    /* Re-init VCPU so that all registers are set to
-     * their respective reset values.
-     */
-    kvm_arm_vcpu_init(CPU(cpu));
-    write_kvmstate_to_list(cpu);
+    return 0;
 }

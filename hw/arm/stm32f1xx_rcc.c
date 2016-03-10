@@ -32,7 +32,7 @@
 
 #ifdef DEBUG_STM32_RCC
 #define DPRINTF(fmt, ...)                                       \
-do { printf("STM32_RCC: " fmt , ## __VA_ARGS__); } while (0)
+do { printf("STM32F1XX_RCC: " fmt , ## __VA_ARGS__); } while (0)
 #else
 #define DPRINTF(fmt, ...)
 #endif
@@ -410,7 +410,7 @@ static void stm32_rcc_RCC_CSR_write(Stm32f1xxRcc *s, uint32_t new_value, bool in
 
 static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
 {
-	Stm32f1xxRcc *s = (Stm32f1xxRcc *)opaque;
+    Stm32f1xxRcc *s = (Stm32f1xxRcc *)opaque;
 
     switch (offset) {
         case RCC_CR_OFFSET:
@@ -448,7 +448,7 @@ static uint64_t stm32_rcc_readw(void *opaque, hwaddr offset)
 static void stm32_rcc_writew(void *opaque, hwaddr offset,
                              uint64_t value)
 {
-	Stm32f1xxRcc *s = (Stm32f1xxRcc *)opaque;
+    Stm32f1xxRcc *s = (Stm32f1xxRcc *)opaque;
 
     switch(offset) {
         case RCC_CR_OFFSET:
@@ -523,7 +523,7 @@ static const MemoryRegionOps stm32_rcc_ops = {
 
 static void stm32_rcc_reset(DeviceState *dev)
 {
-	Stm32f1xxRcc *s = FROM_SYSBUS(Stm32f1xxRcc, SYS_BUS_DEVICE(dev));
+    Stm32f1xxRcc *s = FROM_SYSBUS(Stm32f1xxRcc, SYS_BUS_DEVICE(dev));
 
     stm32_rcc_RCC_CR_write(s, 0x00000083, true);
     stm32_rcc_RCC_CFGR_write(s, 0x00000000, true);
@@ -537,7 +537,7 @@ static void stm32_rcc_reset(DeviceState *dev)
  * This updates the SysTick scales. */
 static void stm32_rcc_hclk_upd_irq_handler(void *opaque, int n, int level)
 {
-	Stm32f1xxRcc *s = (Stm32f1xxRcc *)opaque;
+    Stm32f1xxRcc *s = (Stm32f1xxRcc *)opaque;
 
     uint32_t hclk_freq = 0;
     uint32_t ext_ref_freq = 0;
@@ -553,15 +553,11 @@ static void stm32_rcc_hclk_upd_irq_handler(void *opaque, int n, int level)
          * system/external clock ticks.
          */
         system_clock_scale = get_ticks_per_sec() / hclk_freq;
-        external_ref_clock_scale = get_ticks_per_sec() / ext_ref_freq;
     }
 
 #ifdef DEBUG_STM32_RCC
     DPRINTF("Cortex SYSTICK frequency set to %lu Hz (scale set to %d).\n",
             (unsigned long)hclk_freq, system_clock_scale);
-    DPRINTF("Cortex SYSTICK ext ref frequency set to %lu Hz "
-            "(scale set to %d).\n",
-            (unsigned long)ext_ref_freq, external_ref_clock_scale);
 #endif
 }
 
@@ -642,7 +638,7 @@ static void stm32_rcc_init_clk(Stm32f1xxRcc *s)
 
 static int stm32_rcc_init(SysBusDevice *dev)
 {
-	Stm32f1xxRcc *s = FROM_SYSBUS(Stm32f1xxRcc, dev);
+    Stm32f1xxRcc *s = FROM_SYSBUS(Stm32f1xxRcc, dev);
 
     memory_region_init_io(&s->iomem, OBJECT(s), &stm32_rcc_ops, s,
                           "rcc", 0x1000);

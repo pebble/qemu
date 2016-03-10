@@ -1,5 +1,5 @@
 
-vgabios_variants := stdvga cirrus vmware qxl isavga
+vgabios_variants := stdvga cirrus vmware qxl isavga virtio
 vgabios_targets  := $(subst -isavga,,$(patsubst %,vgabios-%.bin,$(vgabios_variants)))
 pxerom_variants  := e1000 eepro100 ne2k_pci pcnet rtl8139 virtio
 pxerom_targets   := 8086100e 80861209 10500940 10222000 10ec8139 1af41000
@@ -33,6 +33,9 @@ find-cross-prefix = $(subst gcc,,$(notdir $(call find-cross-gcc,$(1))))
 powerpc64_cross_prefix := $(call find-cross-prefix,powerpc64)
 powerpc_cross_prefix := $(call find-cross-prefix,powerpc)
 x86_64_cross_prefix := $(call find-cross-prefix,x86_64)
+
+# tag our seabios builds
+SEABIOS_VERSION="$(shell cd seabios; git describe --tags --long) by qemu-project.org"
 
 #
 # EfiRom utility is shipped with edk2 / tianocore, in BaseTools/
@@ -75,10 +78,12 @@ build-seabios-config-%: config.%
 	mkdir -p seabios/builds/$*
 	cp $< seabios/builds/$*/.config
 	$(MAKE) -C seabios \
+		VERSION=$(SEABIOS_VERSION) \
 		CROSS_COMPILE=$(x86_64_cross_prefix) \
 		KCONFIG_CONFIG=$(CURDIR)/seabios/builds/$*/.config \
 		OUT=$(CURDIR)/seabios/builds/$*/ oldnoconfig
 	$(MAKE) -C seabios \
+		VERSION=$(SEABIOS_VERSION) \
 		CROSS_COMPILE=$(x86_64_cross_prefix) \
 		KCONFIG_CONFIG=$(CURDIR)/seabios/builds/$*/.config \
 		OUT=$(CURDIR)/seabios/builds/$*/ all
@@ -115,19 +120,16 @@ efi-rom-%: build-pxe-roms build-efi-roms
 		-ec ipxe/src/bin-x86_64-efi/$(VID)$(DID).efidrv \
 		-o ../pc-bios/efi-$*.rom
 
-build-pxe-roms: ipxe/src/config/local/general.h
-	$(MAKE) -C ipxe/src GITVERSION="" \
+build-pxe-roms:
+	$(MAKE) -C ipxe/src CONFIG=qemu \
 		CROSS_COMPILE=$(x86_64_cross_prefix) \
 		$(patsubst %,bin/%.rom,$(pxerom_targets))
 
-build-efi-roms: build-pxe-roms ipxe/src/config/local/general.h
-	$(MAKE) -C ipxe/src GITVERSION="" \
+build-efi-roms: build-pxe-roms
+	$(MAKE) -C ipxe/src CONFIG=qemu \
 		CROSS_COMPILE=$(x86_64_cross_prefix) \
 		$(patsubst %,bin-i386-efi/%.efidrv,$(pxerom_targets)) \
 		$(patsubst %,bin-x86_64-efi/%.efidrv,$(pxerom_targets))
-
-ipxe/src/config/local/%: config.ipxe.%
-	cp $< $@
 
 
 slof:

@@ -43,7 +43,7 @@ file_backend_memory_alloc(HostMemoryBackend *backend, Error **errp)
         return;
     }
     if (!fb->mem_path) {
-        error_setg(errp, "mem_path property not set");
+        error_setg(errp, "mem-path property not set");
         return;
     }
 #ifndef CONFIG_LINUX
@@ -83,9 +83,7 @@ static void set_mem_path(Object *o, const char *str, Error **errp)
         error_setg(errp, "cannot change property value");
         return;
     }
-    if (fb->mem_path) {
-        g_free(fb->mem_path);
-    }
+    g_free(fb->mem_path);
     fb->mem_path = g_strdup(str);
 }
 

@@ -23,6 +23,7 @@
 #include "cpu.h"
 #include "sysemu/cpus.h"
 #include "kvm_mips.h"
+#include "exec/memattrs.h"
 
 #define DEBUG_KVM 0
 
@@ -40,7 +41,7 @@ unsigned long kvm_arch_vcpu_id(CPUState *cs)
     return cs->cpu_index;
 }
 
-int kvm_arch_init(KVMState *s)
+int kvm_arch_init(MachineState *ms, KVMState *s)
 {
     /* MIPS has 128 signals */
     kvm_set_sigmask_len(s, 16);
@@ -98,6 +99,8 @@ void kvm_arch_pre_run(CPUState *cs, struct kvm_run *run)
     int r;
     struct kvm_mips_interrupt intr;
 
+    qemu_mutex_lock_iothread();
+
     if ((cs->interrupt_request & CPU_INTERRUPT_HARD) &&
             cpu_mips_io_interrupts_pending(cpu)) {
         intr.cpu = -1;
@@ -108,11 +111,14 @@ void kvm_arch_pre_run(CPUState *cs, struct kvm_run *run)
                          __func__, cs->cpu_index, intr.irq);
         }
     }
+
+    qemu_mutex_unlock_iothread();
 }
 
-void kvm_arch_post_run(CPUState *cs, struct kvm_run *run)
+MemTxAttrs kvm_arch_post_run(CPUState *cs, struct kvm_run *run)
 {
     DPRINTF("%s\n", __func__);
+    return MEMTXATTRS_UNSPECIFIED;
 }
 
 int kvm_arch_process_async_events(CPUState *cs)
@@ -206,10 +212,10 @@ int kvm_mips_set_ipi_interrupt(MIPSCPU *cpu, int irq, int level)
 }
 
 #define MIPS_CP0_32(_R, _S)                                     \
-    (KVM_REG_MIPS | KVM_REG_SIZE_U32 | 0x10000 | (8 * (_R) + (_S)))
+    (KVM_REG_MIPS_CP0 | KVM_REG_SIZE_U32 | (8 * (_R) + (_S)))
 
 #define MIPS_CP0_64(_R, _S)                                     \
-    (KVM_REG_MIPS | KVM_REG_SIZE_U64 | 0x10000 | (8 * (_R) + (_S)))
+    (KVM_REG_MIPS_CP0 | KVM_REG_SIZE_U64 | (8 * (_R) + (_S)))
 
 #define KVM_REG_MIPS_CP0_INDEX          MIPS_CP0_32(0, 0)
 #define KVM_REG_MIPS_CP0_CONTEXT        MIPS_CP0_64(4, 0)
@@ -226,24 +232,12 @@ int kvm_mips_set_ipi_interrupt(MIPSCPU *cpu, int irq, int level)
 #define KVM_REG_MIPS_CP0_EPC            MIPS_CP0_64(14, 0)
 #define KVM_REG_MIPS_CP0_ERROREPC       MIPS_CP0_64(30, 0)
 
-/* CP0_Count control */
-#define KVM_REG_MIPS_COUNT_CTL          (KVM_REG_MIPS | KVM_REG_SIZE_U64 | \
-                                         0x20000 | 0)
-#define KVM_REG_MIPS_COUNT_CTL_DC       0x00000001      /* master disable */
-/* CP0_Count resume monotonic nanoseconds */
-#define KVM_REG_MIPS_COUNT_RESUME       (KVM_REG_MIPS | KVM_REG_SIZE_U64 | \
-                                         0x20000 | 1)
-/* CP0_Count rate in Hz */
-#define KVM_REG_MIPS_COUNT_HZ           (KVM_REG_MIPS | KVM_REG_SIZE_U64 | \
-                                         0x20000 | 2)
-
 static inline int kvm_mips_put_one_reg(CPUState *cs, uint64_t reg_id,
                                        int32_t *addr)
 {
-    uint64_t val64 = *addr;
     struct kvm_one_reg cp0reg = {
         .id = reg_id,
-        .addr = (uintptr_t)&val64
+        .addr = (uintptr_t)addr
     };
 
     return kvm_vcpu_ioctl(cs, KVM_SET_ONE_REG, &cp0reg);
@@ -275,18 +269,12 @@ static inline int kvm_mips_put_one_reg64(CPUState *cs, uint64_t reg_id,
 static inline int kvm_mips_get_one_reg(CPUState *cs, uint64_t reg_id,
                                        int32_t *addr)
 {
-    int ret;
-    uint64_t val64 = 0;
     struct kvm_one_reg cp0reg = {
         .id = reg_id,
-        .addr = (uintptr_t)&val64
+        .addr = (uintptr_t)addr
     };
 
-    ret = kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &cp0reg);
-    if (ret >= 0) {
-        *addr = val64;
-    }
-    return ret;
+    return kvm_vcpu_ioctl(cs, KVM_GET_ONE_REG, &cp0reg);
 }
 
 static inline int kvm_mips_get_one_ulreg(CPUState *cs, uint64 reg_id,
@@ -439,7 +427,7 @@ static void kvm_mips_update_state(void *opaque, int running, RunState state)
         }
     } else {
         /* Set clock restore time to now */
-        count_resume = get_clock();
+        count_resume = qemu_clock_get_ns(QEMU_CLOCK_REALTIME);
         ret = kvm_mips_put_one_reg64(cs, KVM_REG_MIPS_COUNT_RESUME,
                                      &count_resume);
         if (ret < 0) {
@@ -640,12 +628,12 @@ int kvm_arch_put_registers(CPUState *cs, int level)
 
     /* Set the registers based on QEMU's view of things */
     for (i = 0; i < 32; i++) {
-        regs.gpr[i] = env->active_tc.gpr[i];
+        regs.gpr[i] = (int64_t)(target_long)env->active_tc.gpr[i];
     }
 
-    regs.hi = env->active_tc.HI[0];
-    regs.lo = env->active_tc.LO[0];
-    regs.pc = env->active_tc.PC;
+    regs.hi = (int64_t)(target_long)env->active_tc.HI[0];
+    regs.lo = (int64_t)(target_long)env->active_tc.LO[0];
+    regs.pc = (int64_t)(target_long)env->active_tc.PC;
 
     ret = kvm_vcpu_ioctl(cs, KVM_SET_REGS, &regs);
 
@@ -687,4 +675,15 @@ int kvm_arch_get_registers(CPUState *cs)
     kvm_mips_get_cp0_registers(cs);
 
     return ret;
+}
+
+int kvm_arch_fixup_msi_route(struct kvm_irq_routing_entry *route,
+                             uint64_t address, uint32_t data, PCIDevice *dev)
+{
+    return 0;
+}
+
+int kvm_arch_msi_data_to_gsi(uint32_t data)
+{
+    abort();
 }

@@ -63,9 +63,8 @@ static void cubieboard_init(MachineState *machine)
         exit(1);
     }
 
-    memory_region_init_ram(&s->sdram, NULL, "cubieboard.ram",
-                           machine->ram_size);
-    vmstate_register_ram_global(&s->sdram);
+    memory_region_allocate_system_memory(&s->sdram, NULL, "cubieboard.ram",
+                                         machine->ram_size);
     memory_region_add_subregion(get_system_memory(), AW_A10_SDRAM_BASE,
                                 &s->sdram);
 
@@ -75,16 +74,10 @@ static void cubieboard_init(MachineState *machine)
     arm_load_kernel(&s->a10->cpu, &cubieboard_binfo);
 }
 
-static QEMUMachine cubieboard_machine = {
-    .name = "cubieboard",
-    .desc = "cubietech cubieboard",
-    .init = cubieboard_init,
-};
-
-
-static void cubieboard_machine_init(void)
+static void cubieboard_machine_init(MachineClass *mc)
 {
-    qemu_register_machine(&cubieboard_machine);
+    mc->desc = "cubietech cubieboard";
+    mc->init = cubieboard_init;
 }
 
-machine_init(cubieboard_machine_init)
+DEFINE_MACHINE("cubieboard", cubieboard_machine_init)

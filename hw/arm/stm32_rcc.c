@@ -17,8 +17,8 @@ void stm32_rcc_check_periph_clk(Stm32Rcc *s, stm32_periph_t periph)
          * is disabled is a bug and give a warning to unsuspecting programmers.
          * When I made this mistake on real hardware the write had no effect.
          */
-        stm32_hw_warn("Warning: You are attempting to use the %s peripheral while "
-                 "its clock is disabled.\n", s->busdev.qdev.id);
+        stm32_hw_warn("Warning: You are attempting to use the stm32_rcc peripheral while "
+                 "its clock is disabled.\n");
     }
 }
 

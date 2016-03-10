@@ -72,16 +72,14 @@
 #define sigsetjmp(env, savemask) setjmp(env)
 #define siglongjmp(env, val) longjmp(env, val)
 
-/* Declaration of ffs() is missing in MinGW's strings.h. */
-int ffs(int i);
-
 /* Missing POSIX functions. Don't use MinGW-w64 macros. */
+#ifndef CONFIG_LOCALTIME_R
 #undef gmtime_r
 struct tm *gmtime_r(const time_t *timep, struct tm *result);
 #undef localtime_r
 struct tm *localtime_r(const time_t *timep, struct tm *result);
+#endif /* CONFIG_LOCALTIME_R */
 
-char *strtok_r(char *str, const char *delim, char **saveptr);
 
 static inline void os_setup_signal_handling(void) {}
 static inline void os_daemonize(void) {}
@@ -89,7 +87,7 @@ static inline void os_setup_post(void) {}
 void os_set_line_buffering(void);
 static inline void os_set_proc_name(const char *dummy) {}
 
-size_t getpagesize(void);
+int getpagesize(void);
 
 #if !defined(EPROTONOSUPPORT)
 # define EPROTONOSUPPORT EINVAL
@@ -111,6 +109,24 @@ static inline bool is_daemonized(void)
 static inline int os_mlock(void)
 {
     return -ENOSYS;
+}
+
+#define fsync _commit
+
+#if !defined(lseek)
+# define lseek _lseeki64
+#endif
+
+int qemu_ftruncate64(int, int64_t);
+
+#if !defined(ftruncate)
+# define ftruncate qemu_ftruncate64
+#endif
+
+static inline char *realpath(const char *path, char *resolved_path)
+{
+    _fullpath(resolved_path, path, _MAX_PATH);
+    return resolved_path;
 }
 
 #endif

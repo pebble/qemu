@@ -18,9 +18,8 @@
 #define TPM_TPM_TIS_H
 
 #include "hw/isa/isa.h"
+#include "hw/acpi/tpm.h"
 #include "qemu-common.h"
-
-#define TPM_TIS_ADDR_BASE           0xFED40000
 
 #define TPM_TIS_NUM_LOCALITIES      5     /* per spec */
 #define TPM_TIS_LOCALITY_SHIFT      12
@@ -28,12 +27,7 @@
 
 #define TPM_TIS_IS_VALID_LOCTY(x)   ((x) < TPM_TIS_NUM_LOCALITIES)
 
-#define TPM_TIS_IRQ                 5
-
 #define TPM_TIS_BUFFER_MAX          4096
-
-#define TYPE_TPM_TIS                "tpm-tis"
-
 
 typedef enum {
     TPM_TIS_STATE_IDLE = 0,
@@ -47,7 +41,8 @@ typedef enum {
 typedef struct TPMLocality {
     TPMTISState state;
     uint8_t access;
-    uint8_t sts;
+    uint32_t sts;
+    uint32_t iface_id;
     uint32_t inte;
     uint32_t ints;
 

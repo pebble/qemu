@@ -15,6 +15,7 @@
 #include "hw/block/flash.h"
 #include "ui/console.h"
 #include "ui/pixel_ops.h"
+#include "sysemu/block-backend.h"
 #include "sysemu/blockdev.h"
 
 #define IRQ_TC6393_NAND		0
@@ -170,7 +171,7 @@ static void tc6393xb_gpio_handler_update(TC6393xbState *s)
     level = s->gpio_level & s->gpio_dir;
 
     for (diff = s->prev_level ^ level; diff; diff ^= 1 << bit) {
-        bit = ffs(diff) - 1;
+        bit = ctz32(diff);
         qemu_set_irq(s->handler[bit], (level >> bit) & 1);
     }
 
@@ -570,18 +571,20 @@ TC6393xbState *tc6393xb_init(MemoryRegion *sysmem, uint32_t base, qemu_irq irq)
     s->irq = irq;
     s->gpio_in = qemu_allocate_irqs(tc6393xb_gpio_set, s, TC6393XB_GPIOS);
 
-    s->l3v = *qemu_allocate_irqs(tc6393xb_l3v, s, 1);
+    s->l3v = qemu_allocate_irq(tc6393xb_l3v, s, 0);
     s->blanked = 1;
 
     s->sub_irqs = qemu_allocate_irqs(tc6393xb_sub_irq, s, TC6393XB_NR_IRQS);
 
     nand = drive_get(IF_MTD, 0, 0);
-    s->flash = nand_init(nand ? nand->bdrv : NULL, NAND_MFR_TOSHIBA, 0x76);
+    s->flash = nand_init(nand ? blk_by_legacy_dinfo(nand) : NULL,
+                         NAND_MFR_TOSHIBA, 0x76);
 
     memory_region_init_io(&s->iomem, NULL, &tc6393xb_ops, s, "tc6393xb", 0x10000);
     memory_region_add_subregion(sysmem, base, &s->iomem);
 
-    memory_region_init_ram(&s->vram, NULL, "tc6393xb.vram", 0x100000);
+    memory_region_init_ram(&s->vram, NULL, "tc6393xb.vram", 0x100000,
+                           &error_fatal);
     vmstate_register_ram_global(&s->vram);
     s->vram_ptr = memory_region_get_ram_ptr(&s->vram);
     memory_region_add_subregion(sysmem, base + 0x100000, &s->vram);

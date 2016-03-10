@@ -350,11 +350,11 @@
 #define TARGET_NR_vmsplice			(343)
 #define TARGET_NR_move_pages			(344)
 #define TARGET_NR_getcpu			(345)
-					/* 346 for epoll_pwait */
+#define TARGET_NR_epoll_pwait                   (346)
 #define TARGET_NR_kexec_load			(347)
 #define TARGET_NR_utimensat			(348)
 #define TARGET_NR_signalfd			(349)
-#define TARGET_NR_timerfd			(350)
+#define TARGET_NR_timerfd_create		(350)
 #define TARGET_NR_eventfd			(351)
 #define TARGET_NR_fallocate			(352)
 #define TARGET_NR_timerfd_settime		(353)

@@ -21,7 +21,6 @@
 #include "qemu-common.h"
 #include "ui/console.h"
 #include "hw/devices.h"
-#include "vga_int.h"
 #include "ui/pixel_ops.h"
 
 typedef void (*blizzard_fn_t)(uint8_t *, const uint8_t *, unsigned int);
@@ -133,14 +132,6 @@ static const int blizzard_iformat_bpp[0x10] = {
     0,	/* YUV 4:2:0 */
     0, 0, 0, 0, 0, 0,
 };
-
-static inline void blizzard_rgb2yuv(int r, int g, int b,
-                int *y, int *u, int *v)
-{
-    *y = 0x10 + ((0x838 * r + 0x1022 * g + 0x322 * b) >> 13);
-    *u = 0x80 + ((0xe0e * b - 0x04c1 * r - 0x94e * g) >> 13);
-    *v = 0x80 + ((0xe0e * r - 0x0bc7 * g - 0x247 * b) >> 13);
-}
 
 static void blizzard_window(BlizzardState *s)
 {

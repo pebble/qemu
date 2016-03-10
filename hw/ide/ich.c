@@ -65,12 +65,13 @@
 #include <hw/i386/pc.h>
 #include <hw/pci/pci.h>
 #include <hw/isa/isa.h>
-#include "block/block.h"
+#include "sysemu/block-backend.h"
 #include "sysemu/dma.h"
 
 #include <hw/ide/pci.h>
 #include <hw/ide/ahci.h>
 
+#define ICH9_MSI_CAP_OFFSET     0x80
 #define ICH9_SATA_CAP_OFFSET    0xA8
 
 #define ICH9_IDP_BAR            4
@@ -81,7 +82,6 @@
 
 static const VMStateDescription vmstate_ich9_ahci = {
     .name = "ich9_ahci",
-    .unmigratable = 1, /* Still buggy under I/O load */
     .version_id = 1,
     .fields = (VMStateField[]) {
         VMSTATE_PCI_DEVICE(parent_obj, AHCIPCIState),
@@ -97,14 +97,21 @@ static void pci_ich9_reset(DeviceState *dev)
     ahci_reset(&d->ahci);
 }
 
-static int pci_ich9_ahci_init(PCIDevice *dev)
+static void pci_ich9_ahci_init(Object *obj)
+{
+    struct AHCIPCIState *d = ICH_AHCI(obj);
+
+    ahci_init(&d->ahci, DEVICE(obj));
+}
+
+static void pci_ich9_ahci_realize(PCIDevice *dev, Error **errp)
 {
     struct AHCIPCIState *d;
     int sata_cap_offset;
     uint8_t *sata_cap;
     d = ICH_AHCI(dev);
 
-    ahci_init(&d->ahci, DEVICE(dev), pci_get_address_space(dev), 6);
+    ahci_realize(&d->ahci, DEVICE(dev), pci_get_address_space(dev), 6);
 
     pci_config_set_prog_interface(dev->config, AHCI_PROGMODE_MAJOR_REV_1);
 
@@ -115,7 +122,6 @@ static int pci_ich9_ahci_init(PCIDevice *dev)
     /* XXX Software should program this register */
     dev->config[0x90]   = 1 << 6; /* Address Map Register - AHCI mode */
 
-    msi_init(dev, 0x50, 1, true, false);
     d->ahci.irq = pci_allocate_irq(dev);
 
     pci_register_bar(dev, ICH9_IDP_BAR, PCI_BASE_ADDRESS_SPACE_IO,
@@ -123,10 +129,11 @@ static int pci_ich9_ahci_init(PCIDevice *dev)
     pci_register_bar(dev, ICH9_MEM_BAR, PCI_BASE_ADDRESS_SPACE_MEMORY,
                      &d->ahci.mem);
 
-    sata_cap_offset = pci_add_capability(dev, PCI_CAP_ID_SATA,
-                                         ICH9_SATA_CAP_OFFSET, SATA_CAP_SIZE);
+    sata_cap_offset = pci_add_capability2(dev, PCI_CAP_ID_SATA,
+                                          ICH9_SATA_CAP_OFFSET, SATA_CAP_SIZE,
+                                          errp);
     if (sata_cap_offset < 0) {
-        return sata_cap_offset;
+        return;
     }
 
     sata_cap = dev->config + sata_cap_offset;
@@ -135,7 +142,10 @@ static int pci_ich9_ahci_init(PCIDevice *dev)
                  (ICH9_IDP_BAR + 0x4) | (ICH9_IDP_INDEX_LOG2 << 4));
     d->ahci.idp_offset = ICH9_IDP_INDEX;
 
-    return 0;
+    /* Although the AHCI 1.3 specification states that the first capability
+     * should be PMCAP, the Intel ICH9 data sheet specifies that the ICH9
+     * AHCI device puts the MSI capability first, pointing to 0x80. */
+    msi_init(dev, ICH9_MSI_CAP_OFFSET, 1, true, false);
 }
 
 static void pci_ich9_uninit(PCIDevice *dev)
@@ -153,7 +163,7 @@ static void ich_ahci_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = pci_ich9_ahci_init;
+    k->realize = pci_ich9_ahci_realize;
     k->exit = pci_ich9_uninit;
     k->vendor_id = PCI_VENDOR_ID_INTEL;
     k->device_id = PCI_DEVICE_ID_INTEL_82801IR;
@@ -168,6 +178,7 @@ static const TypeInfo ich_ahci_info = {
     .name          = TYPE_ICH9_AHCI,
     .parent        = TYPE_PCI_DEVICE,
     .instance_size = sizeof(AHCIPCIState),
+    .instance_init = pci_ich9_ahci_init,
     .class_init    = ich_ahci_class_init,
 };
 

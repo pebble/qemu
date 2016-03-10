@@ -16,11 +16,14 @@
  * You should have received a copy of the GNU General Public License along
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
+
+#include "hw/boards.h"
 #include "hw/hw.h"
 #include "hw/arm/arm.h"
 #include "hw/arm/omap.h"
 #include "sysemu/sysemu.h"
 #include "hw/arm/soc_dma.h"
+#include "sysemu/block-backend.h"
 #include "sysemu/blockdev.h"
 #include "qemu/range.h"
 #include "hw/sysbus.h"
@@ -206,7 +209,8 @@ static void omap_mpu_timer_write(void *opaque, hwaddr addr,
     struct omap_mpu_timer_s *s = (struct omap_mpu_timer_s *) opaque;
 
     if (size != 4) {
-        return omap_badwidth_write32(opaque, addr, value);
+        omap_badwidth_write32(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -254,8 +258,7 @@ static struct omap_mpu_timer_s *omap_mpu_timer_init(MemoryRegion *system_memory,
                 hwaddr base,
                 qemu_irq irq, omap_clk clk)
 {
-    struct omap_mpu_timer_s *s = (struct omap_mpu_timer_s *)
-            g_malloc0(sizeof(struct omap_mpu_timer_s));
+    struct omap_mpu_timer_s *s = g_new0(struct omap_mpu_timer_s, 1);
 
     s->irq = irq;
     s->clk = clk;
@@ -313,7 +316,8 @@ static void omap_wd_timer_write(void *opaque, hwaddr addr,
     struct omap_watchdog_timer_s *s = (struct omap_watchdog_timer_s *) opaque;
 
     if (size != 2) {
-        return omap_badwidth_write16(opaque, addr, value);
+        omap_badwidth_write16(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -383,8 +387,7 @@ static struct omap_watchdog_timer_s *omap_wd_timer_init(MemoryRegion *memory,
                 hwaddr base,
                 qemu_irq irq, omap_clk clk)
 {
-    struct omap_watchdog_timer_s *s = (struct omap_watchdog_timer_s *)
-            g_malloc0(sizeof(struct omap_watchdog_timer_s));
+    struct omap_watchdog_timer_s *s = g_new0(struct omap_watchdog_timer_s, 1);
 
     s->timer.irq = irq;
     s->timer.clk = clk;
@@ -439,7 +442,8 @@ static void omap_os_timer_write(void *opaque, hwaddr addr,
     int offset = addr & OMAP_MPUI_REG_MASK;
 
     if (size != 4) {
-        return omap_badwidth_write32(opaque, addr, value);
+        omap_badwidth_write32(opaque, addr, value);
+        return;
     }
 
     switch (offset) {
@@ -489,8 +493,7 @@ static struct omap_32khz_timer_s *omap_os_timer_init(MemoryRegion *memory,
                 hwaddr base,
                 qemu_irq irq, omap_clk clk)
 {
-    struct omap_32khz_timer_s *s = (struct omap_32khz_timer_s *)
-            g_malloc0(sizeof(struct omap_32khz_timer_s));
+    struct omap_32khz_timer_s *s = g_new0(struct omap_32khz_timer_s, 1);
 
     s->timer.irq = irq;
     s->timer.clk = clk;
@@ -584,7 +587,8 @@ static void omap_ulpd_pm_write(void *opaque, hwaddr addr,
     uint16_t diff;
 
     if (size != 2) {
-        return omap_badwidth_write16(opaque, addr, value);
+        omap_badwidth_write16(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -856,7 +860,8 @@ static void omap_pin_cfg_write(void *opaque, hwaddr addr,
     uint32_t diff;
 
     if (size != 4) {
-        return omap_badwidth_write32(opaque, addr, value);
+        omap_badwidth_write32(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -1011,7 +1016,8 @@ static void omap_id_write(void *opaque, hwaddr addr,
                           uint64_t value, unsigned size)
 {
     if (size != 4) {
-        return omap_badwidth_write32(opaque, addr, value);
+        omap_badwidth_write32(opaque, addr, value);
+        return;
     }
 
     OMAP_BAD_REG(addr);
@@ -1080,7 +1086,8 @@ static void omap_mpui_write(void *opaque, hwaddr addr,
     struct omap_mpu_state_s *s = (struct omap_mpu_state_s *) opaque;
 
     if (size != 4) {
-        return omap_badwidth_write32(opaque, addr, value);
+        omap_badwidth_write32(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -1174,7 +1181,8 @@ static void omap_tipb_bridge_write(void *opaque, hwaddr addr,
     struct omap_tipb_bridge_s *s = (struct omap_tipb_bridge_s *) opaque;
 
     if (size < 2) {
-        return omap_badwidth_write16(opaque, addr, value);
+        omap_badwidth_write16(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -1225,8 +1233,7 @@ static struct omap_tipb_bridge_s *omap_tipb_bridge_init(
     MemoryRegion *memory, hwaddr base,
     qemu_irq abort_irq, omap_clk clk)
 {
-    struct omap_tipb_bridge_s *s = (struct omap_tipb_bridge_s *)
-            g_malloc0(sizeof(struct omap_tipb_bridge_s));
+    struct omap_tipb_bridge_s *s = g_new0(struct omap_tipb_bridge_s, 1);
 
     s->abort = abort_irq;
     omap_tipb_bridge_reset(s);
@@ -1283,7 +1290,8 @@ static void omap_tcmi_write(void *opaque, hwaddr addr,
     struct omap_mpu_state_s *s = (struct omap_mpu_state_s *) opaque;
 
     if (size != 4) {
-        return omap_badwidth_write32(opaque, addr, value);
+        omap_badwidth_write32(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -1378,7 +1386,8 @@ static void omap_dpll_write(void *opaque, hwaddr addr,
     int div, mult;
 
     if (size != 2) {
-        return omap_badwidth_write16(opaque, addr, value);
+        omap_badwidth_write16(opaque, addr, value);
+        return;
     }
 
     if (addr == 0x00) {	/* CTL_REG */
@@ -1646,7 +1655,8 @@ static void omap_clkm_write(void *opaque, hwaddr addr,
     };
 
     if (size != 2) {
-        return omap_badwidth_write16(opaque, addr, value);
+        omap_badwidth_write16(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -1774,7 +1784,8 @@ static void omap_clkdsp_write(void *opaque, hwaddr addr,
     uint16_t diff;
 
     if (size != 2) {
-        return omap_badwidth_write16(opaque, addr, value);
+        omap_badwidth_write16(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -1981,15 +1992,15 @@ static void omap_mpuio_write(void *opaque, hwaddr addr,
     int ln;
 
     if (size != 2) {
-        return omap_badwidth_write16(opaque, addr, value);
+        omap_badwidth_write16(opaque, addr, value);
+        return;
     }
 
     switch (offset) {
     case 0x04:	/* OUTPUT_REG */
         diff = (s->outputs ^ value) & ~s->dir;
         s->outputs = value;
-        while ((ln = ffs(diff))) {
-            ln --;
+        while ((ln = ctz32(diff)) != 32) {
             if (s->handler[ln])
                 qemu_set_irq(s->handler[ln], (value >> ln) & 1);
             diff &= ~(1 << ln);
@@ -2001,8 +2012,7 @@ static void omap_mpuio_write(void *opaque, hwaddr addr,
         s->dir = value;
 
         value = s->outputs & ~s->dir;
-        while ((ln = ffs(diff))) {
-            ln --;
+        while ((ln = ctz32(diff)) != 32) {
             if (s->handler[ln])
                 qemu_set_irq(s->handler[ln], (value >> ln) & 1);
             diff &= ~(1 << ln);
@@ -2085,8 +2095,7 @@ static struct omap_mpuio_s *omap_mpuio_init(MemoryRegion *memory,
                 qemu_irq kbd_int, qemu_irq gpio_int, qemu_irq wakeup,
                 omap_clk clk)
 {
-    struct omap_mpuio_s *s = (struct omap_mpuio_s *)
-            g_malloc0(sizeof(struct omap_mpuio_s));
+    struct omap_mpuio_s *s = g_new0(struct omap_mpuio_s, 1);
 
     s->irq = gpio_int;
     s->kbd_irq = kbd_int;
@@ -2209,7 +2218,8 @@ static void omap_uwire_write(void *opaque, hwaddr addr,
     int offset = addr & OMAP_MPUI_REG_MASK;
 
     if (size != 2) {
-        return omap_badwidth_write16(opaque, addr, value);
+        omap_badwidth_write16(opaque, addr, value);
+        return;
     }
 
     switch (offset) {
@@ -2277,8 +2287,7 @@ static struct omap_uwire_s *omap_uwire_init(MemoryRegion *system_memory,
                                             qemu_irq dma,
                                             omap_clk clk)
 {
-    struct omap_uwire_s *s = (struct omap_uwire_s *)
-            g_malloc0(sizeof(struct omap_uwire_s));
+    struct omap_uwire_s *s = g_new0(struct omap_uwire_s, 1);
 
     s->txirq = txirq;
     s->rxirq = rxirq;
@@ -2348,7 +2357,8 @@ static void omap_pwl_write(void *opaque, hwaddr addr,
     int offset = addr & OMAP_MPUI_REG_MASK;
 
     if (size != 1) {
-        return omap_badwidth_write8(opaque, addr, value);
+        omap_badwidth_write8(opaque, addr, value);
+        return;
     }
 
     switch (offset) {
@@ -2443,7 +2453,8 @@ static void omap_pwt_write(void *opaque, hwaddr addr,
     int offset = addr & OMAP_MPUI_REG_MASK;
 
     if (size != 1) {
-        return omap_badwidth_write8(opaque, addr, value);
+        omap_badwidth_write8(opaque, addr, value);
+        return;
     }
 
     switch (offset) {
@@ -2636,7 +2647,8 @@ static void omap_rtc_write(void *opaque, hwaddr addr,
     time_t ti[2];
 
     if (size != 1) {
-        return omap_badwidth_write8(opaque, addr, value);
+        omap_badwidth_write8(opaque, addr, value);
+        return;
     }
 
     switch (offset) {
@@ -2914,8 +2926,7 @@ static struct omap_rtc_s *omap_rtc_init(MemoryRegion *system_memory,
                                         qemu_irq timerirq, qemu_irq alarmirq,
                                         omap_clk clk)
 {
-    struct omap_rtc_s *s = (struct omap_rtc_s *)
-            g_malloc0(sizeof(struct omap_rtc_s));
+    struct omap_rtc_s *s = g_new0(struct omap_rtc_s, 1);
 
     s->irq = timerirq;
     s->alarm = alarmirq;
@@ -3409,9 +3420,14 @@ static void omap_mcbsp_write(void *opaque, hwaddr addr,
                              uint64_t value, unsigned size)
 {
     switch (size) {
-    case 2: return omap_mcbsp_writeh(opaque, addr, value);
-    case 4: return omap_mcbsp_writew(opaque, addr, value);
-    default: return omap_badwidth_write16(opaque, addr, value);
+    case 2:
+        omap_mcbsp_writeh(opaque, addr, value);
+        break;
+    case 4:
+        omap_mcbsp_writew(opaque, addr, value);
+        break;
+    default:
+        omap_badwidth_write16(opaque, addr, value);
     }
 }
 
@@ -3445,8 +3461,7 @@ static struct omap_mcbsp_s *omap_mcbsp_init(MemoryRegion *system_memory,
                                             qemu_irq txirq, qemu_irq rxirq,
                                             qemu_irq *dma, omap_clk clk)
 {
-    struct omap_mcbsp_s *s = (struct omap_mcbsp_s *)
-            g_malloc0(sizeof(struct omap_mcbsp_s));
+    struct omap_mcbsp_s *s = g_new0(struct omap_mcbsp_s, 1);
 
     s->txirq = txirq;
     s->rxirq = rxirq;
@@ -3585,7 +3600,8 @@ static void omap_lpg_write(void *opaque, hwaddr addr,
     int offset = addr & OMAP_MPUI_REG_MASK;
 
     if (size != 1) {
-        return omap_badwidth_write8(opaque, addr, value);
+        omap_badwidth_write8(opaque, addr, value);
+        return;
     }
 
     switch (offset) {
@@ -3624,8 +3640,7 @@ static void omap_lpg_clk_update(void *opaque, int line, int on)
 static struct omap_lpg_s *omap_lpg_init(MemoryRegion *system_memory,
                                         hwaddr base, omap_clk clk)
 {
-    struct omap_lpg_s *s = (struct omap_lpg_s *)
-            g_malloc0(sizeof(struct omap_lpg_s));
+    struct omap_lpg_s *s = g_new0(struct omap_lpg_s, 1);
 
     s->tm = timer_new_ms(QEMU_CLOCK_VIRTUAL, omap_lpg_tick, s);
 
@@ -3829,8 +3844,7 @@ struct omap_mpu_state_s *omap310_mpu_init(MemoryRegion *system_memory,
                 const char *core)
 {
     int i;
-    struct omap_mpu_state_s *s = (struct omap_mpu_state_s *)
-            g_malloc0(sizeof(struct omap_mpu_state_s));
+    struct omap_mpu_state_s *s = g_new0(struct omap_mpu_state_s, 1);
     qemu_irq dma_irqs[6];
     DriveInfo *dinfo;
     SysBusDevice *busdev;
@@ -3854,10 +3868,11 @@ struct omap_mpu_state_s *omap310_mpu_init(MemoryRegion *system_memory,
     omap_clk_init(s);
 
     /* Memory-mapped stuff */
-    memory_region_init_ram(&s->emiff_ram, NULL, "omap1.dram", s->sdram_size);
-    vmstate_register_ram_global(&s->emiff_ram);
+    memory_region_allocate_system_memory(&s->emiff_ram, NULL, "omap1.dram",
+                                         s->sdram_size);
     memory_region_add_subregion(system_memory, OMAP_EMIFF_BASE, &s->emiff_ram);
-    memory_region_init_ram(&s->imif_ram, NULL, "omap1.sram", s->sram_size);
+    memory_region_init_ram(&s->imif_ram, NULL, "omap1.sram", s->sram_size,
+                           &error_fatal);
     vmstate_register_ram_global(&s->imif_ram);
     memory_region_add_subregion(system_memory, OMAP_IMIF_BASE, &s->imif_ram);
 
@@ -3976,7 +3991,8 @@ struct omap_mpu_state_s *omap310_mpu_init(MemoryRegion *system_memory,
         fprintf(stderr, "qemu: missing SecureDigital device\n");
         exit(1);
     }
-    s->mmc = omap_mmc_init(0xfffb7800, system_memory, dinfo->bdrv,
+    s->mmc = omap_mmc_init(0xfffb7800, system_memory,
+                           blk_by_legacy_dinfo(dinfo),
                            qdev_get_gpio_in(s->ih[1], OMAP_INT_OQN),
                            &s->drq[OMAP_DMA_MMC_TX],
                     omap_findclk(s, "mmc_ck"));

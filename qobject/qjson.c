@@ -28,7 +28,7 @@ typedef struct JSONParsingState
     QObject *result;
 } JSONParsingState;
 
-static void parse_json(JSONMessageParser *parser, QList *tokens)
+static void parse_json(JSONMessageParser *parser, GQueue *tokens)
 {
     JSONParsingState *s = container_of(parser, JSONParsingState, parser);
     s->result = json_parser_parse(tokens, s->ap);
@@ -86,8 +86,9 @@ static void to_json_dict_iter(const char *key, QObject *obj, void *opaque)
     QString *qkey;
     int j;
 
-    if (s->count)
-        qstring_append(s->str, ", ");
+    if (s->count) {
+        qstring_append(s->str, s->pretty ? "," : ", ");
+    }
 
     if (s->pretty) {
         qstring_append(s->str, "\n");
@@ -109,8 +110,9 @@ static void to_json_list_iter(QObject *obj, void *opaque)
     ToJsonIterState *s = opaque;
     int j;
 
-    if (s->count)
-        qstring_append(s->str, ", ");
+    if (s->count) {
+        qstring_append(s->str, s->pretty ? "," : ", ");
+    }
 
     if (s->pretty) {
         qstring_append(s->str, "\n");
@@ -125,6 +127,9 @@ static void to_json_list_iter(QObject *obj, void *opaque)
 static void to_json(const QObject *obj, QString *str, int pretty, int indent)
 {
     switch (qobject_type(obj)) {
+    case QTYPE_QNULL:
+        qstring_append(str, "null");
+        break;
     case QTYPE_QINT: {
         QInt *val = qobject_to_qint(obj);
         char buffer[1024];
@@ -249,18 +254,14 @@ static void to_json(const QObject *obj, QString *str, int pretty, int indent)
     case QTYPE_QBOOL: {
         QBool *val = qobject_to_qbool(obj);
 
-        if (qbool_get_int(val)) {
+        if (qbool_get_bool(val)) {
             qstring_append(str, "true");
         } else {
             qstring_append(str, "false");
         }
         break;
     }
-    case QTYPE_QERROR:
-        /* XXX: should QError be emitted? */
-    case QTYPE_NONE:
-        break;
-    case QTYPE_MAX:
+    default:
         abort();
     }
 }

@@ -50,19 +50,24 @@ void *qemu_oom_check(void *ptr)
     return ptr;
 }
 
-void *qemu_memalign(size_t alignment, size_t size)
+void *qemu_try_memalign(size_t alignment, size_t size)
 {
     void *ptr;
 
     if (!size) {
         abort();
     }
-    ptr = qemu_oom_check(VirtualAlloc(NULL, size, MEM_COMMIT, PAGE_READWRITE));
+    ptr = VirtualAlloc(NULL, size, MEM_COMMIT, PAGE_READWRITE);
     trace_qemu_memalign(alignment, size, ptr);
     return ptr;
 }
 
-void *qemu_anon_ram_alloc(size_t size)
+void *qemu_memalign(size_t alignment, size_t size)
+{
+    return qemu_oom_check(qemu_try_memalign(alignment, size));
+}
+
+void *qemu_anon_ram_alloc(size_t size, uint64_t *align)
 {
     void *ptr;
 
@@ -90,6 +95,7 @@ void qemu_anon_ram_free(void *ptr, size_t size)
     }
 }
 
+#ifndef CONFIG_LOCALTIME_R
 /* FIXME: add proper locking */
 struct tm *gmtime_r(const time_t *timep, struct tm *result)
 {
@@ -113,6 +119,7 @@ struct tm *localtime_r(const time_t *timep, struct tm *result)
     }
     return p;
 }
+#endif /* CONFIG_LOCALTIME_R */
 
 void qemu_set_block(int fd)
 {
@@ -447,7 +454,7 @@ gint g_poll(GPollFD *fds, guint nfds, gint timeout)
     return retval;
 }
 
-size_t getpagesize(void)
+int getpagesize(void)
 {
     SYSTEM_INFO system_info;
 
@@ -464,4 +471,37 @@ void os_mem_prealloc(int fd, char *area, size_t memory)
     for (i = 0; i < memory / pagesize; i++) {
         memset(area + pagesize * i, 0, 1);
     }
+}
+
+
+/* XXX: put correct support for win32 */
+int qemu_read_password(char *buf, int buf_size)
+{
+    int c, i;
+
+    printf("Password: ");
+    fflush(stdout);
+    i = 0;
+    for (;;) {
+        c = getchar();
+        if (c < 0) {
+            buf[i] = '\0';
+            return -1;
+        } else if (c == '\n') {
+            break;
+        } else if (i < (buf_size - 1)) {
+            buf[i++] = c;
+        }
+    }
+    buf[i] = '\0';
+    return 0;
+}
+
+
+pid_t qemu_fork(Error **errp)
+{
+    errno = ENOSYS;
+    error_setg_errno(errp, errno,
+                     "cannot fork child process");
+    return -1;
 }

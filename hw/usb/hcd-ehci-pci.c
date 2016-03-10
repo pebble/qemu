@@ -23,9 +23,10 @@ typedef struct EHCIPCIInfo {
     uint16_t vendor_id;
     uint16_t device_id;
     uint8_t  revision;
+    bool companion;
 } EHCIPCIInfo;
 
-static int usb_ehci_pci_initfn(PCIDevice *dev)
+static void usb_ehci_pci_realize(PCIDevice *dev, Error **errp)
 {
     EHCIPCIState *i = PCI_EHCI(dev);
     EHCIState *s = &i->ehci;
@@ -65,12 +66,11 @@ static int usb_ehci_pci_initfn(PCIDevice *dev)
 
     usb_ehci_realize(s, DEVICE(dev), NULL);
     pci_register_bar(dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->mem);
-
-    return 0;
 }
 
 static void usb_ehci_pci_init(Object *obj)
 {
+    DeviceClass *dc = OBJECT_GET_CLASS(DeviceClass, obj, TYPE_DEVICE);
     EHCIPCIState *i = PCI_EHCI(obj);
     EHCIState *s = &i->ehci;
 
@@ -81,7 +81,31 @@ static void usb_ehci_pci_init(Object *obj)
     s->portscbase = 0x44;
     s->portnr = NB_PORTS;
 
+    if (!dc->hotpluggable) {
+        s->companion_enable = true;
+    }
+
     usb_ehci_init(s, DEVICE(obj));
+}
+
+static void usb_ehci_pci_exit(PCIDevice *dev)
+{
+    EHCIPCIState *i = PCI_EHCI(dev);
+    EHCIState *s = &i->ehci;
+
+    usb_ehci_unrealize(s, DEVICE(dev), NULL);
+
+    g_free(s->irq);
+    s->irq = NULL;
+}
+
+static void usb_ehci_pci_reset(DeviceState *dev)
+{
+    PCIDevice *pci_dev = PCI_DEVICE(dev);
+    EHCIPCIState *i = PCI_EHCI(pci_dev);
+    EHCIState *s = &i->ehci;
+
+    ehci_reset(s);
 }
 
 static void usb_ehci_pci_write_config(PCIDevice *dev, uint32_t addr,
@@ -120,12 +144,13 @@ static void ehci_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = usb_ehci_pci_initfn;
+    k->realize = usb_ehci_pci_realize;
+    k->exit = usb_ehci_pci_exit;
     k->class_id = PCI_CLASS_SERIAL_USB;
     k->config_write = usb_ehci_pci_write_config;
-    dc->hotpluggable = false;
     dc->vmsd = &vmstate_ehci_pci;
     dc->props = ehci_pci_properties;
+    dc->reset = usb_ehci_pci_reset;
 }
 
 static const TypeInfo ehci_pci_type_info = {
@@ -147,6 +172,9 @@ static void ehci_data_class_init(ObjectClass *klass, void *data)
     k->device_id = i->device_id;
     k->revision = i->revision;
     set_bit(DEVICE_CATEGORY_USB, dc->categories);
+    if (i->companion) {
+        dc->hotpluggable = false;
+    }
 }
 
 static struct EHCIPCIInfo ehci_pci_info[] = {
@@ -160,11 +188,13 @@ static struct EHCIPCIInfo ehci_pci_info[] = {
         .vendor_id = PCI_VENDOR_ID_INTEL,
         .device_id = PCI_DEVICE_ID_INTEL_82801I_EHCI1,
         .revision  = 0x03,
+        .companion = true,
     },{
         .name      = "ich9-usb-ehci2", /* 00:1a.7 */
         .vendor_id = PCI_VENDOR_ID_INTEL,
         .device_id = PCI_DEVICE_ID_INTEL_82801I_EHCI2,
         .revision  = 0x03,
+        .companion = true,
     }
 };
 

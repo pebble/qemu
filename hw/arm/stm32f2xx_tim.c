@@ -92,6 +92,7 @@ typedef struct f2xx_tim {
     uint32_t regs[R_TIM_MAX];
 
     qemu_irq pwm_ratio_changed;
+    qemu_irq pwm_enable;
 } f2xx_tim;
 
 static uint32_t
@@ -191,8 +192,10 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         if ((s->regs[addr] & 1) == 0 && data & 1) {
             //printf("f2xx tim started\n");
             timer_mod(s->timer, f2xx_tim_next_transition(s, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL)));
+            qemu_set_irq(s->pwm_enable, 1);
         } else if (s->regs[addr] & 1 && (data & 1) == 0) {
             timer_del(s->timer);
+            qemu_set_irq(s->pwm_enable, 0);
         }
         s->regs[addr] = data;
         break;
@@ -215,7 +218,7 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         if (    (data & 0x01) // Capture Compare 1 output enable
              && ((s->regs[R_TIM_CCMR1] & 0x60) == 0x60)
              && ((s->regs[R_TIM_CCMR1] & 0x03) == 0x00)) {
-             
+
             uint32_t ratio = (s->regs[R_TIM_CCR1] * 255) / s->regs[R_TIM_ARR];
             DPRINTF("Setting PWM ratio to %d\n", ratio);
             qemu_set_irq(s->pwm_ratio_changed, ratio);
@@ -225,7 +228,7 @@ f2xx_tim_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         else if (    (data & 0x10) // Capture Compare 2 output enable
              && ((s->regs[R_TIM_CCMR1] & 0x6000) == 0x6000)
              && ((s->regs[R_TIM_CCMR1] & 0x0300) == 0x0000)) {
-             
+
             uint32_t ratio = (s->regs[R_TIM_CCR2] * 255) / s->regs[R_TIM_ARR];
             DPRINTF("Setting PWM ratio to %d\n", ratio);
             qemu_set_irq(s->pwm_ratio_changed, ratio);
@@ -290,6 +293,7 @@ f2xx_tim_init(SysBusDevice *dev)
     sysbus_init_irq(dev, &s->irq);
 
     qdev_init_gpio_out_named(DEVICE(dev), &s->pwm_ratio_changed, "pwm_ratio_changed", 1);
+    qdev_init_gpio_out_named(DEVICE(dev), &s->pwm_enable, "pwm_enable", 1);
 
     return 0;
 }

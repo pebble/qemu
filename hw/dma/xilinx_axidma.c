@@ -26,7 +26,6 @@
 #include "qemu/timer.h"
 #include "hw/ptimer.h"
 #include "qemu/log.h"
-#include "qapi/qmp/qerror.h"
 #include "qemu/main-loop.h"
 
 #include "hw/stream.h"
@@ -134,7 +133,7 @@ struct XilinxAXIDMA {
 };
 
 /*
- * Helper calls to extract info from desriptors and other trivial
+ * Helper calls to extract info from descriptors and other trivial
  * state from regs.
  */
 static inline int stream_desc_sof(struct SDesc *d)
@@ -553,10 +552,12 @@ static void xilinx_axidma_realize(DeviceState *dev, Error **errp)
     int i;
 
     for (i = 0; i < 2; i++) {
-        s->streams[i].nr = i;
-        s->streams[i].bh = qemu_bh_new(timer_hit, &s->streams[i]);
-        s->streams[i].ptimer = ptimer_init(s->streams[i].bh);
-        ptimer_set_freq(s->streams[i].ptimer, s->freqhz);
+        struct Stream *st = &s->streams[i];
+
+        st->nr = i;
+        st->bh = qemu_bh_new(timer_hit, st);
+        st->ptimer = ptimer_init(st->bh);
+        ptimer_set_freq(st->ptimer, s->freqhz);
     }
     return;
 

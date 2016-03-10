@@ -29,7 +29,7 @@
 #include "net/net.h"
 #include "hw/boards.h"
 #include "hw/i2c/smbus.h"
-#include "block/block.h"
+#include "sysemu/block-backend.h"
 #include "hw/block/flash.h"
 #include "hw/mips/mips.h"
 #include "hw/mips/cpudevs.h"
@@ -44,6 +44,7 @@
 #include "elf.h"
 #include "hw/timer/mc146818rtc.h"
 #include "hw/timer/i8254.h"
+#include "sysemu/block-backend.h"
 #include "sysemu/blockdev.h"
 #include "exec/address-spaces.h"
 #include "hw/sysbus.h"             /* SysBusDevice */
@@ -52,6 +53,7 @@
 #include "qemu/error-report.h"
 #include "hw/empty_slot.h"
 #include "sysemu/kvm.h"
+#include "exec/semihost.h"
 
 //#define DEBUG_BOARD_INIT
 
@@ -96,7 +98,7 @@ typedef struct {
 static ISADevice *pit;
 
 static struct _loaderparams {
-    int ram_size;
+    int ram_size, ram_low_size;
     const char *kernel_filename;
     const char *kernel_cmdline;
     const char *initrd_filename;
@@ -633,15 +635,21 @@ static void write_bootloader (CPUMIPSState *env, uint8_t *base,
 
     /* Second part of the bootloader */
     p = (uint32_t *) (base + 0x580);
-    stl_p(p++, 0x24040002);                                      /* addiu a0, zero, 2 */
+
+    if (semihosting_get_argc()) {
+        /* Preserve a0 content as arguments have been passed */
+        stl_p(p++, 0x00000000);                         /* nop */
+    } else {
+        stl_p(p++, 0x24040002);                         /* addiu a0, zero, 2 */
+    }
     stl_p(p++, 0x3c1d0000 | (((ENVP_ADDR - 64) >> 16) & 0xffff)); /* lui sp, high(ENVP_ADDR) */
     stl_p(p++, 0x37bd0000 | ((ENVP_ADDR - 64) & 0xffff));        /* ori sp, sp, low(ENVP_ADDR) */
     stl_p(p++, 0x3c050000 | ((ENVP_ADDR >> 16) & 0xffff));       /* lui a1, high(ENVP_ADDR) */
     stl_p(p++, 0x34a50000 | (ENVP_ADDR & 0xffff));               /* ori a1, a1, low(ENVP_ADDR) */
     stl_p(p++, 0x3c060000 | (((ENVP_ADDR + 8) >> 16) & 0xffff)); /* lui a2, high(ENVP_ADDR + 8) */
     stl_p(p++, 0x34c60000 | ((ENVP_ADDR + 8) & 0xffff));         /* ori a2, a2, low(ENVP_ADDR + 8) */
-    stl_p(p++, 0x3c070000 | (loaderparams.ram_size >> 16));     /* lui a3, high(ram_size) */
-    stl_p(p++, 0x34e70000 | (loaderparams.ram_size & 0xffff));  /* ori a3, a3, low(ram_size) */
+    stl_p(p++, 0x3c070000 | (loaderparams.ram_low_size >> 16));     /* lui a3, high(ram_low_size) */
+    stl_p(p++, 0x34e70000 | (loaderparams.ram_low_size & 0xffff));  /* ori a3, a3, low(ram_low_size) */
 
     /* Load BAR registers as done by YAMON */
     stl_p(p++, 0x3c09b400);                                      /* lui t1, 0xb400 */
@@ -697,12 +705,12 @@ static void write_bootloader (CPUMIPSState *env, uint8_t *base,
     /* Jump to kernel code */
     stl_p(p++, 0x3c1f0000 | ((kernel_entry >> 16) & 0xffff));    /* lui ra, high(kernel_entry) */
     stl_p(p++, 0x37ff0000 | (kernel_entry & 0xffff));            /* ori ra, ra, low(kernel_entry) */
-    stl_p(p++, 0x03e00008);                                      /* jr ra */
+    stl_p(p++, 0x03e00009);                                      /* jalr ra */
     stl_p(p++, 0x00000000);                                      /* nop */
 
     /* YAMON subroutines */
     p = (uint32_t *) (base + 0x800);
-    stl_p(p++, 0x03e00008);                                     /* jr ra */
+    stl_p(p++, 0x03e00009);                                     /* jalr ra */
     stl_p(p++, 0x24020000);                                     /* li v0,0 */
     /* 808 YAMON print */
     stl_p(p++, 0x03e06821);                                     /* move t5,ra */
@@ -716,7 +724,7 @@ static void write_bootloader (CPUMIPSState *env, uint8_t *base,
     stl_p(p++, 0x00000000);                                     /* nop */
     stl_p(p++, 0x08000205);                                     /* j 814 */
     stl_p(p++, 0x00000000);                                     /* nop */
-    stl_p(p++, 0x01a00008);                                     /* jr t5 */
+    stl_p(p++, 0x01a00009);                                     /* jalr t5 */
     stl_p(p++, 0x01602021);                                     /* move a0,t3 */
     /* 0x83c YAMON print_count */
     stl_p(p++, 0x03e06821);                                     /* move t5,ra */
@@ -730,7 +738,7 @@ static void write_bootloader (CPUMIPSState *env, uint8_t *base,
     stl_p(p++, 0x258cffff);                                     /* addiu t4,t4,-1 */
     stl_p(p++, 0x1580fffa);                                     /* bnez t4,84c */
     stl_p(p++, 0x00000000);                                     /* nop */
-    stl_p(p++, 0x01a00008);                                     /* jr t5 */
+    stl_p(p++, 0x01a00009);                                     /* jalr t5 */
     stl_p(p++, 0x01602021);                                     /* move a0,t3 */
     /* 0x870 */
     stl_p(p++, 0x3c08b800);                                     /* lui t0,0xb400 */
@@ -740,7 +748,7 @@ static void write_bootloader (CPUMIPSState *env, uint8_t *base,
     stl_p(p++, 0x31290040);                                     /* andi t1,t1,0x40 */
     stl_p(p++, 0x1120fffc);                                     /* beqz t1,878 <outch+0x8> */
     stl_p(p++, 0x00000000);                                     /* nop */
-    stl_p(p++, 0x03e00008);                                     /* jr ra */
+    stl_p(p++, 0x03e00009);                                     /* jalr ra */
     stl_p(p++, 0xa1040000);                                     /* sb a0,0(t0) */
 
 }
@@ -787,7 +795,7 @@ static int64_t load_kernel (void)
 
     if (load_elf(loaderparams.kernel_filename, cpu_mips_kseg0_to_phys, NULL,
                  (uint64_t *)&kernel_entry, NULL, (uint64_t *)&kernel_high,
-                 big_endian, ELF_MACHINE, 1) < 0) {
+                 big_endian, EM_MIPS, 1) < 0) {
         fprintf(stderr, "qemu: could not load kernel '%s'\n",
                 loaderparams.kernel_filename);
         exit(1);
@@ -850,8 +858,10 @@ static int64_t load_kernel (void)
     }
 
     prom_set(prom_buf, prom_index++, "memsize");
-    prom_set(prom_buf, prom_index++, "%i",
-             MIN(loaderparams.ram_size, 256 << 20));
+    prom_set(prom_buf, prom_index++, "%u", loaderparams.ram_low_size);
+
+    prom_set(prom_buf, prom_index++, "ememsize");
+    prom_set(prom_buf, prom_index++, "%u", loaderparams.ram_size);
 
     prom_set(prom_buf, prom_index++, "modetty0");
     prom_set(prom_buf, prom_index++, "38400n8r");
@@ -860,6 +870,7 @@ static int64_t load_kernel (void)
     rom_add_blob_fixed("prom", prom_buf, prom_size,
                        cpu_mips_kseg0_to_phys(NULL, ENVP_ADDR));
 
+    g_free(prom_buf);
     return kernel_entry;
 }
 
@@ -883,23 +894,14 @@ static void main_cpu_reset(void *opaque)
        read only location. The kernel location and the arguments table
        location does not change. */
     if (loaderparams.kernel_filename) {
-        env->CP0_Status &= ~((1 << CP0St_BEV) | (1 << CP0St_ERL));
+        env->CP0_Status &= ~(1 << CP0St_ERL);
     }
 
     malta_mips_config(cpu);
 
     if (kvm_enabled()) {
         /* Start running from the bootloader we wrote to end of RAM */
-        env->active_tc.PC = 0x40000000 + loaderparams.ram_size;
-    }
-}
-
-static void cpu_request_exit(void *opaque, int irq, int level)
-{
-    CPUState *cpu = current_cpu;
-
-    if (cpu && level) {
-        cpu_exit(cpu);
+        env->active_tc.PC = 0x40000000 + loaderparams.ram_low_size;
     }
 }
 
@@ -928,7 +930,6 @@ void mips_malta_init(MachineState *machine)
     MIPSCPU *cpu;
     CPUMIPSState *env;
     qemu_irq *isa_irq;
-    qemu_irq *cpu_exit_irq;
     int piix4_devfn;
     I2CBus *smbus;
     int i;
@@ -992,8 +993,8 @@ void mips_malta_init(MachineState *machine)
     }
 
     /* register RAM at high address where it is undisturbed by IO */
-    memory_region_init_ram(ram_high, NULL, "mips_malta.ram", ram_size);
-    vmstate_register_ram_global(ram_high);
+    memory_region_allocate_system_memory(ram_high, NULL, "mips_malta.ram",
+                                         ram_size);
     memory_region_add_subregion(system_memory, 0x80000000, ram_high);
 
     /* alias for pre IO hole access */
@@ -1031,11 +1032,12 @@ void mips_malta_init(MachineState *machine)
         printf("Register parallel flash %d size " TARGET_FMT_lx " at "
                "addr %08llx '%s' %x\n",
                fl_idx, bios_size, FLASH_ADDRESS,
-               bdrv_get_device_name(dinfo->bdrv), fl_sectors);
+               blk_name(dinfo->bdrv), fl_sectors);
     }
 #endif
     fl = pflash_cfi01_register(FLASH_ADDRESS, NULL, "mips_malta.bios",
-                               BIOS_SIZE, dinfo ? dinfo->bdrv : NULL,
+                               BIOS_SIZE,
+                               dinfo ? blk_by_legacy_dinfo(dinfo) : NULL,
                                65536, fl_sectors,
                                4, 0x0000, 0x0000, 0x0000, 0x0000, be);
     bios = pflash_cfi01_get_memory(fl);
@@ -1051,7 +1053,8 @@ void mips_malta_init(MachineState *machine)
         }
 
         /* Write a small bootloader to the flash location. */
-        loaderparams.ram_size = ram_low_size;
+        loaderparams.ram_size = ram_size;
+        loaderparams.ram_low_size = ram_low_size;
         loaderparams.kernel_filename = kernel_filename;
         loaderparams.kernel_cmdline = kernel_cmdline;
         loaderparams.initrd_filename = initrd_filename;
@@ -1116,7 +1119,8 @@ void mips_malta_init(MachineState *machine)
      * handled by an overlapping region as the resulting ROM code subpage
      * regions are not executable.
      */
-    memory_region_init_ram(bios_copy, NULL, "bios.1fc", BIOS_SIZE);
+    memory_region_init_ram(bios_copy, NULL, "bios.1fc", BIOS_SIZE,
+                           &error_fatal);
     if (!rom_copy(memory_region_get_ram_ptr(bios_copy),
                   FLASH_ADDRESS, BIOS_SIZE)) {
         memcpy(memory_region_get_ram_ptr(bios_copy),
@@ -1145,7 +1149,7 @@ void mips_malta_init(MachineState *machine)
     pci_bus = gt64120_register(isa_irq);
 
     /* Southbridge */
-    ide_drive_get(hd, MAX_IDE_BUS);
+    ide_drive_get(hd, ARRAY_SIZE(hd));
 
     piix4_devfn = piix4_init(pci_bus, &isa_bus, 80);
 
@@ -1157,21 +1161,19 @@ void mips_malta_init(MachineState *machine)
     pci_piix4_ide_init(pci_bus, hd, piix4_devfn + 1);
     pci_create_simple(pci_bus, piix4_devfn + 2, "piix4-usb-uhci");
     smbus = piix4_pm_init(pci_bus, piix4_devfn + 3, 0x1100,
-                          isa_get_irq(NULL, 9), NULL, 0, NULL, NULL);
+                          isa_get_irq(NULL, 9), NULL, 0, NULL);
     smbus_eeprom_init(smbus, 8, smbus_eeprom_buf, smbus_eeprom_size);
     g_free(smbus_eeprom_buf);
     pit = pit_init(isa_bus, 0x40, 0, NULL);
-    cpu_exit_irq = qemu_allocate_irqs(cpu_request_exit, NULL, 1);
-    DMA_init(0, cpu_exit_irq);
+    DMA_init(0);
 
     /* Super I/O */
     isa_create_simple(isa_bus, "i8042");
 
     rtc_init(isa_bus, 2000, NULL);
-    serial_isa_init(isa_bus, 0, serial_hds[0]);
-    serial_isa_init(isa_bus, 1, serial_hds[1]);
-    if (parallel_hds[0])
-        parallel_init(isa_bus, 0, parallel_hds[0]);
+    serial_hds_isa_init(isa_bus, 2);
+    parallel_hds_isa_init(isa_bus, 1);
+
     for(i = 0; i < MAX_FD; i++) {
         fd[i] = drive_get(IF_FLOPPY, 0, i);
     }
@@ -1203,23 +1205,19 @@ static const TypeInfo mips_malta_device = {
     .class_init    = mips_malta_class_init,
 };
 
-static QEMUMachine mips_malta_machine = {
-    .name = "malta",
-    .desc = "MIPS Malta Core LV",
-    .init = mips_malta_init,
-    .max_cpus = 16,
-    .is_default = 1,
-};
+static void mips_malta_machine_init(MachineClass *mc)
+{
+    mc->desc = "MIPS Malta Core LV";
+    mc->init = mips_malta_init;
+    mc->max_cpus = 16;
+    mc->is_default = 1;
+}
+
+DEFINE_MACHINE("malta", mips_malta_machine_init)
 
 static void mips_malta_register_types(void)
 {
     type_register_static(&mips_malta_device);
 }
 
-static void mips_malta_machine_init(void)
-{
-    qemu_register_machine(&mips_malta_machine);
-}
-
 type_init(mips_malta_register_types)
-machine_init(mips_malta_machine_init);

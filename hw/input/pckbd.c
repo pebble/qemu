@@ -101,6 +101,12 @@
 #define KBD_OUT_OBF             0x10    /* Keyboard output buffer full */
 #define KBD_OUT_MOUSE_OBF       0x20    /* Mouse output buffer full */
 
+/* OSes typically write 0xdd/0xdf to turn the A20 line off and on.
+ * We make the default value of the outport include these four bits,
+ * so that the subsection is rarely necessary.
+ */
+#define KBD_OUT_ONES            0xcc
+
 /* Mouse Commands */
 #define AUX_SET_SCALE11		0xE6	/* Set 1:1 scaling */
 #define AUX_SET_SCALE21		0xE7	/* Set 2:1 scaling */
@@ -131,6 +137,7 @@ typedef struct KBDState {
     uint8_t status;
     uint8_t mode;
     uint8_t outport;
+    bool outport_present;
     /* Bitmask of devices with data available.  */
     uint8_t pending;
     void *kbd;
@@ -229,7 +236,7 @@ static void kbd_write_command(void *opaque, hwaddr addr,
 {
     KBDState *s = opaque;
 
-    DPRINTF("kbd: write cmd=0x%02x\n", val);
+    DPRINTF("kbd: write cmd=0x%02" PRIx64 "\n", val);
 
     /* Bits 3-0 of the output port P2 of the keyboard controller may be pulsed
      * low for approximately 6 micro seconds. Bits 3-0 of the KBD_CCMD_PULSE
@@ -330,7 +337,7 @@ static void kbd_write_data(void *opaque, hwaddr addr,
 {
     KBDState *s = opaque;
 
-    DPRINTF("kbd: write data=0x%02x\n", val);
+    DPRINTF("kbd: write data=0x%02" PRIx64 "\n", val);
 
     switch(s->write_cmd) {
     case 0:
@@ -366,19 +373,67 @@ static void kbd_reset(void *opaque)
 
     s->mode = KBD_MODE_KBD_INT | KBD_MODE_MOUSE_INT;
     s->status = KBD_STAT_CMD | KBD_STAT_UNLOCKED;
-    s->outport = KBD_OUT_RESET | KBD_OUT_A20;
+    s->outport = KBD_OUT_RESET | KBD_OUT_A20 | KBD_OUT_ONES;
+    s->outport_present = false;
+}
+
+static uint8_t kbd_outport_default(KBDState *s)
+{
+    return KBD_OUT_RESET | KBD_OUT_A20 | KBD_OUT_ONES
+           | (s->status & KBD_STAT_OBF ? KBD_OUT_OBF : 0)
+           | (s->status & KBD_STAT_MOUSE_OBF ? KBD_OUT_MOUSE_OBF : 0);
+}
+
+static int kbd_outport_post_load(void *opaque, int version_id)
+{
+    KBDState *s = opaque;
+    s->outport_present = true;
+    return 0;
+}
+
+static bool kbd_outport_needed(void *opaque)
+{
+    KBDState *s = opaque;
+    return s->outport != kbd_outport_default(s);
+}
+
+static const VMStateDescription vmstate_kbd_outport = {
+    .name = "pckbd_outport",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .post_load = kbd_outport_post_load,
+    .needed = kbd_outport_needed,
+    .fields = (VMStateField[]) {
+        VMSTATE_UINT8(outport, KBDState),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
+static int kbd_post_load(void *opaque, int version_id)
+{
+    KBDState *s = opaque;
+    if (!s->outport_present) {
+        s->outport = kbd_outport_default(s);
+    }
+    s->outport_present = false;
+    return 0;
 }
 
 static const VMStateDescription vmstate_kbd = {
     .name = "pckbd",
     .version_id = 3,
     .minimum_version_id = 3,
+    .post_load = kbd_post_load,
     .fields = (VMStateField[]) {
         VMSTATE_UINT8(write_cmd, KBDState),
         VMSTATE_UINT8(status, KBDState),
         VMSTATE_UINT8(mode, KBDState),
         VMSTATE_UINT8(pending, KBDState),
         VMSTATE_END_OF_LIST()
+    },
+    .subsections = (const VMStateDescription*[]) {
+        &vmstate_kbd_outport,
+        NULL
     }
 };
 

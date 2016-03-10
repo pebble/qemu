@@ -24,12 +24,13 @@
 #include "hw/hw.h"
 #include "hw/block/flash.h"
 #include "block/block.h"
+#include "sysemu/block-backend.h"
 #include "hw/sysbus.h"
 
 
 struct f2xx_flash {
     SysBusDevice busdev;
-    BlockDriverState *bdrv;
+    BlockBackend *blk;
     hwaddr base_address;
     uint32_t size;
 
@@ -38,7 +39,7 @@ struct f2xx_flash {
 }; // f2xx_flash_t;
 
 /* */
-f2xx_flash_t *f2xx_flash_register(BlockDriverState *bdrv, hwaddr base,
+f2xx_flash_t *f2xx_flash_register(BlockBackend *blk, hwaddr base,
                                   hwaddr size)
 {
     DeviceState *dev = qdev_create(NULL, "f2xx.flash");
@@ -47,8 +48,10 @@ f2xx_flash_t *f2xx_flash_register(BlockDriverState *bdrv, hwaddr base,
                                                               "f2xx.flash");
     qdev_prop_set_uint32(dev, "size", size);
     qdev_prop_set_uint64(dev, "base_address", base);
-    if (bdrv) {
-        if (qdev_prop_set_drive(dev, "drive", bdrv)) {
+    if (blk) {
+    	Error *err = NULL;
+        qdev_prop_set_drive(dev, "drive", blk, &err);
+        if (err) {
             printf("%s, have no drive???\n", __func__);
             return NULL;
         }
@@ -84,11 +87,12 @@ MemoryRegion *get_system_memory(void); /* XXX */
 
 static int f2xx_flash_init(SysBusDevice *dev)
 {
+    Error *err = NULL;
     f2xx_flash_t *flash = FROM_SYSBUS(typeof(*flash), dev);
 
 //    memory_region_init_rom_device(&flash->mem, &f2xx_flash_ops, flash, "name",
 //      size);
-    memory_region_init_ram(&flash->mem, NULL, "f2xx.flash", flash->size);
+    memory_region_init_ram(&flash->mem, NULL, "f2xx.flash", flash->size, &err);
 
     vmstate_register_ram(&flash->mem, DEVICE(flash));
     //vmstate_register_ram_global(&flash->mem);
@@ -98,12 +102,12 @@ static int f2xx_flash_init(SysBusDevice *dev)
 
     flash->data = memory_region_get_ram_ptr(&flash->mem);
     memset(flash->data, 0xff, flash->size);
-    if (flash->bdrv) {
+    if (flash->blk) {
         int r;
-        r = bdrv_read(flash->bdrv, 0, flash->data, bdrv_getlength(flash->bdrv)/BDRV_SECTOR_SIZE);
+        r = blk_read(flash->blk, 0, flash->data, blk_getlength(flash->blk)/BDRV_SECTOR_SIZE);
         if (r < 0) {
             vmstate_unregister_ram(&flash->mem, DEVICE(flash));
-            memory_region_destroy(&flash->mem);
+            // memory_region_destroy(&flash->mem);
             return 1;
         }
     }
@@ -112,9 +116,10 @@ static int f2xx_flash_init(SysBusDevice *dev)
 }
 
 static Property f2xx_flash_properties[] = {
-    DEFINE_PROP_DRIVE("drive", struct f2xx_flash, bdrv),
+    DEFINE_PROP_DRIVE("drive", struct f2xx_flash, blk),
     DEFINE_PROP_UINT32("size", struct f2xx_flash, size, 512*1024),
     DEFINE_PROP_UINT64("base_address", struct f2xx_flash, base_address, 0x08000000),
+    DEFINE_PROP_END_OF_LIST(),
 };
 
 static void f2xx_flash_class_init(ObjectClass *klass, void *data)

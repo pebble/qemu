@@ -151,13 +151,12 @@ static void leon3_generic_hw_init(MachineState *machine)
         exit(1);
     }
 
-    memory_region_init_ram(ram, NULL, "leon3.ram", ram_size);
-    vmstate_register_ram_global(ram);
+    memory_region_allocate_system_memory(ram, NULL, "leon3.ram", ram_size);
     memory_region_add_subregion(address_space_mem, 0x40000000, ram);
 
     /* Allocate BIOS */
     prom_size = 8 * 1024 * 1024; /* 8Mb */
-    memory_region_init_ram(prom, NULL, "Leon3.bios", prom_size);
+    memory_region_init_ram(prom, NULL, "Leon3.bios", prom_size, &error_fatal);
     vmstate_register_ram_global(prom);
     memory_region_set_readonly(prom, true);
     memory_region_add_subregion(address_space_mem, 0x00000000, prom);
@@ -186,6 +185,7 @@ static void leon3_generic_hw_init(MachineState *machine)
         fprintf(stderr, "Can't read bios image %s\n", filename);
         exit(1);
     }
+    g_free(filename);
 
     /* Can directly load an application. */
     if (kernel_filename != NULL) {
@@ -193,7 +193,7 @@ static void leon3_generic_hw_init(MachineState *machine)
         uint64_t entry;
 
         kernel_size = load_elf(kernel_filename, NULL, NULL, &entry, NULL, NULL,
-                               1 /* big endian */, ELF_MACHINE, 0);
+                               1 /* big endian */, EM_SPARC, 0);
         if (kernel_size < 0) {
             fprintf(stderr, "qemu: could not load kernel '%s'\n",
                     kernel_filename);
@@ -216,15 +216,10 @@ static void leon3_generic_hw_init(MachineState *machine)
     }
 }
 
-static QEMUMachine leon3_generic_machine = {
-    .name     = "leon3_generic",
-    .desc     = "Leon-3 generic",
-    .init     = leon3_generic_hw_init,
-};
-
-static void leon3_machine_init(void)
+static void leon3_generic_machine_init(MachineClass *mc)
 {
-    qemu_register_machine(&leon3_generic_machine);
+    mc->desc = "Leon-3 generic";
+    mc->init = leon3_generic_hw_init;
 }
 
-machine_init(leon3_machine_init);
+DEFINE_MACHINE("leon3_generic", leon3_generic_machine_init)

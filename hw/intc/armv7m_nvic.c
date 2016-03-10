@@ -17,6 +17,19 @@
 #include "gic_internal.h"
 #include "sysemu/sysemu.h"
 
+//#define DEBUG_ARMV7M_NVIC
+#ifdef DEBUG_ARMV7M_NVIC
+
+// NOTE: The usleep() helps the MacOS stdout from freezing when we have a lot of print out
+#define DPRINTF(fmt, ...)                                       \
+    do { printf("ARMV7M_NVIC: " fmt , ## __VA_ARGS__); \
+         /* usleep(1000); */ /* the usleep causes watchdogs :( */ \
+    } while (0)
+#else
+#define DPRINTF(fmt, ...)
+#endif
+
+
 typedef struct {
     GICState gic;
     struct {
@@ -29,23 +42,19 @@ typedef struct {
     MemoryRegion sysregmem;
     MemoryRegion gic_iomem_alias;
     MemoryRegion container;
-    uint32_t  num_irq;
-    uint32_t  scr_reg;      /* contents of SCR register */
-
+    uint32_t num_irq;
+    qemu_irq sysresetreq;
+    uint32_t scr_reg;      /* contents of SCR register */
     /* set true if we executed a WFI instruction with the SLEEPDEEP bit set in the SCR */
-    bool      in_deep_sleep;
-
+    bool in_deep_sleep;
     // Set true if we execute a WFI instruction with both SLEEPDEEP bit set in the SCR
     // and PDDS (Power Down Deep Sleep) bit is set in the PWR_CR register
-    bool      in_standby;
-
+    bool in_standby;
     // Properties
     void *stm32_pwr_prop;
-
     // output IRQs
     qemu_irq cpu_wakeup_out;
     qemu_irq power_out;
-
 } nvic_state;
 
 #define TYPE_NVIC "armv7m_nvic"
@@ -86,7 +95,6 @@ static const uint8_t nvic_id[] = {
 #define SYSTICK_COUNTFLAG (1 << 16)
 
 int system_clock_scale;
-int external_ref_clock_scale = 1000;
 
 /* Conversion factor from qemu timer to SysTick frequencies.  */
 static inline int64_t systick_scale(nvic_state *s)
@@ -94,11 +102,20 @@ static inline int64_t systick_scale(nvic_state *s)
     if (s->systick.control & SYSTICK_CLKSOURCE)
         return system_clock_scale;
     else
-        return external_ref_clock_scale;
+        return 1000;
 }
 
 static void systick_reload(nvic_state *s, int reset)
 {
+    /* The Cortex-M3 Devices Generic User Guide says that "When the
+     * ENABLE bit is set to 1, the counter loads the RELOAD value from the
+     * SYST RVR register and then counts down". So, we need to check the
+     * ENABLE bit before reloading the value.
+     */
+    if ((s->systick.control & SYSTICK_ENABLE) == 0) {
+        return;
+    }
+
     if (reset)
         s->systick.tick = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
     s->systick.tick += (s->systick.reload + 1) * systick_scale(s);
@@ -112,11 +129,11 @@ static void systick_timer_tick(void * opaque)
     if (s->systick.control & SYSTICK_TICKINT) {
         if (!s->in_deep_sleep) {
             /* NOTE: In deep sleep mode, all peripherals are off (no clocks), so
-             * no IRQs should be made pending. Eventually, we should gate all 
+             * no IRQs should be made pending. Eventually, we should gate all
              * peripherals according to deep sleep mode, but SysTick is a good
              * important start. */
             armv7m_nvic_set_pending(s, ARMV7M_EXCP_SYSTICK);
-        } 
+        }
     }
     if (s->systick.reload == 0) {
         s->systick.control &= ~SYSTICK_ENABLE;
@@ -165,8 +182,8 @@ int armv7m_nvic_acknowledge_irq(void *opaque)
     uint32_t irq;
 
     /* We can't be in deep sleep mode anymore because we received an interrupt
-     * Actually, the correct way to do this to match the hardware exactly would be to fall 
-     * out of deep sleep even if an interrupt is pending - regardless if it is active or 
+     * Actually, the correct way to do this to match the hardware exactly would be to fall
+     * out of deep sleep even if an interrupt is pending - regardless if it is active or
      * not or masked due to BASEPRI. This would involved moving this reset of deep sleep
      * mode higher up the call chain, perhaps in arm_gic.c, where we get notification of
      * interrupts that change to pending state.  */
@@ -176,12 +193,13 @@ int armv7m_nvic_acknowledge_irq(void *opaque)
         s->in_standby = false;
     }
 
-    irq = gic_acknowledge_irq(&s->gic, 0);
-    if (irq == 1023)
-        //hw_error("Interrupt but no vector\n");
-        return 1023;
-    if (irq >= 32)
+    irq = gic_acknowledge_irq(&s->gic, 0, MEMTXATTRS_UNSPECIFIED);
+    if (irq == 1023) {
+        hw_error("Interrupt but no vector\n");
+    }
+    if (irq >= 32) {
         irq -= 16;
+    }
     return irq;
 }
 
@@ -190,7 +208,7 @@ void armv7m_nvic_complete_irq(void *opaque, int irq)
     nvic_state *s = (nvic_state *)opaque;
     if (irq >= 16)
         irq += 16;
-    gic_complete_irq(&s->gic, 0, irq);
+    gic_complete_irq(&s->gic, 0, irq, MEMTXATTRS_UNSPECIFIED);
 }
 
 void armv7m_nvic_cpu_executed_wfi(void *opaque)
@@ -202,7 +220,7 @@ void armv7m_nvic_cpu_executed_wfi(void *opaque)
             s->in_standby = true;
             // For now, this is an easy way to disable nearly all interrupts from waking up
             // the CPU. Technically, this is not correct and we should allow specific ones
-            // through (some RTC interrupts, etc.). 
+            // through (some RTC interrupts, etc.).
             armv7m_nvic_set_base_priority(opaque, 0x01);
 
             // Inform peripherals that the power is off
@@ -210,7 +228,6 @@ void armv7m_nvic_cpu_executed_wfi(void *opaque)
         }
     }
 }
-
 
 // -----------------------------------------------------------------------------
 // Called when the WKUP pin changes state (GPIO A0)
@@ -267,25 +284,24 @@ static uint32_t nvic_readl(nvic_state *s, uint32_t offset)
         return cpu->midr;
     case 0xd04: /* Interrupt Control State.  */
         /* VECTACTIVE */
-        val = s->gic.running_irq[0];
+        cpu = ARM_CPU(current_cpu);
+        val = cpu->env.v7m.exception;
         if (val == 1023) {
             val = 0;
         } else if (val >= 32) {
             val -= 16;
         }
-        /* RETTOBASE */
-        if (s->gic.running_irq[0] == 1023
-                || s->gic.last_active[s->gic.running_irq[0]][0] == 1023) {
-            val |= (1 << 11);
-        }
         /* VECTPENDING */
         if (s->gic.current_pending[0] != 1023)
             val |= (s->gic.current_pending[0] << 12);
-        /* ISRPENDING */
+        /* ISRPENDING and RETTOBASE */
         for (irq = 32; irq < s->num_irq; irq++) {
             if (s->gic.irq_state[irq].pending) {
                 val |= (1 << 22);
                 break;
+            }
+            if (irq != cpu->env.v7m.exception && s->gic.irq_state[irq].active) {
+                val |= (1 << 11);
             }
         }
         /* PENDSTSET */
@@ -307,8 +323,8 @@ static uint32_t nvic_readl(nvic_state *s, uint32_t offset)
         return s->scr_reg;
         break;
     case 0xd14: /* Configuration Control.  */
-        /* TODO: Implement Configuration Control bits.  */
-        return 0;
+        cpu = ARM_CPU(current_cpu);
+        return cpu->env.v7m.ccr;
     case 0xd24: /* System Handler Status.  */
         val = 0;
         if (s->gic.irq_state[ARMV7M_EXCP_MEM].active) val |= (1 << 0);
@@ -327,16 +343,23 @@ static uint32_t nvic_readl(nvic_state *s, uint32_t offset)
         if (s->gic.irq_state[ARMV7M_EXCP_USAGE].enabled) val |= (1 << 18);
         return val;
     case 0xd28: /* Configurable Fault Status.  */
-        /* TODO: Implement Fault Status.  */
-        qemu_log_mask(LOG_UNIMP, "Configurable Fault Status unimplemented\n");
-        return 0;
+        cpu = ARM_CPU(current_cpu);
+        return cpu->env.v7m.cfsr;
     case 0xd2c: /* Hard Fault Status.  */
+        cpu = ARM_CPU(current_cpu);
+        return cpu->env.v7m.hfsr;
     case 0xd30: /* Debug Fault Status.  */
-    case 0xd34: /* Mem Manage Address.  */
+        cpu = ARM_CPU(current_cpu);
+        return cpu->env.v7m.dfsr;
+    case 0xd34: /* MemManage Address.  */
+        cpu = ARM_CPU(current_cpu);
+        return cpu->env.v7m.mmfar;
     case 0xd38: /* Bus Fault Address.  */
+        cpu = ARM_CPU(current_cpu);
+        return cpu->env.v7m.bfar;
     case 0xd3c: /* Aux Fault Status.  */
         /* TODO: Implement fault status registers.  */
-        qemu_log_mask(LOG_UNIMP, "Fault status registers unimplemented\n");
+        qemu_log_mask(LOG_UNIMP, "AUX fault status registers unimplemented\n");
         return 0;
     case 0xd40: /* PFR0.  */
         return 0x00000030;
@@ -364,7 +387,39 @@ static uint32_t nvic_readl(nvic_state *s, uint32_t offset)
         return 0x01111110;
     case 0xd70: /* ISAR4.  */
         return 0x01310102;
-    /* TODO: Implement debug registers.  */
+    case 0xd90: /* MPU type register.  */
+        cpu = ARM_CPU(current_cpu);
+        return cpu->pmsav7_dregion << 8;
+    case 0xd94: /* MPU control register.  */
+        cpu = ARM_CPU(current_cpu);
+        return cpu->env.v7m.mpu_ctrl;
+    case 0xd98: /* MPU_RNR.  */
+        cpu = ARM_CPU(current_cpu);
+        return cpu->env.cp15.c6_rgnr;
+    case 0xd9c: /* MPU_RBAR: MPU region base address register.  */
+    case 0xda4: /* MPU_RBAR_A1.  */
+    case 0xdac: /* MPU_RBAR_A2.  */
+    case 0xdb4: /* MPU_RBAR_A3.  */
+        cpu = ARM_CPU(current_cpu);
+        if (cpu->pmsav7_dregion == 0) {
+            return 0;
+        }
+        val = cpu->env.pmsav7.drbar[cpu->env.cp15.c6_rgnr];
+        val |= (cpu->env.cp15.c6_rgnr ) & 0xf;
+        return val;
+    case 0xda0: /* MPU_RASR: MPU region attribute and size register.  */
+    case 0xda8: /* MPU_RASR_A1.  */
+    case 0xdb0: /* MPU_RASR_A2.  */
+    case 0xdb8: /* MPU_RASR_A3.  */
+        cpu = ARM_CPU(current_cpu);
+        if (cpu->pmsav7_dregion == 0) {
+            return 0;
+        }
+        val = cpu->env.pmsav7.dracr[cpu->env.cp15.c6_rgnr];
+        val <<= 16;
+        val |= cpu->env.pmsav7.drsr[cpu->env.cp15.c6_rgnr];
+        return val;
+        /* TODO: Implement debug registers.  */
     default:
         qemu_log_mask(LOG_GUEST_ERROR, "NVIC: Bad read offset 0x%x\n", offset);
         return 0;
@@ -431,10 +486,13 @@ static void nvic_writel(nvic_state *s, uint32_t offset, uint32_t value)
         break;
     case 0xd0c: /* Application Interrupt/Reset Control.  */
         if ((value >> 16) == 0x05fa) {
+            if (value & 4) {
+                qemu_irq_pulse(s->sysresetreq);
+            }
             if (value & 2) {
                 qemu_log_mask(LOG_UNIMP, "VECTCLRACTIVE unimplemented\n");
             }
-            if (value & 5) {
+            if (value & 1) {
                 qemu_system_reset_request();
             }
             s->aircr_reg = value & 0x00700;    /* keep only the bits we suport */
@@ -444,8 +502,8 @@ static void nvic_writel(nvic_state *s, uint32_t offset, uint32_t value)
         s->scr_reg = value;
         break;
     case 0xd14: /* Configuration Control.  */
-        /* TODO: Implement control registers.  */
-        qemu_log_mask(LOG_UNIMP, "NVIC: CCR unimplemented\n");
+        cpu = ARM_CPU(current_cpu);
+        cpu->env.v7m.ccr = value & CCR_STKALIGN;
         break;
     case 0xd24: /* System Handler Control.  */
         /* TODO: Real hardware allows you to set/clear the active bits
@@ -455,21 +513,101 @@ static void nvic_writel(nvic_state *s, uint32_t offset, uint32_t value)
         s->gic.irq_state[ARMV7M_EXCP_USAGE].enabled = (value & (1 << 18)) != 0;
         break;
     case 0xd28: /* Configurable Fault Status.  */
+        cpu = ARM_CPU(current_cpu);
+        cpu->env.v7m.cfsr &= ~value;
+        DPRINTF("writel:cfsr now: %08X\n", cpu->env.v7m.cfsr);
+        break;
     case 0xd2c: /* Hard Fault Status.  */
+        cpu = ARM_CPU(current_cpu);
+        cpu->env.v7m.hfsr &= ~value;
+        DPRINTF("writel:hfsr now: %08X\n", cpu->env.v7m.hfsr);
+        break;
     case 0xd30: /* Debug Fault Status.  */
+        cpu = ARM_CPU(current_cpu);
+        cpu->env.v7m.dfsr &= ~value;
+        DPRINTF("writel:dfsr now: %08X\n", cpu->env.v7m.dfsr);
+        break;
     case 0xd34: /* Mem Manage Address.  */
+        cpu = ARM_CPU(current_cpu);
+        cpu->env.v7m.mmfar = value;
+        DPRINTF("writel:mmfar now: %08X\n", cpu->env.v7m.mmfar);
+        break;
     case 0xd38: /* Bus Fault Address.  */
+        cpu = ARM_CPU(current_cpu);
+        cpu->env.v7m.bfar = value;
+        DPRINTF("writel:bfar now: %08X\n", cpu->env.v7m.bfar);
+        break;
     case 0xd3c: /* Aux Fault Status.  */
         qemu_log_mask(LOG_UNIMP,
-                      "NVIC: fault status registers unimplemented\n");
+                      "NVIC: AUX fault status registers unimplemented\n");
         break;
-    case 0xd9c:
-    case 0xda0:
-    case 0xda4:
-    case 0xda8:
-    case 0xdac:
-    case 0xdb0:
-        /* XXX memory protection - just ignore it. */
+    case 0xd94: /* MPU control register.  */
+        cpu = ARM_CPU(current_cpu);
+        if (cpu->pmsav7_dregion == 0) {
+            DPRINTF("writel:mpu_ctrl -- no regions!\n");
+            break;
+        }
+        cpu->env.v7m.mpu_ctrl = value & 0x7;
+        if (cpu->env.v7m.mpu_ctrl & MPU_CTRL_ENABLE) {
+            cpu->env.cp15.sctlr_ns |= SCTLR_M;
+        } else {
+            cpu->env.cp15.sctlr_ns &= ~SCTLR_M;
+        }
+        /* TODO: mimic MPU_CTRL_HFNMIENA */
+        if (cpu->env.v7m.mpu_ctrl & MPU_CTRL_PRIVDEFENA) {
+            cpu->env.cp15.sctlr_ns |= SCTLR_BR;
+        } else {
+            cpu->env.cp15.sctlr_ns &= ~SCTLR_BR;
+        }
+        /* This may enable/disable the MMU, so do a TLB flush.  */
+        DPRINTF("writel:mpu_ctrl now: %08X\n", cpu->env.v7m.mpu_ctrl);
+        DPRINTF("writel:sctlr_ns now: %016llX\n", cpu->env.cp15.sctlr_ns);
+        tlb_flush(CPU(cpu), 1);
+        break;
+    case 0xd98: /* MPU_RNR.  */
+        cpu = ARM_CPU(current_cpu);
+        value &= 0xff;
+        if (value < cpu->pmsav7_dregion) {
+            cpu->env.cp15.c6_rgnr = value;
+        }
+        DPRINTF("writel:mpu_rnr, region now: %u\n", cpu->env.cp15.c6_rgnr);
+        break;
+    case 0xd9c: /* MPU_RBAR: MPU region base address register.  */
+    case 0xda4: /* MPU_RBAR_A1.  */
+    case 0xdac: /* MPU_RBAR_A2.  */
+    case 0xdb4: /* MPU_RBAR_A3.  */
+        cpu = ARM_CPU(current_cpu);
+        if (cpu->pmsav7_dregion == 0) {
+            DPRINTF("writel:mpu_rbar (%02X) -- no regions!\n", offset);
+            break;
+        }
+        if (value & 0x10) {
+            /* region update */
+            uint32_t region = value & 0x0f;
+            if (region < cpu->pmsav7_dregion) {
+                cpu->env.cp15.c6_rgnr = region;
+            }
+            DPRINTF("writel:mpu_rbar (%04X), region now: %u\n", offset, cpu->env.cp15.c6_rgnr);
+        }
+        value &= ~0x1f;
+        cpu->env.pmsav7.drbar[cpu->env.cp15.c6_rgnr] = value;
+        DPRINTF("writel:mpu_rbar (%04X), region(%u) now %08X\n", offset, cpu->env.cp15.c6_rgnr, cpu->env.pmsav7.drbar[cpu->env.cp15.c6_rgnr]);
+        tlb_flush(CPU(cpu), 1); /* Mappings may have changed - purge! */
+        break;
+    case 0xda0: /* MPU_RSAR: MPU region attribute and size register.  */
+    case 0xda8: /* MPU_RSAR_A1.  */
+    case 0xdb0: /* MPU_RSAR_A2.  */
+    case 0xdb8: /* MPU_RSAR_A3.  */
+        cpu = ARM_CPU(current_cpu);
+        if (cpu->pmsav7_dregion == 0) {
+            DPRINTF("writel:mpu_rsar (%02X) -- no regions!\n", offset);
+            break;
+        }
+        cpu->env.pmsav7.dracr[cpu->env.cp15.c6_rgnr] = value >> 16;
+        cpu->env.pmsav7.drsr[cpu->env.cp15.c6_rgnr] = value & 0xffff;
+        DPRINTF("writel:mpu_rsar (%04X), region(%u), dracr now %04X\n", offset, cpu->env.cp15.c6_rgnr, cpu->env.pmsav7.dracr[cpu->env.cp15.c6_rgnr]);
+        DPRINTF("writel:mpu_rsar (%04X), region(%u), drsr now %04X\n", offset, cpu->env.cp15.c6_rgnr, cpu->env.pmsav7.drsr[cpu->env.cp15.c6_rgnr]);
+        tlb_flush(CPU(cpu), 1); /* Mappings may have changed - purge! */
         break;
     case 0xf00: /* Software Triggered Interrupt Register */
         if ((value & 0x1ff) < s->num_irq) {
@@ -489,6 +627,7 @@ static uint64_t nvic_sysreg_read(void *opaque, hwaddr addr,
     uint32_t offset = addr;
     int i;
     uint32_t val;
+    ARMCPU *cpu;
 
     switch (offset) {
     case 0xd18 ... 0xd23: /* System Handler Priority.  */
@@ -497,6 +636,23 @@ static uint64_t nvic_sysreg_read(void *opaque, hwaddr addr,
             val |= s->gic.priority1[(offset - 0xd14) + i][0] << (i * 8);
         }
         return val;
+    case 0xd28 ... 0xd2b: /* Configurable Fault Status.  */
+        cpu = ARM_CPU(current_cpu);
+        return extract32(cpu->env.v7m.cfsr, (offset - 0xd28) * 8, size * 8);
+    case 0xda0 ... 0xdb7: /* MPU_RSAR and aliases.  */
+        cpu = ARM_CPU(current_cpu);
+        if (cpu->pmsav7_dregion == 0) {
+            break;
+        }
+        if ((size == 2) && (offset & 7) == 0) {
+            val = cpu->env.pmsav7.drsr[cpu->env.cp15.c6_rgnr];
+            return val & 0xffff;
+        }
+        if ((size == 2) && (offset & 7) == 2) {
+            val = cpu->env.pmsav7.dracr[cpu->env.cp15.c6_rgnr];
+            return val & 0xffff;
+        }
+        break;
     case 0xfe0 ... 0xfff: /* ID.  */
         if (offset & 3) {
             return 0;
@@ -517,6 +673,7 @@ static void nvic_sysreg_write(void *opaque, hwaddr addr,
     nvic_state *s = (nvic_state *)opaque;
     uint32_t offset = addr;
     int i;
+    ARMCPU *cpu;
 
     switch (offset) {
     case 0xd18 ... 0xd23: /* System Handler Priority.  */
@@ -526,6 +683,39 @@ static void nvic_sysreg_write(void *opaque, hwaddr addr,
         }
         gic_update(&s->gic);
         return;
+    case 0xd28 ... 0xd2b: /* Configurable Fault Status.  */
+        if (size == 1) {
+            value <<= (offset - 0xd28) * 8;
+            offset &= ~3;
+            size = 4;
+            break;
+        }
+        if ((size == 2) && ((offset & 1) == 0)) {
+            value <<= (offset - 0xd28) * 8;
+            offset &= ~3;
+            size = 4;
+            break;
+        }
+        break;
+    case 0xda0 ... 0xdb7: /* MPU_RSAR and aliases.  */
+        cpu = ARM_CPU(current_cpu);
+        if (cpu->pmsav7_dregion == 0) {
+            break;
+        }
+        if ((size == 2) && (offset & 7) == 0) {
+            value |= cpu->env.pmsav7.dracr[cpu->env.cp15.c6_rgnr] << 16;
+            offset &= ~2;
+            size = 4;
+            break;
+        }
+        if ((size == 2) && (offset & 7) == 2) {
+            value <<= 16;
+            value |= cpu->env.pmsav7.drsr[cpu->env.cp15.c6_rgnr];
+            offset &= ~2;
+            size = 4;
+            break;
+        }
+        break;
     }
     if (size == 4) {
         nvic_writel(s, offset, value);
@@ -549,7 +739,7 @@ static const VMStateDescription vmstate_nvic = {
         VMSTATE_UINT32(systick.control, nvic_state),
         VMSTATE_UINT32(systick.reload, nvic_state),
         VMSTATE_INT64(systick.tick, nvic_state),
-        VMSTATE_TIMER(systick.timer, nvic_state),
+        VMSTATE_TIMER_PTR(systick.timer, nvic_state),
         VMSTATE_END_OF_LIST()
     }
 };
@@ -558,23 +748,16 @@ static void armv7m_nvic_reset(DeviceState *dev)
 {
     nvic_state *s = NVIC(dev);
     NVICClass *nc = NVIC_GET_CLASS(s);
-
     nc->parent_reset(dev);
     /* Common GIC reset resets to disabled; the NVIC doesn't have
      * per-CPU interfaces so mark our non-existent CPU interface
-     * as enabled by default, with a priority mask which allows
-     * all interrupts through, and reset all priorities. 
+     * as enabled by default, and with a priority mask which allows
+     * all interrupts through.
      */
-    s->gic.cpu_enabled[0] = true;
+    s->gic.cpu_ctlr[0] = GICC_CTLR_EN_GRP0;
     s->gic.priority_mask[0] = 0x100;
-    int i;
-    for (i=0; i<GIC_INTERNAL; i++) {
-        s->gic.priority1[i][0] = 0;
-    }
-    memset(s->gic.priority2, 0, sizeof(s->gic.priority2));
-
     /* The NVIC as a whole is always enabled. */
-    s->gic.enabled = true;
+    s->gic.ctlr = 1;
     systick_reset(s);
 
     s->scr_reg = 0;
@@ -599,7 +782,7 @@ static void armv7m_nvic_realize(DeviceState *dev, Error **errp)
         error_propagate(errp, local_err);
         return;
     }
-    gic_init_irqs_and_distributor(&s->gic, s->num_irq);
+    gic_init_irqs_and_distributor(&s->gic);
     /* The NVIC and system controller register area looks like this:
      *  0..0xff : system control registers, including systick
      *  0x100..0xcff : GIC-like registers
@@ -636,7 +819,6 @@ static void armv7m_nvic_realize(DeviceState *dev, Error **errp)
 
     // This is the handler that informs peripherals that the power is on/off
     qdev_init_gpio_out_named(dev, &s->power_out, "power_out", 1);
-
 }
 
 static void armv7m_nvic_instance_init(Object *obj)
@@ -648,11 +830,14 @@ static void armv7m_nvic_instance_init(Object *obj)
      * value in the GICState struct.
      */
     GICState *s = ARM_GIC_COMMON(obj);
+    DeviceState *dev = DEVICE(obj);
+    nvic_state *nvic = NVIC(obj);
     /* The ARM v7m may have anything from 0 to 496 external interrupt
      * IRQ lines. We default to 64. Other boards may differ and should
      * set the num-irq property appropriately.
      */
     s->num_irq = 64;
+    qdev_init_gpio_out_named(dev, &nvic->sysresetreq, "SYSRESETREQ", 1);
 }
 
 static Property armv7m_nvic_properties[] = {

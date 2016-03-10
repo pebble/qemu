@@ -105,7 +105,7 @@ static void qmp_input_pop(QmpInputVisitor *qiv, Error **errp)
             if (g_hash_table_size(top_ht)) {
                 const char *key;
                 g_hash_table_find(top_ht, always_true, &key);
-                error_set(errp, QERR_QMP_EXTRA_MEMBER, key);
+                error_setg(errp, QERR_QMP_EXTRA_MEMBER, key);
             }
             g_hash_table_unref(top_ht);
         }
@@ -122,8 +122,8 @@ static void qmp_input_start_struct(Visitor *v, void **obj, const char *kind,
     Error *err = NULL;
 
     if (!qobj || qobject_type(qobj) != QTYPE_QDICT) {
-        error_set(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
-                  "QDict");
+        error_setg(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
+                   "QDict");
         return;
     }
 
@@ -163,8 +163,8 @@ static void qmp_input_start_list(Visitor *v, const char *name, Error **errp)
     QObject *qobj = qmp_input_get_object(qiv, name, true);
 
     if (!qobj || qobject_type(qobj) != QTYPE_QLIST) {
-        error_set(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
-                  "list");
+        error_setg(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
+                   "list");
         return;
     }
 
@@ -215,7 +215,7 @@ static void qmp_input_get_next_type(Visitor *v, int *kind, const int *qobjects,
     QObject *qobj = qmp_input_get_object(qiv, name, false);
 
     if (!qobj) {
-        error_set(errp, QERR_MISSING_PARAMETER, name ? name : "null");
+        error_setg(errp, QERR_MISSING_PARAMETER, name ? name : "null");
         return;
     }
     *kind = qobjects[qobject_type(qobj)];
@@ -225,45 +225,45 @@ static void qmp_input_type_int(Visitor *v, int64_t *obj, const char *name,
                                Error **errp)
 {
     QmpInputVisitor *qiv = to_qiv(v);
-    QObject *qobj = qmp_input_get_object(qiv, name, true);
+    QInt *qint = qobject_to_qint(qmp_input_get_object(qiv, name, true));
 
-    if (!qobj || qobject_type(qobj) != QTYPE_QINT) {
-        error_set(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
-                  "integer");
+    if (!qint) {
+        error_setg(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
+                   "integer");
         return;
     }
 
-    *obj = qint_get_int(qobject_to_qint(qobj));
+    *obj = qint_get_int(qint);
 }
 
 static void qmp_input_type_bool(Visitor *v, bool *obj, const char *name,
                                 Error **errp)
 {
     QmpInputVisitor *qiv = to_qiv(v);
-    QObject *qobj = qmp_input_get_object(qiv, name, true);
+    QBool *qbool = qobject_to_qbool(qmp_input_get_object(qiv, name, true));
 
-    if (!qobj || qobject_type(qobj) != QTYPE_QBOOL) {
-        error_set(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
-                  "boolean");
+    if (!qbool) {
+        error_setg(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
+                   "boolean");
         return;
     }
 
-    *obj = qbool_get_int(qobject_to_qbool(qobj));
+    *obj = qbool_get_bool(qbool);
 }
 
 static void qmp_input_type_str(Visitor *v, char **obj, const char *name,
                                Error **errp)
 {
     QmpInputVisitor *qiv = to_qiv(v);
-    QObject *qobj = qmp_input_get_object(qiv, name, true);
+    QString *qstr = qobject_to_qstring(qmp_input_get_object(qiv, name, true));
 
-    if (!qobj || qobject_type(qobj) != QTYPE_QSTRING) {
-        error_set(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
-                  "string");
+    if (!qstr) {
+        error_setg(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
+                   "string");
         return;
     }
 
-    *obj = g_strdup(qstring_get_str(qobject_to_qstring(qobj)));
+    *obj = g_strdup(qstring_get_str(qstr));
 }
 
 static void qmp_input_type_number(Visitor *v, double *obj, const char *name,
@@ -271,19 +271,33 @@ static void qmp_input_type_number(Visitor *v, double *obj, const char *name,
 {
     QmpInputVisitor *qiv = to_qiv(v);
     QObject *qobj = qmp_input_get_object(qiv, name, true);
+    QInt *qint;
+    QFloat *qfloat;
 
-    if (!qobj || (qobject_type(qobj) != QTYPE_QFLOAT &&
-        qobject_type(qobj) != QTYPE_QINT)) {
-        error_set(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
-                  "number");
+    qint = qobject_to_qint(qobj);
+    if (qint) {
+        *obj = qint_get_int(qobject_to_qint(qobj));
         return;
     }
 
-    if (qobject_type(qobj) == QTYPE_QINT) {
-        *obj = qint_get_int(qobject_to_qint(qobj));
-    } else {
+    qfloat = qobject_to_qfloat(qobj);
+    if (qfloat) {
         *obj = qfloat_get_double(qobject_to_qfloat(qobj));
+        return;
     }
+
+    error_setg(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
+               "number");
+}
+
+static void qmp_input_type_any(Visitor *v, QObject **obj, const char *name,
+                               Error **errp)
+{
+    QmpInputVisitor *qiv = to_qiv(v);
+    QObject *qobj = qmp_input_get_object(qiv, name, true);
+
+    qobject_incref(qobj);
+    *obj = qobj;
 }
 
 static void qmp_input_optional(Visitor *v, bool *present, const char *name,
@@ -329,6 +343,7 @@ QmpInputVisitor *qmp_input_visitor_new(QObject *obj)
     v->visitor.type_bool = qmp_input_type_bool;
     v->visitor.type_str = qmp_input_type_str;
     v->visitor.type_number = qmp_input_type_number;
+    v->visitor.type_any = qmp_input_type_any;
     v->visitor.optional = qmp_input_optional;
     v->visitor.get_next_type = qmp_input_get_next_type;
 

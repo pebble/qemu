@@ -61,6 +61,11 @@ static void m68k_cpu_reset(CPUState *s)
     tlb_flush(s, 1);
 }
 
+static void m68k_cpu_disas_set_info(CPUState *cpu, disassemble_info *info)
+{
+    info->print_insn = print_insn_m68k;
+}
+
 /* CPU models */
 
 static ObjectClass *m68k_cpu_class_by_name(const char *cpu_model)
@@ -168,7 +173,7 @@ static void m68k_cpu_initfn(Object *obj)
     static bool inited;
 
     cs->env_ptr = env;
-    cpu_exec_init(env);
+    cpu_exec_init(cs, &error_abort);
 
     if (tcg_enabled() && !inited) {
         inited = true;
@@ -196,6 +201,7 @@ static void m68k_cpu_class_init(ObjectClass *c, void *data)
     cc->class_by_name = m68k_cpu_class_by_name;
     cc->has_work = m68k_cpu_has_work;
     cc->do_interrupt = m68k_cpu_do_interrupt;
+    cc->cpu_exec_interrupt = m68k_cpu_exec_interrupt;
     cc->dump_state = m68k_cpu_dump_state;
     cc->set_pc = m68k_cpu_set_pc;
     cc->gdb_read_register = m68k_cpu_gdb_read_register;
@@ -205,9 +211,21 @@ static void m68k_cpu_class_init(ObjectClass *c, void *data)
 #else
     cc->get_phys_page_debug = m68k_cpu_get_phys_page_debug;
 #endif
-    dc->vmsd = &vmstate_m68k_cpu;
+    cc->cpu_exec_enter = m68k_cpu_exec_enter;
+    cc->cpu_exec_exit = m68k_cpu_exec_exit;
+    cc->disas_set_info = m68k_cpu_disas_set_info;
+
     cc->gdb_num_core_regs = 18;
     cc->gdb_core_xml_file = "cf-core.xml";
+
+    dc->vmsd = &vmstate_m68k_cpu;
+
+    /*
+     * Reason: m68k_cpu_initfn() calls cpu_exec_init(), which saves
+     * the object in cpus -> dangling pointer after final
+     * object_unref().
+     */
+    dc->cannot_destroy_with_object_finalize_yet = true;
 }
 
 static void register_cpu_type(const M68kCPUInfo *info)

@@ -12,7 +12,8 @@
  */
 
 #include <glib.h>
-#include "block/coroutine.h"
+#include "qemu/coroutine.h"
+#include "qemu/coroutine_int.h"
 
 /*
  * Check that qemu_in_coroutine() works
@@ -120,6 +121,30 @@ static void test_yield(void)
         i++;
     }
     g_assert_cmpint(i, ==, 5); /* coroutine must yield 5 times */
+}
+
+static void coroutine_fn c2_fn(void *opaque)
+{
+    qemu_coroutine_yield();
+}
+
+static void coroutine_fn c1_fn(void *opaque)
+{
+    Coroutine *c2 = opaque;
+    qemu_coroutine_enter(c2, NULL);
+}
+
+static void test_co_queue(void)
+{
+    Coroutine *c1;
+    Coroutine *c2;
+
+    c1 = qemu_coroutine_create(c1_fn);
+    c2 = qemu_coroutine_create(c2_fn);
+
+    qemu_coroutine_enter(c1, c2);
+    memset(c1, 0xff, sizeof(Coroutine));
+    qemu_coroutine_enter(c2, NULL);
 }
 
 /*
@@ -288,9 +313,62 @@ static void perf_yield(void)
         maxcycles, duration);
 }
 
+static __attribute__((noinline)) void dummy(unsigned *i)
+{
+    (*i)--;
+}
+
+static void perf_baseline(void)
+{
+    unsigned int i, maxcycles;
+    double duration;
+
+    maxcycles = 100000000;
+    i = maxcycles;
+
+    g_test_timer_start();
+    while (i > 0) {
+        dummy(&i);
+    }
+    duration = g_test_timer_elapsed();
+
+    g_test_message("Function call %u iterations: %f s\n",
+        maxcycles, duration);
+}
+
+static __attribute__((noinline)) void perf_cost_func(void *opaque)
+{
+    qemu_coroutine_yield();
+}
+
+static void perf_cost(void)
+{
+    const unsigned long maxcycles = 40000000;
+    unsigned long i = 0;
+    double duration;
+    unsigned long ops;
+    Coroutine *co;
+
+    g_test_timer_start();
+    while (i++ < maxcycles) {
+        co = qemu_coroutine_create(perf_cost_func);
+        qemu_coroutine_enter(co, &i);
+        qemu_coroutine_enter(co, NULL);
+    }
+    duration = g_test_timer_elapsed();
+    ops = (long)(maxcycles / (duration * 1000));
+
+    g_test_message("Run operation %lu iterations %f s, %luK operations/s, "
+                   "%luns per coroutine",
+                   maxcycles,
+                   duration, ops,
+                   (unsigned long)(1000000000.0 * duration / maxcycles));
+}
+
 int main(int argc, char **argv)
 {
     g_test_init(&argc, &argv, NULL);
+    g_test_add_func("/basic/co_queue", test_co_queue);
     g_test_add_func("/basic/lifecycle", test_lifecycle);
     g_test_add_func("/basic/yield", test_yield);
     g_test_add_func("/basic/nesting", test_nesting);
@@ -301,6 +379,8 @@ int main(int argc, char **argv)
         g_test_add_func("/perf/lifecycle", perf_lifecycle);
         g_test_add_func("/perf/nesting", perf_nesting);
         g_test_add_func("/perf/yield", perf_yield);
+        g_test_add_func("/perf/function-call", perf_baseline);
+        g_test_add_func("/perf/cost", perf_cost);
     }
     return g_test_run();
 }

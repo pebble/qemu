@@ -65,7 +65,7 @@
 #include "sysemu/kvm.h"
 #include "kvm_ppc.h"
 #include "hw/usb.h"
-#include "sysemu/blockdev.h"
+#include "sysemu/block-backend.h"
 #include "exec/address-spaces.h"
 #include "hw/sysbus.h"
 
@@ -116,10 +116,10 @@ static const MemoryRegionOps unin_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-static int fw_cfg_boot_set(void *opaque, const char *boot_device)
+static void fw_cfg_boot_set(void *opaque, const char *boot_device,
+                            Error **errp)
 {
-    fw_cfg_add_i16(opaque, FW_CFG_BOOT_DEVICE, boot_device[0]);
-    return 0;
+    fw_cfg_modify_i16(opaque, FW_CFG_BOOT_DEVICE, boot_device[0]);
 }
 
 static uint64_t translate_kernel_address(void *opaque, uint64_t addr)
@@ -145,7 +145,6 @@ static void ppc_core99_reset(void *opaque)
 static void ppc_core99_init(MachineState *machine)
 {
     ram_addr_t ram_size = machine->ram_size;
-    const char *cpu_model = machine->cpu_model;
     const char *kernel_filename = machine->kernel_filename;
     const char *kernel_cmdline = machine->kernel_cmdline;
     const char *initrd_filename = machine->initrd_filename;
@@ -176,18 +175,21 @@ static void ppc_core99_init(MachineState *machine)
     SysBusDevice *s;
     DeviceState *dev;
     int *token = g_new(int, 1);
+    hwaddr nvram_addr = 0xFFF04000;
+    uint64_t tbfreq;
 
     linux_boot = (kernel_filename != NULL);
 
     /* init CPUs */
-    if (cpu_model == NULL)
+    if (machine->cpu_model == NULL) {
 #ifdef TARGET_PPC64
-        cpu_model = "970fx";
+        machine->cpu_model = "970fx";
 #else
-        cpu_model = "G4";
+        machine->cpu_model = "G4";
 #endif
+    }
     for (i = 0; i < smp_cpus; i++) {
-        cpu = cpu_ppc_init(cpu_model);
+        cpu = cpu_ppc_init(machine->cpu_model);
         if (cpu == NULL) {
             fprintf(stderr, "Unable to find PowerPC CPU definition\n");
             exit(1);
@@ -204,7 +206,8 @@ static void ppc_core99_init(MachineState *machine)
     memory_region_add_subregion(get_system_memory(), 0, ram);
 
     /* allocate and load BIOS */
-    memory_region_init_ram(bios, NULL, "ppc_core99.bios", BIOS_SIZE);
+    memory_region_init_ram(bios, NULL, "ppc_core99.bios", BIOS_SIZE,
+                           &error_fatal);
     vmstate_register_ram_global(bios);
 
     if (bios_name == NULL)
@@ -216,7 +219,7 @@ static void ppc_core99_init(MachineState *machine)
     /* Load OpenBIOS (ELF) */
     if (filename) {
         bios_size = load_elf(filename, NULL, NULL, NULL,
-                             NULL, NULL, 1, ELF_MACHINE, 0);
+                             NULL, NULL, 1, PPC_ELF_MACHINE, 0);
 
         g_free(filename);
     } else {
@@ -239,7 +242,7 @@ static void ppc_core99_init(MachineState *machine)
         kernel_base = KERNEL_LOAD_ADDR;
 
         kernel_size = load_elf(kernel_filename, translate_kernel_address, NULL,
-                               NULL, &lowaddr, NULL, 1, ELF_MACHINE, 0);
+                               NULL, &lowaddr, NULL, 1, PPC_ELF_MACHINE, 0);
         if (kernel_size < 0)
             kernel_size = load_aout(kernel_filename, kernel_base,
                                     ram_size - kernel_base, bswap_needed,
@@ -346,7 +349,7 @@ static void ppc_core99_init(MachineState *machine)
         }
     }
 
-    pic = g_new(qemu_irq, 64);
+    pic = g_new0(qemu_irq, 64);
 
     dev = qdev_create(NULL, TYPE_OPENPIC);
     qdev_prop_set_uint32(dev, "model", OPENPIC_MODEL_RAVEN);
@@ -372,6 +375,16 @@ static void ppc_core99_init(MachineState *machine)
         pci_bus = pci_pmac_init(pic, get_system_memory(), get_system_io());
         machine_arch = ARCH_MAC99;
     }
+
+    machine->usb |= defaults_enabled() && !machine->usb_disabled;
+
+    /* Timebase Frequency */
+    if (kvm_enabled()) {
+        tbfreq = kvmppc_get_tbfreq();
+    } else {
+        tbfreq = TBFREQ;
+    }
+
     /* init basic PC hardware */
     escc_mem = escc_init(0, pic[0x25], pic[0x24],
                          serial_hds[0], serial_hds[1], ESCC_CLOCK, 4);
@@ -385,10 +398,11 @@ static void ppc_core99_init(MachineState *machine)
     qdev_connect_gpio_out(dev, 2, pic[0x02]); /* IDE DMA */
     qdev_connect_gpio_out(dev, 3, pic[0x0e]); /* IDE */
     qdev_connect_gpio_out(dev, 4, pic[0x03]); /* IDE DMA */
+    qdev_prop_set_uint64(dev, "frequency", tbfreq);
     macio_init(macio, pic_mem, escc_bar);
 
     /* We only emulate 2 out of 3 IDE controllers for now */
-    ide_drive_get(hd, MAX_IDE_BUS);
+    ide_drive_get(hd, ARRAY_SIZE(hd));
 
     macio_ide = MACIO_IDE(object_resolve_path_component(OBJECT(macio),
                                                         "ide[0]"));
@@ -405,13 +419,16 @@ static void ppc_core99_init(MachineState *machine)
     dev = qdev_create(adb_bus, TYPE_ADB_MOUSE);
     qdev_init_nofail(dev);
 
-    if (usb_enabled(machine_arch == ARCH_MAC99_U3)) {
+    if (machine->usb) {
         pci_create_simple(pci_bus, -1, "pci-ohci");
+
         /* U3 needs to use USB for input because Linux doesn't support via-cuda
         on PPC64 */
         if (machine_arch == ARCH_MAC99_U3) {
-            usbdevice_create("keyboard");
-            usbdevice_create("mouse");
+            USBBus *usb_bus = usb_bus_find(-1);
+
+            usb_create_simple(usb_bus, "usb-kbd");
+            usb_create_simple(usb_bus, "usb-mouse");
         }
     }
 
@@ -426,18 +443,24 @@ static void ppc_core99_init(MachineState *machine)
     }
 
     /* The NewWorld NVRAM is not located in the MacIO device */
+#ifdef CONFIG_KVM
+    if (kvm_enabled() && getpagesize() > 4096) {
+        /* We can't combine read-write and read-only in a single page, so
+           move the NVRAM out of ROM again for KVM */
+        nvram_addr = 0xFFE00000;
+    }
+#endif
     dev = qdev_create(NULL, TYPE_MACIO_NVRAM);
     qdev_prop_set_uint32(dev, "size", 0x2000);
     qdev_prop_set_uint32(dev, "it_shift", 1);
     qdev_init_nofail(dev);
-    sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, 0xFFF04000);
+    sysbus_mmio_map(SYS_BUS_DEVICE(dev), 0, nvram_addr);
     nvr = MACIO_NVRAM(dev);
     pmac_format_nvram_partition(nvr, 0x2000);
     /* No PCI init: the BIOS will do it */
 
-    fw_cfg = fw_cfg_init(0, 0, CFG_ADDR, CFG_ADDR + 2);
+    fw_cfg = fw_cfg_init_mem(CFG_ADDR, CFG_ADDR + 2);
     fw_cfg_add_i16(fw_cfg, FW_CFG_MAX_CPUS, (uint16_t)max_cpus);
-    fw_cfg_add_i32(fw_cfg, FW_CFG_ID, 1);
     fw_cfg_add_i64(fw_cfg, FW_CFG_RAM_SIZE, (uint64_t)ram_size);
     fw_cfg_add_i16(fw_cfg, FW_CFG_MACHINE_ID, machine_arch);
     fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_ADDR, kernel_base);
@@ -461,33 +484,47 @@ static void ppc_core99_init(MachineState *machine)
 #ifdef CONFIG_KVM
         uint8_t *hypercall;
 
-        fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_TBFREQ, kvmppc_get_tbfreq());
         hypercall = g_malloc(16);
         kvmppc_get_hypercall(env, hypercall, 16);
         fw_cfg_add_bytes(fw_cfg, FW_CFG_PPC_KVM_HC, hypercall, 16);
         fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_KVM_PID, getpid());
 #endif
-    } else {
-        fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_TBFREQ, TBFREQ);
     }
+    fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_TBFREQ, tbfreq);
     /* Mac OS X requires a "known good" clock-frequency value; pass it one. */
     fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_CLOCKFREQ, CLOCKFREQ);
     fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_BUSFREQ, BUSFREQ);
+    fw_cfg_add_i32(fw_cfg, FW_CFG_PPC_NVRAM_ADDR, nvram_addr);
 
     qemu_register_boot_set(fw_cfg_boot_set, fw_cfg);
 }
 
-static QEMUMachine core99_machine = {
-    .name = "mac99",
-    .desc = "Mac99 based PowerMAC",
-    .init = ppc_core99_init,
-    .max_cpus = MAX_CPUS,
-    .default_boot_order = "cd",
-};
-
-static void core99_machine_init(void)
+static int core99_kvm_type(const char *arg)
 {
-    qemu_register_machine(&core99_machine);
+    /* Always force PR KVM */
+    return 2;
 }
 
-machine_init(core99_machine_init);
+static void core99_machine_class_init(ObjectClass *oc, void *data)
+{
+    MachineClass *mc = MACHINE_CLASS(oc);
+
+    mc->desc = "Mac99 based PowerMAC";
+    mc->init = ppc_core99_init;
+    mc->max_cpus = MAX_CPUS;
+    mc->default_boot_order = "cd";
+    mc->kvm_type = core99_kvm_type;
+}
+
+static const TypeInfo core99_machine_info = {
+    .name          = MACHINE_TYPE_NAME("mac99"),
+    .parent        = TYPE_MACHINE,
+    .class_init    = core99_machine_class_init,
+};
+
+static void mac_machine_register_types(void)
+{
+    type_register_static(&core99_machine_info);
+}
+
+type_init(mac_machine_register_types)

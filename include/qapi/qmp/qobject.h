@@ -3,7 +3,7 @@
  *
  * Based on ideas by Avi Kivity <avi@redhat.com>
  *
- * Copyright (C) 2009 Red Hat Inc.
+ * Copyright (C) 2009, 2015 Red Hat Inc.
  *
  * Authors:
  *  Luiz Capitulino <lcapitulino@redhat.com>
@@ -36,14 +36,14 @@
 #include <assert.h>
 
 typedef enum {
-    QTYPE_NONE,
+    QTYPE_NONE,    /* sentinel value, no QObject has this type code */
+    QTYPE_QNULL,
     QTYPE_QINT,
     QTYPE_QSTRING,
     QTYPE_QDICT,
     QTYPE_QLIST,
     QTYPE_QFLOAT,
     QTYPE_QBOOL,
-    QTYPE_QERROR,
     QTYPE_MAX,
 } qtype_code;
 
@@ -58,10 +58,6 @@ typedef struct QObject {
     const QType *type;
     size_t refcnt;
 } QObject;
-
-/* Objects definitions must include this */
-#define QObject_HEAD  \
-    QObject base
 
 /* Get the 'base' part of an object */
 #define QOBJECT(obj) (&(obj)->base)
@@ -94,6 +90,7 @@ static inline void qobject_incref(QObject *obj)
  */
 static inline void qobject_decref(QObject *obj)
 {
+    assert(!obj || obj->refcnt);
     if (obj && --obj->refcnt == 0) {
         assert(obj->type != NULL);
         assert(obj->type->destroy != NULL);
@@ -108,6 +105,14 @@ static inline qtype_code qobject_type(const QObject *obj)
 {
     assert(obj->type != NULL);
     return obj->type->code;
+}
+
+extern QObject qnull_;
+
+static inline QObject *qnull(void)
+{
+    qobject_incref(&qnull_);
+    return &qnull_;
 }
 
 #endif /* QOBJECT_H */

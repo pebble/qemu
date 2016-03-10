@@ -106,17 +106,20 @@ const QEMULogItem qemu_log_items[] = {
       "show trace before each executed TB (lots of logs)" },
     { CPU_LOG_TB_CPU, "cpu",
       "show CPU state before block translation" },
+    { CPU_LOG_MMU, "mmu",
+      "log MMU-related activities" },
     { CPU_LOG_PCALL, "pcall",
       "x86 only: show protected mode far calls/returns/exceptions" },
     { CPU_LOG_RESET, "cpu_reset",
-      "x86 only: show CPU state before CPU resets" },
-    { CPU_LOG_IOPORT, "ioport",
-      "show all i/o ports accesses" },
+      "show CPU state before CPU resets" },
     { LOG_UNIMP, "unimp",
       "log unimplemented functionality" },
     { LOG_GUEST_ERROR, "guest_errors",
       "log when the guest OS does something invalid (eg accessing a\n"
       "non-existent register)" },
+    { CPU_LOG_TB_NOCHAIN, "nochain",
+      "do not chain compiled TBs so that \"exec\" and \"cpu\" show\n"
+      "complete traces" },
     { 0, NULL, NULL },
 };
 

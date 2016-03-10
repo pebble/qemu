@@ -200,8 +200,14 @@ static uint64_t msix_pba_mmio_read(void *opaque, hwaddr addr,
     return pci_get_long(dev->msix_pba + addr);
 }
 
+static void msix_pba_mmio_write(void *opaque, hwaddr addr,
+                                uint64_t val, unsigned size)
+{
+}
+
 static const MemoryRegionOps msix_pba_mmio_ops = {
     .read = msix_pba_mmio_read,
+    .write = msix_pba_mmio_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
     .valid = {
         .min_access_size = 4,
@@ -295,31 +301,36 @@ int msix_init_exclusive_bar(PCIDevice *dev, unsigned short nentries,
 {
     int ret;
     char *name;
+    uint32_t bar_size = 4096;
+    uint32_t bar_pba_offset = bar_size / 2;
+    uint32_t bar_pba_size = (nentries / 8 + 1) * 8;
 
     /*
      * Migration compatibility dictates that this remains a 4k
      * BAR with the vector table in the lower half and PBA in
-     * the upper half.  Do not use these elsewhere!
+     * the upper half for nentries which is lower or equal to 128.
+     * No need to care about using more than 65 entries for legacy
+     * machine types who has at most 64 queues.
      */
-#define MSIX_EXCLUSIVE_BAR_SIZE 4096
-#define MSIX_EXCLUSIVE_BAR_TABLE_OFFSET 0
-#define MSIX_EXCLUSIVE_BAR_PBA_OFFSET (MSIX_EXCLUSIVE_BAR_SIZE / 2)
-#define MSIX_EXCLUSIVE_CAP_OFFSET 0
-
-    if (nentries * PCI_MSIX_ENTRY_SIZE > MSIX_EXCLUSIVE_BAR_PBA_OFFSET) {
-        return -EINVAL;
+    if (nentries * PCI_MSIX_ENTRY_SIZE > bar_pba_offset) {
+        bar_pba_offset = nentries * PCI_MSIX_ENTRY_SIZE;
     }
 
+    if (bar_pba_offset + bar_pba_size > 4096) {
+        bar_size = bar_pba_offset + bar_pba_size;
+    }
+
+    bar_size = pow2ceil(bar_size);
+
     name = g_strdup_printf("%s-msix", dev->name);
-    memory_region_init(&dev->msix_exclusive_bar, OBJECT(dev), name, MSIX_EXCLUSIVE_BAR_SIZE);
+    memory_region_init(&dev->msix_exclusive_bar, OBJECT(dev), name, bar_size);
     g_free(name);
 
     ret = msix_init(dev, nentries, &dev->msix_exclusive_bar, bar_nr,
-                    MSIX_EXCLUSIVE_BAR_TABLE_OFFSET, &dev->msix_exclusive_bar,
-                    bar_nr, MSIX_EXCLUSIVE_BAR_PBA_OFFSET,
-                    MSIX_EXCLUSIVE_CAP_OFFSET);
+                    0, &dev->msix_exclusive_bar,
+                    bar_nr, bar_pba_offset,
+                    0);
     if (ret) {
-        memory_region_destroy(&dev->msix_exclusive_bar);
         return ret;
     }
 
@@ -359,11 +370,9 @@ void msix_uninit(PCIDevice *dev, MemoryRegion *table_bar, MemoryRegion *pba_bar)
     msix_free_irq_entries(dev);
     dev->msix_entries_nr = 0;
     memory_region_del_subregion(pba_bar, &dev->msix_pba_mmio);
-    memory_region_destroy(&dev->msix_pba_mmio);
     g_free(dev->msix_pba);
     dev->msix_pba = NULL;
     memory_region_del_subregion(table_bar, &dev->msix_table_mmio);
-    memory_region_destroy(&dev->msix_table_mmio);
     g_free(dev->msix_table);
     dev->msix_table = NULL;
     g_free(dev->msix_entry_used);
@@ -375,7 +384,6 @@ void msix_uninit_exclusive_bar(PCIDevice *dev)
 {
     if (msix_present(dev)) {
         msix_uninit(dev, &dev->msix_exclusive_bar, &dev->msix_exclusive_bar);
-        memory_region_destroy(&dev->msix_exclusive_bar);
     }
 }
 
@@ -439,7 +447,7 @@ void msix_notify(PCIDevice *dev, unsigned vector)
 
     msg = msix_get_message(dev, vector);
 
-    stl_le_phys(&address_space_memory, msg.address, msg.data);
+    msi_send_message(dev, msg);
 }
 
 void msix_reset(PCIDevice *dev)

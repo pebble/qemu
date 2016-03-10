@@ -17,12 +17,14 @@
 #ifndef VRING_H
 #define VRING_H
 
-#include <linux/virtio_ring.h>
 #include "qemu-common.h"
+#include "standard-headers/linux/virtio_ring.h"
 #include "hw/virtio/virtio.h"
 
 typedef struct {
-    MemoryRegion *mr;               /* memory region containing the vring */
+    MemoryRegion *mr_desc;          /* memory region for the vring desc */
+    MemoryRegion *mr_avail;         /* memory region for the vring avail */
+    MemoryRegion *mr_used;          /* memory region for the vring used */
     struct vring vr;                /* virtqueue vring mapped to host memory */
     uint16_t last_avail_idx;        /* last processed avail ring index */
     uint16_t last_used_idx;         /* last processed used ring index */
@@ -30,17 +32,6 @@ typedef struct {
     bool signalled_used_valid;
     bool broken;                    /* was there a fatal error? */
 } Vring;
-
-static inline unsigned int vring_get_num(Vring *vring)
-{
-    return vring->vr.num;
-}
-
-/* Are there more descriptors available? */
-static inline bool vring_more_avail(Vring *vring)
-{
-    return vring->vr.avail->idx != vring->last_avail_idx;
-}
 
 /* Fail future vring_pop() and vring_push() calls until reset */
 static inline void vring_set_broken(Vring *vring)
@@ -54,6 +45,7 @@ void vring_disable_notification(VirtIODevice *vdev, Vring *vring);
 bool vring_enable_notification(VirtIODevice *vdev, Vring *vring);
 bool vring_should_notify(VirtIODevice *vdev, Vring *vring);
 int vring_pop(VirtIODevice *vdev, Vring *vring, VirtQueueElement *elem);
-void vring_push(Vring *vring, VirtQueueElement *elem, int len);
+void vring_push(VirtIODevice *vdev, Vring *vring, VirtQueueElement *elem,
+                int len);
 
 #endif /* VRING_H */

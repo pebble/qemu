@@ -15,10 +15,18 @@
 
 #define QGA_READ_COUNT_DEFAULT 4096
 
+/* Mapping of whence codes used by guest-file-seek. */
+enum {
+    QGA_SEEK_SET = 0,
+    QGA_SEEK_CUR = 1,
+    QGA_SEEK_END = 2,
+};
+
 typedef struct GAState GAState;
 typedef struct GACommandState GACommandState;
 extern GAState *ga_state;
 
+GList *ga_command_blacklist_init(GList *blacklist);
 void ga_command_state_init(GAState *s, GACommandState *cs);
 void ga_command_state_add(GACommandState *cs,
                           void (*init)(void),

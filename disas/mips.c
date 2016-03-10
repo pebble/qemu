@@ -119,6 +119,8 @@ see <http://www.gnu.org/licenses/>.  */
 #define OP_SH_IMMEDIATE		0
 #define OP_MASK_DELTA		0xffff
 #define OP_SH_DELTA		0
+#define OP_MASK_DELTA_R6        0x1ff
+#define OP_SH_DELTA_R6          7
 #define OP_MASK_FUNCT		0x3f
 #define OP_SH_FUNCT		0
 #define OP_MASK_SPEC		0x3f
@@ -217,6 +219,28 @@ see <http://www.gnu.org/licenses/>.  */
 #define OP_MASK_MTACC_T		0x3
 #define OP_SH_MTACC_D		13
 #define OP_MASK_MTACC_D		0x3
+
+/* MSA */
+#define OP_MASK_1BIT            0x1
+#define OP_SH_1BIT              16
+#define OP_MASK_2BIT            0x3
+#define OP_SH_2BIT              16
+#define OP_MASK_3BIT            0x7
+#define OP_SH_3BIT              16
+#define OP_MASK_4BIT            0xf
+#define OP_SH_4BIT              16
+#define OP_MASK_5BIT            0x1f
+#define OP_SH_5BIT              16
+#define OP_MASK_10BIT           0x3ff
+#define OP_SH_10BIT             11
+#define OP_MASK_MSACR11         0x1f
+#define OP_SH_MSACR11           11
+#define OP_MASK_MSACR6          0x1f
+#define OP_SH_MSACR6            6
+#define OP_MASK_GPR             0x1f
+#define OP_SH_GPR               6
+#define OP_MASK_1_TO_4          0x3
+#define OP_SH_1_TO_4            6
 
 #define	OP_OP_COP0		0x10
 #define	OP_OP_COP1		0x11
@@ -405,6 +429,12 @@ struct mips_opcode
    "+3" UDI immediate bits 6-20
    "+4" UDI immediate bits 6-25
 
+   R6 immediates/displacements :
+   (adding suffix to 'o' to avoid adding new characters)
+   "+o"  9 bits immediate/displacement (shift = 7)
+   "+o1" 18 bits immediate/displacement (shift = 0)
+   "+o2" 19 bits immediate/displacement (shift = 0)
+
    Other:
    "()" parens surrounding optional value
    ","  separates operands
@@ -502,6 +532,9 @@ struct mips_opcode
 /* Instruction writes MDMX accumulator. */
 #define INSN2_WRITE_MDMX_ACC	    0x00000004
 
+/* Reads the general purpose register in OP_*_RD.  */
+#define INSN2_READ_GPR_D    0x00000200
+
 /* Instruction is actually a macro.  It should be ignored by the
    disassembler, and requires special treatment by the assembler.  */
 #define INSN_MACRO                  0xffffffff
@@ -521,6 +554,8 @@ struct mips_opcode
 #define INSN_ISA64                0x00000040
 #define INSN_ISA32R2              0x00000080
 #define INSN_ISA64R2              0x00000100
+#define INSN_ISA32R6              0x00000200
+#define INSN_ISA64R6              0x00000400
 
 /* Masks used for MIPS-defined ASEs.  */
 #define INSN_ASE_MASK		  0x0000f000
@@ -557,7 +592,12 @@ struct mips_opcode
 #define INSN_5500		  0x02000000
 
 /* MDMX ASE */
-#define INSN_MDMX                 0x04000000
+#define INSN_MDMX                 0x00000000    /* Deprecated */
+
+/* MIPS MSA Extension */
+#define INSN_MSA                  0x04000000
+#define INSN_MSA64                0x04000000
+
 /* MT ASE */
 #define INSN_MT                   0x08000000
 /* SmartMIPS ASE  */
@@ -585,6 +625,8 @@ struct mips_opcode
 #define       ISA_MIPS32R2    (ISA_MIPS32 | INSN_ISA32R2)
 #define       ISA_MIPS64R2    (ISA_MIPS64 | INSN_ISA32R2 | INSN_ISA64R2)
 
+#define       ISA_MIPS32R6    (ISA_MIPS32R2 | INSN_ISA32R6)
+#define       ISA_MIPS64R6    (ISA_MIPS64R2 | INSN_ISA32R6 | INSN_ISA64R6)
 
 /* CPU defines, use instead of hardcoding processor number. Keep this
    in sync with bfd/archures.c in order for machine selection to work.  */
@@ -1121,6 +1163,8 @@ extern const int bfd_mips16_num_opcodes;
 #define I64     INSN_ISA64
 #define I33	INSN_ISA32R2
 #define I65	INSN_ISA64R2
+#define I32R6   INSN_ISA32R6
+#define I64R6   INSN_ISA64R6
 
 /* MIPS64 MIPS-3D ASE support.  */
 #define I16     INSN_MIPS16
@@ -1190,6 +1234,17 @@ extern const int bfd_mips16_num_opcodes;
 /* MIPS MT ASE support.  */
 #define MT32	INSN_MT
 
+/* MSA */
+#define MSA     INSN_MSA
+#define MSA64   INSN_MSA64
+#define WR_VD   INSN_WRITE_FPR_D    /* Reuse INSN_WRITE_FPR_D */
+#define RD_VD   WR_VD               /* Reuse WR_VD */
+#define RD_VT   INSN_READ_FPR_T     /* Reuse INSN_READ_FPR_T */
+#define RD_VS   INSN_READ_FPR_S     /* Reuse INSN_READ_FPR_S */
+#define RD_d    INSN2_READ_GPR_D    /* Reuse INSN2_READ_GPR_D */
+
+#define RD_rd6  0
+
 /* The order of overloaded instructions matters.  Label arguments and
    register arguments look the same. Instructions that can have either
    for arguments must apear in the correct order in this table for the
@@ -1209,6 +1264,681 @@ const struct mips_opcode mips_builtin_opcodes[] =
    them first.  The assemblers uses a hash table based on the
    instruction name anyhow.  */
 /* name,    args,	match,	    mask,	pinfo,          	membership */
+{"lwpc",    "s,+o2",    0xec080000, 0xfc180000, WR_d,                 0, I32R6},
+{"lwupc",   "s,+o2",    0xec100000, 0xfc180000, WR_d,                 0, I64R6},
+{"ldpc",    "s,+o1",    0xec180000, 0xfc1c0000, WR_d,                 0, I64R6},
+{"addiupc", "s,+o2",    0xec000000, 0xfc180000, WR_d,                 0, I32R6},
+{"auipc",   "s,u",      0xec1e0000, 0xfc1f0000, WR_d,                 0, I32R6},
+{"aluipc",  "s,u",      0xec1f0000, 0xfc1f0000, WR_d,                 0, I32R6},
+{"daui",    "s,t,u",    0x74000000, 0xfc000000, RD_s|WR_t,            0, I64R6},
+{"dahi",    "s,u",      0x04060000, 0xfc1f0000, RD_s,                 0, I64R6},
+{"dati",    "s,u",      0x041e0000, 0xfc1f0000, RD_s,                 0, I64R6},
+{"lsa",     "d,s,t",    0x00000005, 0xfc00073f, WR_d|RD_s|RD_t,       0, I32R6},
+{"dlsa",    "d,s,t",    0x00000015, 0xfc00073f, WR_d|RD_s|RD_t,       0, I64R6},
+{"clz",     "U,s",      0x00000050, 0xfc1f07ff, WR_d|RD_s,            0, I32R6},
+{"clo",     "U,s",      0x00000051, 0xfc1f07ff, WR_d|RD_s,            0, I32R6},
+{"dclz",    "U,s",      0x00000052, 0xfc1f07ff, WR_d|RD_s,            0, I64R6},
+{"dclo",    "U,s",      0x00000053, 0xfc1f07ff, WR_d|RD_s,            0, I64R6},
+{"sdbbp",   "B",        0x0000000e, 0xfc00003f, TRAP,                 0, I32R6},
+{"mul",     "d,s,t",    0x00000098, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I32R6},
+{"muh",     "d,s,t",    0x000000d8, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I32R6},
+{"mulu",    "d,s,t",    0x00000099, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I32R6},
+{"muhu",    "d,s,t",    0x000000d9, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I32R6},
+{"div",     "d,s,t",    0x0000009a, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I32R6},
+{"mod",     "d,s,t",    0x000000da, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I32R6},
+{"divu",    "d,s,t",    0x0000009b, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I32R6},
+{"modu",    "d,s,t",    0x000000db, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I32R6},
+{"dmul",    "d,s,t",    0x0000009c, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I64R6},
+{"dmuh",    "d,s,t",    0x000000dc, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I64R6},
+{"dmulu",   "d,s,t",    0x0000009d, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I64R6},
+{"dmuhu",   "d,s,t",    0x000000dd, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I64R6},
+{"ddiv",    "d,s,t",    0x0000009e, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I64R6},
+{"dmod",    "d,s,t",    0x000000de, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I64R6},
+{"ddivu",   "d,s,t",    0x0000009f, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I64R6},
+{"dmodu",   "d,s,t",    0x000000df, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I64R6},
+{"ll",      "t,+o(b)",  0x7c000036, 0xfc00007f, LDD|RD_b|WR_t,        0, I32R6},
+{"sc",      "t,+o(b)",  0x7c000026, 0xfc00007f, LDD|RD_b|WR_t,        0, I32R6},
+{"lld",     "t,+o(b)",  0x7c000037, 0xfc00007f, LDD|RD_b|WR_t,        0, I64R6},
+{"scd",     "t,+o(b)",  0x7c000027, 0xfc00007f, LDD|RD_b|WR_t,        0, I64R6},
+{"pref",    "h,+o(b)",  0x7c000035, 0xfc00007f, RD_b,                 0, I32R6},
+{"cache",   "k,+o(b)",  0x7c000025, 0xfc00007f, RD_b,                 0, I32R6},
+{"seleqz",  "d,v,t",    0x00000035, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I32R6},
+{"selnez",  "d,v,t",    0x00000037, 0xfc0007ff, WR_d|RD_s|RD_t,       0, I32R6},
+{"maddf.s", "D,S,T",    0x46000018, 0xffe0003f, WR_D|RD_S|RD_T|FP_S,  0, I32R6},
+{"maddf.d", "D,S,T",    0x46200018, 0xffe0003f, WR_D|RD_S|RD_T|FP_D,  0, I32R6},
+{"msubf.s", "D,S,T",    0x46000019, 0xffe0003f, WR_D|RD_S|RD_T|FP_S,  0, I32R6},
+{"msubf.d", "D,S,T",    0x46200019, 0xffe0003f, WR_D|RD_S|RD_T|FP_D,  0, I32R6},
+{"max.s",   "D,S,T",    0x4600001e, 0xffe0003f, WR_D|RD_S|RD_T|FP_S,  0, I32R6},
+{"max.d",   "D,S,T",    0x4620001e, 0xffe0003f, WR_D|RD_S|RD_T|FP_D,  0, I32R6},
+{"maxa.s",  "D,S,T",    0x4600001f, 0xffe0003f, WR_D|RD_S|RD_T|FP_S,  0, I32R6},
+{"maxa.d",  "D,S,T",    0x4620001f, 0xffe0003f, WR_D|RD_S|RD_T|FP_D,  0, I32R6},
+{"rint.s",  "D,S",      0x4600001a, 0xffff003f, WR_D|RD_S|FP_S,       0, I32R6},
+{"rint.d",  "D,S",      0x4620001a, 0xffff003f, WR_D|RD_S|FP_D,       0, I32R6},
+{"class.s", "D,S",      0x4600001b, 0xffff003f, WR_D|RD_S|FP_S,       0, I32R6},
+{"class.d", "D,S",      0x4620001b, 0xffff003f, WR_D|RD_S|FP_D,       0, I32R6},
+{"min.s",   "D,S,T",    0x4600001c, 0xffe0003f, WR_D|RD_S|RD_T|FP_S,  0, I32R6},
+{"min.d",   "D,S,T",    0x4620001c, 0xffe0003f, WR_D|RD_S|RD_T|FP_D,  0, I32R6},
+{"mina.s",  "D,S,T",    0x4600001d, 0xffe0003f, WR_D|RD_S|RD_T|FP_S,  0, I32R6},
+{"mina.d",  "D,S,T",    0x4620001d, 0xffe0003f, WR_D|RD_S|RD_T|FP_D,  0, I32R6},
+{"sel.s",   "D,S,T",    0x46000010, 0xffe0003f, WR_D|RD_S|RD_T|FP_S,  0, I32R6},
+{"sel.d",   "D,S,T",    0x46200010, 0xffe0003f, WR_D|RD_S|RD_T|FP_D,  0, I32R6},
+{"seleqz.s", "D,S,T",   0x46000014, 0xffe0003f, WR_D|RD_S|RD_T|FP_S,  0, I32R6},
+{"seleqz.d", "D,S,T",   0x46200014, 0xffe0003f, WR_D|RD_S|RD_T|FP_D,  0, I32R6},
+{"selnez.s", "D,S,T",   0x46000017, 0xffe0003f, WR_D|RD_S|RD_T|FP_S,  0, I32R6},
+{"selnez.d", "D,S,T",   0x46200017, 0xffe0003f, WR_D|RD_S|RD_T|FP_D,  0, I32R6},
+{"align",   "d,v,t",    0x7c000220, 0xfc00073f, WR_d|RD_s|RD_t,       0, I32R6},
+{"dalign",  "d,v,t",    0x7c000224, 0xfc00063f, WR_d|RD_s|RD_t,       0, I64R6},
+{"bitswap", "d,w",      0x7c000020, 0xffe007ff, WR_d|RD_t,            0, I32R6},
+{"dbitswap","d,w",      0x7c000024, 0xffe007ff, WR_d|RD_t,            0, I64R6},
+{"balc",    "+p",       0xe8000000, 0xfc000000, UBD|WR_31,            0, I32R6},
+{"bc",      "+p",       0xc8000000, 0xfc000000, UBD|WR_31,            0, I32R6},
+{"jic",     "t,o",      0xd8000000, 0xffe00000, UBD|RD_t,             0, I32R6},
+{"beqzc",   "s,+p",     0xd8000000, 0xfc000000, CBD|RD_s,             0, I32R6},
+{"jialc",   "t,o",      0xf8000000, 0xffe00000, UBD|RD_t,             0, I32R6},
+{"bnezc",   "s,+p",     0xf8000000, 0xfc000000, CBD|RD_s,             0, I32R6},
+{"beqzalc", "s,t,p",    0x20000000, 0xffe00000, CBD|RD_s|RD_t,        0, I32R6},
+{"bovc",    "s,t,p",    0x20000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"beqc",    "s,t,p",    0x20000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"bnezalc", "s,t,p",    0x60000000, 0xffe00000, CBD|RD_s|RD_t,        0, I32R6},
+{"bnvc",    "s,t,p",    0x60000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"bnec",    "s,t,p",    0x60000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"blezc",   "s,t,p",    0x58000000, 0xffe00000, CBD|RD_s|RD_t,        0, I32R6},
+{"bgezc",   "s,t,p",    0x58000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"bgec",    "s,t,p",    0x58000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"bgtzc",   "s,t,p",    0x5c000000, 0xffe00000, CBD|RD_s|RD_t,        0, I32R6},
+{"bltzc",   "s,t,p",    0x5c000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"bltc",    "s,t,p",    0x5c000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"blezalc", "s,t,p",    0x18000000, 0xffe00000, CBD|RD_s|RD_t,        0, I32R6},
+{"bgezalc", "s,t,p",    0x18000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"bgeuc",   "s,t,p",    0x18000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"bgtzalc", "s,t,p",    0x1c000000, 0xffe00000, CBD|RD_s|RD_t,        0, I32R6},
+{"bltzalc", "s,t,p",    0x1c000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"bltuc",   "s,t,p",    0x1c000000, 0xfc000000, CBD|RD_s|RD_t,        0, I32R6},
+{"nal",     "p",        0x04100000, 0xffff0000, WR_31,                0, I32R6},
+{"bal",     "p",        0x04110000, 0xffff0000, UBD|WR_31,            0, I32R6},
+{"bc1eqz",  "T,p",      0x45200000, 0xffe00000, CBD|RD_T|FP_S|FP_D,   0, I32R6},
+{"bc1nez",  "T,p",      0x45a00000, 0xffe00000, CBD|RD_T|FP_S|FP_D,   0, I32R6},
+{"bc2eqz",  "E,p",      0x49200000, 0xffe00000, CBD|RD_C2,            0, I32R6},
+{"bc2nez",  "E,p",      0x49a00000, 0xffe00000, CBD|RD_C2,            0, I32R6},
+{"cmp.af.s",   "D,S,T", 0x46800000, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.un.s",   "D,S,T", 0x46800001, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.eq.s",   "D,S,T", 0x46800002, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.ueq.s",  "D,S,T", 0x46800003, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.lt.s",   "D,S,T", 0x46800004, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.ult.s",  "D,S,T", 0x46800005, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.le.s",   "D,S,T", 0x46800006, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.ule.s",  "D,S,T", 0x46800007, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.saf.s",  "D,S,T", 0x46800008, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.sun.s",  "D,S,T", 0x46800009, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.seq.s",  "D,S,T", 0x4680000a, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.sueq.s", "D,S,T", 0x4680000b, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.slt.s",  "D,S,T", 0x4680000c, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.sult.s", "D,S,T", 0x4680000d, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.sle.s",  "D,S,T", 0x4680000e, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.sule.s", "D,S,T", 0x4680000f, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.or.s",   "D,S,T", 0x46800011, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.une.s",  "D,S,T", 0x46800012, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.ne.s",   "D,S,T", 0x46800013, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.sor.s",  "D,S,T", 0x46800019, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.sune.s", "D,S,T", 0x4680001a, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.sne.s",  "D,S,T", 0x4680001b, 0xffe0003f, RD_S|RD_T|WR_D|FP_S,  0, I32R6},
+{"cmp.af.d",   "D,S,T", 0x46a00000, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.un.d",   "D,S,T", 0x46a00001, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.eq.d",   "D,S,T", 0x46a00002, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.ueq.d",  "D,S,T", 0x46a00003, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.lt.d",   "D,S,T", 0x46a00004, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.ult.d",  "D,S,T", 0x46a00005, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.le.d",   "D,S,T", 0x46a00006, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.ule.d",  "D,S,T", 0x46a00007, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.saf.d",  "D,S,T", 0x46a00008, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.sun.d",  "D,S,T", 0x46a00009, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.seq.d",  "D,S,T", 0x46a0000a, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.sueq.d", "D,S,T", 0x46a0000b, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.slt.d",  "D,S,T", 0x46a0000c, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.sult.d", "D,S,T", 0x46a0000d, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.sle.d",  "D,S,T", 0x46a0000e, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.sule.d", "D,S,T", 0x46a0000f, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.or.d",   "D,S,T", 0x46a00011, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.une.d",  "D,S,T", 0x46a00012, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.ne.d",   "D,S,T", 0x46a00013, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.sor.d",  "D,S,T", 0x46a00019, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.sune.d", "D,S,T", 0x46a0001a, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+{"cmp.sne.d",  "D,S,T", 0x46a0001b, 0xffe0003f, RD_S|RD_T|WR_D|FP_D,  0, I32R6},
+
+/* MSA */
+{"sll.b",   "+d,+e,+f", 0x7800000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"sll.h",   "+d,+e,+f", 0x7820000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"sll.w",   "+d,+e,+f", 0x7840000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"sll.d",   "+d,+e,+f", 0x7860000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"slli.b",  "+d,+e,+7", 0x78700009, 0xfff8003f, WR_VD|RD_VS,        0, MSA},
+{"slli.h",  "+d,+e,+8", 0x78600009, 0xfff0003f, WR_VD|RD_VS,        0, MSA},
+{"slli.w",  "+d,+e,+9", 0x78400009, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"slli.d",  "+d,+e,'",  0x78000009, 0xffc0003f, WR_VD|RD_VS,        0, MSA},
+{"sra.b",   "+d,+e,+f", 0x7880000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"sra.h",   "+d,+e,+f", 0x78a0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"sra.w",   "+d,+e,+f", 0x78c0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"sra.d",   "+d,+e,+f", 0x78e0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srai.b",  "+d,+e,+7", 0x78f00009, 0xfff8003f, WR_VD|RD_VS,        0, MSA},
+{"srai.h",  "+d,+e,+8", 0x78e00009, 0xfff0003f, WR_VD|RD_VS,        0, MSA},
+{"srai.w",  "+d,+e,+9", 0x78c00009, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"srai.d",  "+d,+e,'",  0x78800009, 0xffc0003f, WR_VD|RD_VS,        0, MSA},
+{"srl.b",   "+d,+e,+f", 0x7900000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srl.h",   "+d,+e,+f", 0x7920000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srl.w",   "+d,+e,+f", 0x7940000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srl.d",   "+d,+e,+f", 0x7960000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srli.b",  "+d,+e,+7", 0x79700009, 0xfff8003f, WR_VD|RD_VS,        0, MSA},
+{"srli.h",  "+d,+e,+8", 0x79600009, 0xfff0003f, WR_VD|RD_VS,        0, MSA},
+{"srli.w",  "+d,+e,+9", 0x79400009, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"srli.d",  "+d,+e,'",  0x79000009, 0xffc0003f, WR_VD|RD_VS,        0, MSA},
+{"bclr.b",  "+d,+e,+f", 0x7980000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bclr.h",  "+d,+e,+f", 0x79a0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bclr.w",  "+d,+e,+f", 0x79c0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bclr.d",  "+d,+e,+f", 0x79e0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bclri.b", "+d,+e,+7", 0x79f00009, 0xfff8003f, WR_VD|RD_VS,        0, MSA},
+{"bclri.h", "+d,+e,+8", 0x79e00009, 0xfff0003f, WR_VD|RD_VS,        0, MSA},
+{"bclri.w", "+d,+e,+9", 0x79c00009, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"bclri.d", "+d,+e,'",  0x79800009, 0xffc0003f, WR_VD|RD_VS,        0, MSA},
+{"bset.b",  "+d,+e,+f", 0x7a00000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bset.h",  "+d,+e,+f", 0x7a20000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bset.w",  "+d,+e,+f", 0x7a40000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bset.d",  "+d,+e,+f", 0x7a60000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bseti.b", "+d,+e,+7", 0x7a700009, 0xfff8003f, WR_VD|RD_VS,        0, MSA},
+{"bseti.h", "+d,+e,+8", 0x7a600009, 0xfff0003f, WR_VD|RD_VS,        0, MSA},
+{"bseti.w", "+d,+e,+9", 0x7a400009, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"bseti.d", "+d,+e,'",  0x7a000009, 0xffc0003f, WR_VD|RD_VS,        0, MSA},
+{"bneg.b",  "+d,+e,+f", 0x7a80000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bneg.h",  "+d,+e,+f", 0x7aa0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bneg.w",  "+d,+e,+f", 0x7ac0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bneg.d",  "+d,+e,+f", 0x7ae0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bnegi.b", "+d,+e,+7", 0x7af00009, 0xfff8003f, WR_VD|RD_VS,        0, MSA},
+{"bnegi.h", "+d,+e,+8", 0x7ae00009, 0xfff0003f, WR_VD|RD_VS,        0, MSA},
+{"bnegi.w", "+d,+e,+9", 0x7ac00009, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"bnegi.d", "+d,+e,'",  0x7a800009, 0xffc0003f, WR_VD|RD_VS,        0, MSA},
+{"binsl.b", "+d,+e,+f", 0x7b00000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"binsl.h", "+d,+e,+f", 0x7b20000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"binsl.w", "+d,+e,+f", 0x7b40000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"binsl.d", "+d,+e,+f", 0x7b60000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"binsli.b", "+d,+e,+7", 0x7b700009, 0xfff8003f, WR_VD|RD_VS,       0, MSA},
+{"binsli.h", "+d,+e,+8", 0x7b600009, 0xfff0003f, WR_VD|RD_VS,       0, MSA},
+{"binsli.w", "+d,+e,+9", 0x7b400009, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"binsli.d", "+d,+e,'",  0x7b000009, 0xffc0003f, WR_VD|RD_VS,       0, MSA},
+{"binsr.b", "+d,+e,+f", 0x7b80000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"binsr.h", "+d,+e,+f", 0x7ba0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"binsr.w", "+d,+e,+f", 0x7bc0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"binsr.d", "+d,+e,+f", 0x7be0000d, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"binsri.b", "+d,+e,+7", 0x7bf00009, 0xfff8003f, WR_VD|RD_VS,       0, MSA},
+{"binsri.h", "+d,+e,+8", 0x7be00009, 0xfff0003f, WR_VD|RD_VS,       0, MSA},
+{"binsri.w", "+d,+e,+9", 0x7bc00009, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"binsri.d", "+d,+e,'",  0x7b800009, 0xffc0003f, WR_VD|RD_VS,       0, MSA},
+{"addv.b",  "+d,+e,+f", 0x7800000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"addv.h",  "+d,+e,+f", 0x7820000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"addv.w",  "+d,+e,+f", 0x7840000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"addv.d",  "+d,+e,+f", 0x7860000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"addvi.b", "+d,+e,k",  0x78000006, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"addvi.h", "+d,+e,k",  0x78200006, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"addvi.w", "+d,+e,k",  0x78400006, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"addvi.d", "+d,+e,k",  0x78600006, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"subv.b",  "+d,+e,+f", 0x7880000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"subv.h",  "+d,+e,+f", 0x78a0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"subv.w",  "+d,+e,+f", 0x78c0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"subv.d",  "+d,+e,+f", 0x78e0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"subvi.b", "+d,+e,k",  0x78800006, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"subvi.h", "+d,+e,k",  0x78a00006, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"subvi.w", "+d,+e,k",  0x78c00006, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"subvi.d", "+d,+e,k",  0x78e00006, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"max_s.b", "+d,+e,+f", 0x7900000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"max_s.h", "+d,+e,+f", 0x7920000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"max_s.w", "+d,+e,+f", 0x7940000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"max_s.d", "+d,+e,+f", 0x7960000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"maxi_s.b", "+d,+e,+5", 0x79000006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"maxi_s.h", "+d,+e,+5", 0x79200006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"maxi_s.w", "+d,+e,+5", 0x79400006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"maxi_s.d", "+d,+e,+5", 0x79600006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"max_u.b", "+d,+e,+f", 0x7980000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"max_u.h", "+d,+e,+f", 0x79a0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"max_u.w", "+d,+e,+f", 0x79c0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"max_u.d", "+d,+e,+f", 0x79e0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"maxi_u.b", "+d,+e,k",  0x79800006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"maxi_u.h", "+d,+e,k",  0x79a00006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"maxi_u.w", "+d,+e,k",  0x79c00006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"maxi_u.d", "+d,+e,k",  0x79e00006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"min_s.b", "+d,+e,+f", 0x7a00000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"min_s.h", "+d,+e,+f", 0x7a20000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"min_s.w", "+d,+e,+f", 0x7a40000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"min_s.d", "+d,+e,+f", 0x7a60000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mini_s.b", "+d,+e,+5", 0x7a000006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"mini_s.h", "+d,+e,+5", 0x7a200006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"mini_s.w", "+d,+e,+5", 0x7a400006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"mini_s.d", "+d,+e,+5", 0x7a600006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"min_u.b", "+d,+e,+f", 0x7a80000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"min_u.h", "+d,+e,+f", 0x7aa0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"min_u.w", "+d,+e,+f", 0x7ac0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"min_u.d", "+d,+e,+f", 0x7ae0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mini_u.b", "+d,+e,k",  0x7a800006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"mini_u.h", "+d,+e,k",  0x7aa00006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"mini_u.w", "+d,+e,k",  0x7ac00006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"mini_u.d", "+d,+e,k",  0x7ae00006, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"max_a.b", "+d,+e,+f", 0x7b00000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"max_a.h", "+d,+e,+f", 0x7b20000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"max_a.w", "+d,+e,+f", 0x7b40000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"max_a.d", "+d,+e,+f", 0x7b60000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"min_a.b", "+d,+e,+f", 0x7b80000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"min_a.h", "+d,+e,+f", 0x7ba0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"min_a.w", "+d,+e,+f", 0x7bc0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"min_a.d", "+d,+e,+f", 0x7be0000e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ceq.b",   "+d,+e,+f", 0x7800000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ceq.h",   "+d,+e,+f", 0x7820000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ceq.w",   "+d,+e,+f", 0x7840000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ceq.d",   "+d,+e,+f", 0x7860000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ceqi.b",  "+d,+e,+5", 0x78000007, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"ceqi.h",  "+d,+e,+5", 0x78200007, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"ceqi.w",  "+d,+e,+5", 0x78400007, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"ceqi.d",  "+d,+e,+5", 0x78600007, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"clt_s.b", "+d,+e,+f", 0x7900000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"clt_s.h", "+d,+e,+f", 0x7920000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"clt_s.w", "+d,+e,+f", 0x7940000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"clt_s.d", "+d,+e,+f", 0x7960000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"clti_s.b", "+d,+e,+5", 0x79000007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clti_s.h", "+d,+e,+5", 0x79200007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clti_s.w", "+d,+e,+5", 0x79400007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clti_s.d", "+d,+e,+5", 0x79600007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clt_u.b", "+d,+e,+f", 0x7980000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"clt_u.h", "+d,+e,+f", 0x79a0000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"clt_u.w", "+d,+e,+f", 0x79c0000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"clt_u.d", "+d,+e,+f", 0x79e0000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"clti_u.b", "+d,+e,k",  0x79800007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clti_u.h", "+d,+e,k",  0x79a00007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clti_u.w", "+d,+e,k",  0x79c00007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clti_u.d", "+d,+e,k",  0x79e00007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"cle_s.b", "+d,+e,+f", 0x7a00000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"cle_s.h", "+d,+e,+f", 0x7a20000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"cle_s.w", "+d,+e,+f", 0x7a40000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"cle_s.d", "+d,+e,+f", 0x7a60000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"clei_s.b", "+d,+e,+5", 0x7a000007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clei_s.h", "+d,+e,+5", 0x7a200007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clei_s.w", "+d,+e,+5", 0x7a400007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clei_s.d", "+d,+e,+5", 0x7a600007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"cle_u.b", "+d,+e,+f", 0x7a80000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"cle_u.h", "+d,+e,+f", 0x7aa0000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"cle_u.w", "+d,+e,+f", 0x7ac0000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"cle_u.d", "+d,+e,+f", 0x7ae0000f, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"clei_u.b", "+d,+e,k",  0x7a800007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clei_u.h", "+d,+e,k",  0x7aa00007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clei_u.w", "+d,+e,k",  0x7ac00007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"clei_u.d", "+d,+e,k",  0x7ae00007, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"ld.b",    "+d,+^(d)", 0x78000020, 0xfc00003f, WR_VD|LDD,       RD_d, MSA},
+{"ld.h",    "+d,+#(d)", 0x78000021, 0xfc00003f, WR_VD|LDD,       RD_d, MSA},
+{"ld.w",    "+d,+$(d)", 0x78000022, 0xfc00003f, WR_VD|LDD,       RD_d, MSA},
+{"ld.d",    "+d,+%(d)", 0x78000023, 0xfc00003f, WR_VD|LDD,       RD_d, MSA},
+{"st.b",    "+d,+^(d)", 0x78000024, 0xfc00003f, RD_VD|SM,        RD_d, MSA},
+{"st.h",    "+d,+#(d)", 0x78000025, 0xfc00003f, RD_VD|SM,        RD_d, MSA},
+{"st.w",    "+d,+$(d)", 0x78000026, 0xfc00003f, RD_VD|SM,        RD_d, MSA},
+{"st.d",    "+d,+%(d)", 0x78000027, 0xfc00003f, RD_VD|SM,        RD_d, MSA},
+{"sat_s.b", "+d,+e,+7", 0x7870000a, 0xfff8003f, WR_VD|RD_VS,        0, MSA},
+{"sat_s.h", "+d,+e,+8", 0x7860000a, 0xfff0003f, WR_VD|RD_VS,        0, MSA},
+{"sat_s.w", "+d,+e,+9", 0x7840000a, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"sat_s.d", "+d,+e,'",  0x7800000a, 0xffc0003f, WR_VD|RD_VS,        0, MSA},
+{"sat_u.b", "+d,+e,+7", 0x78f0000a, 0xfff8003f, WR_VD|RD_VS,        0, MSA},
+{"sat_u.h", "+d,+e,+8", 0x78e0000a, 0xfff0003f, WR_VD|RD_VS,        0, MSA},
+{"sat_u.w", "+d,+e,+9", 0x78c0000a, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"sat_u.d", "+d,+e,'",  0x7880000a, 0xffc0003f, WR_VD|RD_VS,        0, MSA},
+{"add_a.b", "+d,+e,+f", 0x78000010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"add_a.h", "+d,+e,+f", 0x78200010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"add_a.w", "+d,+e,+f", 0x78400010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"add_a.d", "+d,+e,+f", 0x78600010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"adds_a.b", "+d,+e,+f", 0x78800010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_a.h", "+d,+e,+f", 0x78a00010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_a.w", "+d,+e,+f", 0x78c00010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_a.d", "+d,+e,+f", 0x78e00010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_s.b", "+d,+e,+f", 0x79000010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_s.h", "+d,+e,+f", 0x79200010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_s.w", "+d,+e,+f", 0x79400010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_s.d", "+d,+e,+f", 0x79600010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_u.b", "+d,+e,+f", 0x79800010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_u.h", "+d,+e,+f", 0x79a00010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_u.w", "+d,+e,+f", 0x79c00010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"adds_u.d", "+d,+e,+f", 0x79e00010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"ave_s.b", "+d,+e,+f", 0x7a000010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ave_s.h", "+d,+e,+f", 0x7a200010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ave_s.w", "+d,+e,+f", 0x7a400010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ave_s.d", "+d,+e,+f", 0x7a600010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ave_u.b", "+d,+e,+f", 0x7a800010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ave_u.h", "+d,+e,+f", 0x7aa00010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ave_u.w", "+d,+e,+f", 0x7ac00010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ave_u.d", "+d,+e,+f", 0x7ae00010, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"aver_s.b", "+d,+e,+f", 0x7b000010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"aver_s.h", "+d,+e,+f", 0x7b200010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"aver_s.w", "+d,+e,+f", 0x7b400010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"aver_s.d", "+d,+e,+f", 0x7b600010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"aver_u.b", "+d,+e,+f", 0x7b800010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"aver_u.h", "+d,+e,+f", 0x7ba00010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"aver_u.w", "+d,+e,+f", 0x7bc00010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"aver_u.d", "+d,+e,+f", 0x7be00010, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subs_s.b", "+d,+e,+f", 0x78000011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subs_s.h", "+d,+e,+f", 0x78200011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subs_s.w", "+d,+e,+f", 0x78400011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subs_s.d", "+d,+e,+f", 0x78600011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subs_u.b", "+d,+e,+f", 0x78800011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subs_u.h", "+d,+e,+f", 0x78a00011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subs_u.w", "+d,+e,+f", 0x78c00011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subs_u.d", "+d,+e,+f", 0x78e00011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subsus_u.b", "+d,+e,+f", 0x79000011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subsus_u.h", "+d,+e,+f", 0x79200011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subsus_u.w", "+d,+e,+f", 0x79400011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subsus_u.d", "+d,+e,+f", 0x79600011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subsuu_s.b", "+d,+e,+f", 0x79800011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subsuu_s.h", "+d,+e,+f", 0x79a00011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subsuu_s.w", "+d,+e,+f", 0x79c00011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"subsuu_s.d", "+d,+e,+f", 0x79e00011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"asub_s.b", "+d,+e,+f", 0x7a000011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"asub_s.h", "+d,+e,+f", 0x7a200011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"asub_s.w", "+d,+e,+f", 0x7a400011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"asub_s.d", "+d,+e,+f", 0x7a600011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"asub_u.b", "+d,+e,+f", 0x7a800011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"asub_u.h", "+d,+e,+f", 0x7aa00011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"asub_u.w", "+d,+e,+f", 0x7ac00011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"asub_u.d", "+d,+e,+f", 0x7ae00011, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"mulv.b",  "+d,+e,+f", 0x78000012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mulv.h",  "+d,+e,+f", 0x78200012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mulv.w",  "+d,+e,+f", 0x78400012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mulv.d",  "+d,+e,+f", 0x78600012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"maddv.b", "+d,+e,+f", 0x78800012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"maddv.h", "+d,+e,+f", 0x78a00012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"maddv.w", "+d,+e,+f", 0x78c00012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"maddv.d", "+d,+e,+f", 0x78e00012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"msubv.b", "+d,+e,+f", 0x79000012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"msubv.h", "+d,+e,+f", 0x79200012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"msubv.w", "+d,+e,+f", 0x79400012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"msubv.d", "+d,+e,+f", 0x79600012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"div_s.b", "+d,+e,+f", 0x7a000012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"div_s.h", "+d,+e,+f", 0x7a200012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"div_s.w", "+d,+e,+f", 0x7a400012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"div_s.d", "+d,+e,+f", 0x7a600012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"div_u.b", "+d,+e,+f", 0x7a800012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"div_u.h", "+d,+e,+f", 0x7aa00012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"div_u.w", "+d,+e,+f", 0x7ac00012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"div_u.d", "+d,+e,+f", 0x7ae00012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mod_s.b", "+d,+e,+f", 0x7b000012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mod_s.h", "+d,+e,+f", 0x7b200012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mod_s.w", "+d,+e,+f", 0x7b400012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mod_s.d", "+d,+e,+f", 0x7b600012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mod_u.b", "+d,+e,+f", 0x7b800012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mod_u.h", "+d,+e,+f", 0x7ba00012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mod_u.w", "+d,+e,+f", 0x7bc00012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mod_u.d", "+d,+e,+f", 0x7be00012, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"dotp_s.h", "+d,+e,+f", 0x78200013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dotp_s.w", "+d,+e,+f", 0x78400013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dotp_s.d", "+d,+e,+f", 0x78600013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dotp_u.h", "+d,+e,+f", 0x78a00013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dotp_u.w", "+d,+e,+f", 0x78c00013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dotp_u.d", "+d,+e,+f", 0x78e00013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpadd_s.h", "+d,+e,+f", 0x79200013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpadd_s.w", "+d,+e,+f", 0x79400013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpadd_s.d", "+d,+e,+f", 0x79600013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpadd_u.h", "+d,+e,+f", 0x79a00013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpadd_u.w", "+d,+e,+f", 0x79c00013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpadd_u.d", "+d,+e,+f", 0x79e00013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpsub_s.h", "+d,+e,+f", 0x7a200013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpsub_s.w", "+d,+e,+f", 0x7a400013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpsub_s.d", "+d,+e,+f", 0x7a600013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpsub_u.h", "+d,+e,+f", 0x7aa00013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpsub_u.w", "+d,+e,+f", 0x7ac00013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"dpsub_u.d", "+d,+e,+f", 0x7ae00013, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"sld.b",   "+d,+e[t]", 0x78000014, 0xffe0003f, WR_VD|RD_VS|RD_t,   0, MSA},
+{"sld.h",   "+d,+e[t]", 0x78200014, 0xffe0003f, WR_VD|RD_VS|RD_t,   0, MSA},
+{"sld.w",   "+d,+e[t]", 0x78400014, 0xffe0003f, WR_VD|RD_VS|RD_t,   0, MSA},
+{"sld.d",   "+d,+e[t]", 0x78600014, 0xffe0003f, WR_VD|RD_VS|RD_t,   0, MSA},
+{"sldi.b",  "+d,+e[+9]", 0x78000019, 0xffe0003f, WR_VD|RD_VS,       0, MSA},
+{"sldi.h",  "+d,+e[+8]", 0x78200019, 0xfff0003f, WR_VD|RD_VS,       0, MSA},
+{"sldi.w",  "+d,+e[+7]", 0x78300019, 0xfff8003f, WR_VD|RD_VS,       0, MSA},
+{"sldi.d",  "+d,+e[+6]", 0x78380019, 0xfffc003f, WR_VD|RD_VS,       0, MSA},
+{"splat.b", "+d,+e[t]", 0x78800014, 0xffe0003f, WR_VD|RD_VS|RD_t,   0, MSA},
+{"splat.h", "+d,+e[t]", 0x78a00014, 0xffe0003f, WR_VD|RD_VS|RD_t,   0, MSA},
+{"splat.w", "+d,+e[t]", 0x78c00014, 0xffe0003f, WR_VD|RD_VS|RD_t,   0, MSA},
+{"splat.d", "+d,+e[t]", 0x78e00014, 0xffe0003f, WR_VD|RD_VS|RD_t,   0, MSA},
+{"splati.b", "+d,+e[+9]", 0x78400019, 0xffe0003f, WR_VD|RD_VS,      0, MSA},
+{"splati.h", "+d,+e[+8]", 0x78600019, 0xfff0003f, WR_VD|RD_VS,      0, MSA},
+{"splati.w", "+d,+e[+7]", 0x78700019, 0xfff8003f, WR_VD|RD_VS,      0, MSA},
+{"splati.d", "+d,+e[+6]", 0x78780019, 0xfffc003f, WR_VD|RD_VS,      0, MSA},
+{"pckev.b", "+d,+e,+f", 0x79000014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"pckev.h", "+d,+e,+f", 0x79200014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"pckev.w", "+d,+e,+f", 0x79400014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"pckev.d", "+d,+e,+f", 0x79600014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"pckod.b", "+d,+e,+f", 0x79800014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"pckod.h", "+d,+e,+f", 0x79a00014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"pckod.w", "+d,+e,+f", 0x79c00014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"pckod.d", "+d,+e,+f", 0x79e00014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvl.b",  "+d,+e,+f", 0x7a000014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvl.h",  "+d,+e,+f", 0x7a200014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvl.w",  "+d,+e,+f", 0x7a400014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvl.d",  "+d,+e,+f", 0x7a600014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvr.b",  "+d,+e,+f", 0x7a800014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvr.h",  "+d,+e,+f", 0x7aa00014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvr.w",  "+d,+e,+f", 0x7ac00014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvr.d",  "+d,+e,+f", 0x7ae00014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvev.b", "+d,+e,+f", 0x7b000014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvev.h", "+d,+e,+f", 0x7b200014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvev.w", "+d,+e,+f", 0x7b400014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvev.d", "+d,+e,+f", 0x7b600014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvod.b", "+d,+e,+f", 0x7b800014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvod.h", "+d,+e,+f", 0x7ba00014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvod.w", "+d,+e,+f", 0x7bc00014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ilvod.d", "+d,+e,+f", 0x7be00014, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"vshf.b",  "+d,+e,+f", 0x78000015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"vshf.h",  "+d,+e,+f", 0x78200015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"vshf.w",  "+d,+e,+f", 0x78400015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"vshf.d",  "+d,+e,+f", 0x78600015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srar.b",  "+d,+e,+f", 0x78800015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srar.h",  "+d,+e,+f", 0x78a00015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srar.w",  "+d,+e,+f", 0x78c00015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srar.d",  "+d,+e,+f", 0x78e00015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srari.b", "+d,+e,+7", 0x7970000a, 0xfff8003f, WR_VD|RD_VS,        0, MSA},
+{"srari.h", "+d,+e,+8", 0x7960000a, 0xfff0003f, WR_VD|RD_VS,        0, MSA},
+{"srari.w", "+d,+e,+9", 0x7940000a, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"srari.d", "+d,+e,'",  0x7900000a, 0xffc0003f, WR_VD|RD_VS,        0, MSA},
+{"srlr.b",  "+d,+e,+f", 0x79000015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srlr.h",  "+d,+e,+f", 0x79200015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srlr.w",  "+d,+e,+f", 0x79400015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srlr.d",  "+d,+e,+f", 0x79600015, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"srlri.b", "+d,+e,+7", 0x79f0000a, 0xfff8003f, WR_VD|RD_VS,        0, MSA},
+{"srlri.h", "+d,+e,+8", 0x79e0000a, 0xfff0003f, WR_VD|RD_VS,        0, MSA},
+{"srlri.w", "+d,+e,+9", 0x79c0000a, 0xffe0003f, WR_VD|RD_VS,        0, MSA},
+{"srlri.d", "+d,+e,'",  0x7980000a, 0xffc0003f, WR_VD|RD_VS,        0, MSA},
+{"hadd_s.h", "+d,+e,+f", 0x7a200015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hadd_s.w", "+d,+e,+f", 0x7a400015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hadd_s.d", "+d,+e,+f", 0x7a600015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hadd_u.h", "+d,+e,+f", 0x7aa00015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hadd_u.w", "+d,+e,+f", 0x7ac00015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hadd_u.d", "+d,+e,+f", 0x7ae00015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hsub_s.h", "+d,+e,+f", 0x7b200015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hsub_s.w", "+d,+e,+f", 0x7b400015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hsub_s.d", "+d,+e,+f", 0x7b600015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hsub_u.h", "+d,+e,+f", 0x7ba00015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hsub_u.w", "+d,+e,+f", 0x7bc00015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"hsub_u.d", "+d,+e,+f", 0x7be00015, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"and.v",   "+d,+e,+f", 0x7800001e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"andi.b",  "+d,+e,5",  0x78000000, 0xff00003f, WR_VD|RD_VS,        0, MSA},
+{"or.v",    "+d,+e,+f", 0x7820001e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ori.b",   "+d,+e,5",  0x79000000, 0xff00003f, WR_VD|RD_VS,        0, MSA},
+{"nor.v",   "+d,+e,+f", 0x7840001e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"nori.b",  "+d,+e,5",  0x7a000000, 0xff00003f, WR_VD|RD_VS,        0, MSA},
+{"xor.v",   "+d,+e,+f", 0x7860001e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"xori.b",  "+d,+e,5",  0x7b000000, 0xff00003f, WR_VD|RD_VS,        0, MSA},
+{"bmnz.v",  "+d,+e,+f", 0x7880001e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bmnzi.b", "+d,+e,5",  0x78000001, 0xff00003f, WR_VD|RD_VS,        0, MSA},
+{"bmz.v",   "+d,+e,+f", 0x78a0001e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bmzi.b",  "+d,+e,5",  0x79000001, 0xff00003f, WR_VD|RD_VS,        0, MSA},
+{"bsel.v",  "+d,+e,+f", 0x78c0001e, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"bseli.b", "+d,+e,5",  0x7a000001, 0xff00003f, WR_VD|RD_VS,        0, MSA},
+{"shf.b",   "+d,+e,5",  0x78000002, 0xff00003f, WR_VD|RD_VS,        0, MSA},
+{"shf.h",   "+d,+e,5",  0x79000002, 0xff00003f, WR_VD|RD_VS,        0, MSA},
+{"shf.w",   "+d,+e,5",  0x7a000002, 0xff00003f, WR_VD|RD_VS,        0, MSA},
+{"bnz.v",    "+f,p",    0x45e00000, 0xffe00000, CBD|RD_VT,          0, MSA},
+{"bz.v",    "+f,p",     0x45600000, 0xffe00000, CBD|RD_VT,          0, MSA},
+{"fill.b",  "+d,d",     0x7b00001e, 0xffff003f, WR_VD,           RD_d, MSA},
+{"fill.h",  "+d,d",     0x7b01001e, 0xffff003f, WR_VD,           RD_d, MSA},
+{"fill.w",  "+d,d",     0x7b02001e, 0xffff003f, WR_VD,           RD_d, MSA},
+{"fill.d",  "+d,d",     0x7b03001e, 0xffff003f, WR_VD,           RD_d, MSA64},
+{"pcnt.b",  "+d,+e",    0x7b04001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"pcnt.h",  "+d,+e",    0x7b05001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"pcnt.w",  "+d,+e",    0x7b06001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"pcnt.d",  "+d,+e",    0x7b07001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"nloc.b",  "+d,+e",    0x7b08001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"nloc.h",  "+d,+e",    0x7b09001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"nloc.w",  "+d,+e",    0x7b0a001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"nloc.d",  "+d,+e",    0x7b0b001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"nlzc.b",  "+d,+e",    0x7b0c001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"nlzc.h",  "+d,+e",    0x7b0d001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"nlzc.w",  "+d,+e",    0x7b0e001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"nlzc.d",  "+d,+e",    0x7b0f001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"copy_s.b", "+i,+e[+9]", 0x78800019, 0xffe0003f, RD_VS,       RD_rd6, MSA},
+{"copy_s.h", "+i,+e[+8]", 0x78a00019, 0xfff0003f, RD_VS,       RD_rd6, MSA},
+{"copy_s.w", "+i,+e[+7]", 0x78b00019, 0xfff8003f, RD_VS,       RD_rd6, MSA},
+{"copy_s.d", "+i,+e[+6]", 0x78b80019, 0xfffc003f, RD_VS,       RD_rd6, MSA64},
+{"copy_u.b", "+i,+e[+9]", 0x78c00019, 0xffe0003f, RD_VS,       RD_rd6, MSA},
+{"copy_u.h", "+i,+e[+8]", 0x78e00019, 0xfff0003f, RD_VS,       RD_rd6, MSA},
+{"copy_u.w", "+i,+e[+7]", 0x78f00019, 0xfff8003f, RD_VS,       RD_rd6, MSA},
+{"copy_u.d", "+i,+e[+6]", 0x78f80019, 0xfffc003f, RD_VS,       RD_rd6, MSA64},
+{"insert.b", "+d[+9],d", 0x79000019, 0xffe0003f, WR_VD|RD_VD,    RD_d, MSA},
+{"insert.h", "+d[+8],d", 0x79200019, 0xfff0003f, WR_VD|RD_VD,    RD_d, MSA},
+{"insert.w", "+d[+7],d", 0x79300019, 0xfff8003f, WR_VD|RD_VD,    RD_d, MSA},
+{"insert.d", "+d[+6],d", 0x79380019, 0xfffc003f, WR_VD|RD_VD,    RD_d, MSA64},
+{"insve.b", "+d[+9],+e[+~]", 0x79400019, 0xffe0003f, WR_VD|RD_VD|RD_VS, 0, MSA},
+{"insve.h", "+d[+8],+e[+~]", 0x79600019, 0xfff0003f, WR_VD|RD_VD|RD_VS, 0, MSA},
+{"insve.w", "+d[+7],+e[+~]", 0x79700019, 0xfff8003f, WR_VD|RD_VD|RD_VS, 0, MSA},
+{"insve.d", "+d[+6],+e[+~]", 0x79780019, 0xfffc003f, WR_VD|RD_VD|RD_VS, 0, MSA},
+{"bnz.b",    "+f,p",    0x47800000, 0xffe00000, CBD|RD_VT,          0, MSA},
+{"bnz.h",    "+f,p",    0x47a00000, 0xffe00000, CBD|RD_VT,          0, MSA},
+{"bnz.w",    "+f,p",    0x47c00000, 0xffe00000, CBD|RD_VT,          0, MSA},
+{"bnz.d",    "+f,p",    0x47e00000, 0xffe00000, CBD|RD_VT,          0, MSA},
+{"bz.b",    "+f,p",     0x47000000, 0xffe00000, CBD|RD_VT,          0, MSA},
+{"bz.h",    "+f,p",     0x47200000, 0xffe00000, CBD|RD_VT,          0, MSA},
+{"bz.w",    "+f,p",     0x47400000, 0xffe00000, CBD|RD_VT,          0, MSA},
+{"bz.d",    "+f,p",     0x47600000, 0xffe00000, CBD|RD_VT,          0, MSA},
+{"ldi.b",   "+d,+0",    0x7b000007, 0xffe0003f, WR_VD,              0, MSA},
+{"ldi.h",   "+d,+0",    0x7b200007, 0xffe0003f, WR_VD,              0, MSA},
+{"ldi.w",   "+d,+0",    0x7b400007, 0xffe0003f, WR_VD,              0, MSA},
+{"ldi.d",   "+d,+0",    0x7b600007, 0xffe0003f, WR_VD,              0, MSA},
+{"fcaf.w",  "+d,+e,+f", 0x7800001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcaf.d",  "+d,+e,+f", 0x7820001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcun.w",  "+d,+e,+f", 0x7840001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcun.d",  "+d,+e,+f", 0x7860001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fceq.w",  "+d,+e,+f", 0x7880001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fceq.d",  "+d,+e,+f", 0x78a0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcueq.w", "+d,+e,+f", 0x78c0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcueq.d", "+d,+e,+f", 0x78e0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fclt.w",  "+d,+e,+f", 0x7900001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fclt.d",  "+d,+e,+f", 0x7920001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcult.w", "+d,+e,+f", 0x7940001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcult.d", "+d,+e,+f", 0x7960001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcle.w",  "+d,+e,+f", 0x7980001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcle.d",  "+d,+e,+f", 0x79a0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcule.w", "+d,+e,+f", 0x79c0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcule.d", "+d,+e,+f", 0x79e0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsaf.w",  "+d,+e,+f", 0x7a00001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsaf.d",  "+d,+e,+f", 0x7a20001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsun.w",  "+d,+e,+f", 0x7a40001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsun.d",  "+d,+e,+f", 0x7a60001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fseq.w",  "+d,+e,+f", 0x7a80001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fseq.d",  "+d,+e,+f", 0x7aa0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsueq.w", "+d,+e,+f", 0x7ac0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsueq.d", "+d,+e,+f", 0x7ae0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fslt.w",  "+d,+e,+f", 0x7b00001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fslt.d",  "+d,+e,+f", 0x7b20001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsult.w", "+d,+e,+f", 0x7b40001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsult.d", "+d,+e,+f", 0x7b60001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsle.w",  "+d,+e,+f", 0x7b80001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsle.d",  "+d,+e,+f", 0x7ba0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsule.w", "+d,+e,+f", 0x7bc0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsule.d", "+d,+e,+f", 0x7be0001a, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fadd.w",  "+d,+e,+f", 0x7800001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fadd.d",  "+d,+e,+f", 0x7820001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsub.w",  "+d,+e,+f", 0x7840001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsub.d",  "+d,+e,+f", 0x7860001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmul.w",  "+d,+e,+f", 0x7880001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmul.d",  "+d,+e,+f", 0x78a0001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fdiv.w",  "+d,+e,+f", 0x78c0001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fdiv.d",  "+d,+e,+f", 0x78e0001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmadd.w", "+d,+e,+f", 0x7900001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmadd.d", "+d,+e,+f", 0x7920001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmsub.w", "+d,+e,+f", 0x7940001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmsub.d", "+d,+e,+f", 0x7960001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fexp2.w", "+d,+e,+f", 0x79c0001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fexp2.d", "+d,+e,+f", 0x79e0001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fexdo.h", "+d,+e,+f", 0x7a00001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fexdo.w", "+d,+e,+f", 0x7a20001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ftq.h",   "+d,+e,+f", 0x7a80001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"ftq.w",   "+d,+e,+f", 0x7aa0001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmin.w",  "+d,+e,+f", 0x7b00001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmin.d",  "+d,+e,+f", 0x7b20001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmin_a.w", "+d,+e,+f", 0x7b40001b, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"fmin_a.d", "+d,+e,+f", 0x7b60001b, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"fmax.w",  "+d,+e,+f", 0x7b80001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmax.d",  "+d,+e,+f", 0x7ba0001b, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fmax_a.w", "+d,+e,+f", 0x7bc0001b, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"fmax_a.d", "+d,+e,+f", 0x7be0001b, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"fcor.w",  "+d,+e,+f", 0x7840001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcor.d",  "+d,+e,+f", 0x7860001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcune.w", "+d,+e,+f", 0x7880001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcune.d", "+d,+e,+f", 0x78a0001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcne.w",  "+d,+e,+f", 0x78c0001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fcne.d",  "+d,+e,+f", 0x78e0001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mul_q.h", "+d,+e,+f", 0x7900001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mul_q.w", "+d,+e,+f", 0x7920001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"madd_q.h", "+d,+e,+f", 0x7940001c, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"madd_q.w", "+d,+e,+f", 0x7960001c, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"msub_q.h", "+d,+e,+f", 0x7980001c, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"msub_q.w", "+d,+e,+f", 0x79a0001c, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"fsor.w",  "+d,+e,+f", 0x7a40001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsor.d",  "+d,+e,+f", 0x7a60001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsune.w", "+d,+e,+f", 0x7a80001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsune.d", "+d,+e,+f", 0x7aa0001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsne.w",  "+d,+e,+f", 0x7ac0001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"fsne.d",  "+d,+e,+f", 0x7ae0001c, 0xffe0003f, WR_VD|RD_VS|RD_VT,  0, MSA},
+{"mulr_q.h", "+d,+e,+f", 0x7b00001c, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"mulr_q.w", "+d,+e,+f", 0x7b20001c, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"maddr_q.h", "+d,+e,+f", 0x7b40001c, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"maddr_q.w", "+d,+e,+f", 0x7b60001c, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"msubr_q.h", "+d,+e,+f", 0x7b80001c, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"msubr_q.w", "+d,+e,+f", 0x7ba0001c, 0xffe0003f, WR_VD|RD_VS|RD_VT, 0, MSA},
+{"fclass.w", "+d,+e",    0x7b20001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"fclass.d", "+d,+e",    0x7b21001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"fsqrt.w", "+d,+e",    0x7b26001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"fsqrt.d", "+d,+e",    0x7b27001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"frsqrt.w", "+d,+e",    0x7b28001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"frsqrt.d", "+d,+e",    0x7b29001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"frcp.w",  "+d,+e",    0x7b2a001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"frcp.d",  "+d,+e",    0x7b2b001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"frint.w", "+d,+e",    0x7b2c001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"frint.d", "+d,+e",    0x7b2d001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"flog2.w", "+d,+e",    0x7b2e001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"flog2.d", "+d,+e",    0x7b2f001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"fexupl.w", "+d,+e",    0x7b30001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"fexupl.d", "+d,+e",    0x7b31001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"fexupr.w", "+d,+e",    0x7b32001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"fexupr.d", "+d,+e",    0x7b33001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ffql.w",  "+d,+e",    0x7b34001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"ffql.d",  "+d,+e",    0x7b35001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"ffqr.w",  "+d,+e",    0x7b36001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"ffqr.d",  "+d,+e",    0x7b37001e, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"ftint_s.w", "+d,+e",   0x7b38001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ftint_s.d", "+d,+e",   0x7b39001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ftint_u.w", "+d,+e",   0x7b3a001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ftint_u.d", "+d,+e",   0x7b3b001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ffint_s.w", "+d,+e",   0x7b3c001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ffint_s.d", "+d,+e",   0x7b3d001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ffint_u.w", "+d,+e",   0x7b3e001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ffint_u.d", "+d,+e",   0x7b3f001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ftrunc_s.w", "+d,+e",  0x7b40001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ftrunc_s.d", "+d,+e",  0x7b41001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ftrunc_u.w", "+d,+e",  0x7b42001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ftrunc_u.d", "+d,+e",  0x7b43001e, 0xffff003f, WR_VD|RD_VS,       0, MSA},
+{"ctcmsa",  "+h,d",     0x783e0019, 0xffff003f, COD,             RD_d, MSA},
+{"cfcmsa",  "+i,+g",    0x787e0019, 0xffff003f, COD,                0, MSA},
+{"move.v",  "+d,+e",    0x78be0019, 0xffff003f, WR_VD|RD_VS,        0, MSA},
+{"lsa",     "d,v,t,+@", 0x00000005, 0xfc00073f, WR_d|RD_s|RD_t,     0, MSA},
+{"dlsa",    "d,v,t,+@", 0x00000015, 0xfc00073f, WR_d|RD_s|RD_t,     0, MSA64},
+
 {"pref",    "k,o(b)",   0xcc000000, 0xfc000000, RD_b,           	0,		I4|I32|G3	},
 {"prefx",   "h,t(b)",	0x4c00000f, 0xfc0007ff, RD_b|RD_t,		0,		I4|I33	},
 {"nop",     "",         0x00000000, 0xffffffff, 0,              	INSN2_ALIAS,	I1      }, /* sll */
@@ -1508,6 +2238,8 @@ const struct mips_opcode mips_builtin_opcodes[] =
 {"ceil.l.s", "D,S",	0x4600000a, 0xffff003f, WR_D|RD_S|FP_S|FP_D,	0,		I3|I33	},
 {"ceil.w.d", "D,S",	0x4620000e, 0xffff003f, WR_D|RD_S|FP_S|FP_D,	0,		I2	},
 {"ceil.w.s", "D,S",	0x4600000e, 0xffff003f, WR_D|RD_S|FP_S,		0,		I2	},
+{"mfhc0",   "t,G,H",    0x40400000, 0xffe007f8, LCD|WR_t|RD_C0,       0, I33},
+{"mthc0",   "t,G,H",    0x40c00000, 0xffe007f8, COD|RD_t|WR_C0|WR_CC, 0, I33},
 {"cfc0",    "t,G",	0x40400000, 0xffe007ff,	LCD|WR_t|RD_C0,		0,		I1	},
 {"cfc1",    "t,G",	0x44400000, 0xffe007ff,	LCD|WR_t|RD_C1|FP_S,	0,		I1	},
 {"cfc1",    "t,S",	0x44400000, 0xffe007ff,	LCD|WR_t|RD_C1|FP_S,	0,		I1	},
@@ -1677,6 +2409,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
 {"emt",     "",		0x41600be1, 0xffffffff, TRAP,			0,		MT32	},
 {"emt",     "t",	0x41600be1, 0xffe0ffff, TRAP|WR_t,		0,		MT32	},
 {"eret",    "",         0x42000018, 0xffffffff, 0,      		0,		I3|I32	},
+{"eretnc",  "",         0x42000058, 0xffffffff, 0,                    0, I33},
 {"evpe",    "",		0x41600021, 0xffffffff, TRAP,			0,		MT32	},
 {"evpe",    "t",	0x41600021, 0xffe0ffff, TRAP|WR_t,		0,		MT32	},
 {"ext",     "t,r,+A,+C", 0x7c000000, 0xfc00003f, WR_t|RD_s,    		0,		I33	},
@@ -1687,9 +2420,11 @@ const struct mips_opcode mips_builtin_opcodes[] =
 {"hibernate","",        0x42000023, 0xffffffff,	0, 			0,		V1	},
 {"ins",     "t,r,+A,+B", 0x7c000004, 0xfc00003f, WR_t|RD_s,    		0,		I33	},
 {"jr",      "s",	0x00000008, 0xfc1fffff,	UBD|RD_s,		0,		I1	},
+{"jr",      "s",	0x00000009, 0xfc1fffff,	UBD|RD_s,		0,		I32R6	}, /* jalr */
 /* jr.hb is officially MIPS{32,64}R2, but it works on R1 as jr with
    the same hazard barrier effect.  */
 {"jr.hb",   "s",	0x00000408, 0xfc1fffff,	UBD|RD_s,		0,		I32	},
+{"jr.hb",   "s",	0x00000409, 0xfc1fffff,	UBD|RD_s,		0,		I32R6	}, /* jalr.hb */
 {"j",       "s",	0x00000008, 0xfc1fffff,	UBD|RD_s,		0,		I1	}, /* jr */
 /* SVR4 PIC code requires special handling for j, so it must be a
    macro.  */
@@ -1753,6 +2488,7 @@ const struct mips_opcode mips_builtin_opcodes[] =
 {"lld",	    "t,o(b)",	0xd0000000, 0xfc000000, LDD|RD_b|WR_t,		0,		I3	},
 {"lld",     "t,A(b)",	0,    (int) M_LLD_AB,	INSN_MACRO,		0,		I3	},
 {"lui",     "t,u",	0x3c000000, 0xffe00000,	WR_t,			0,		I1	},
+{"aui",     "s,t,u",    0x3c000000, 0xfc000000, RD_s|WR_t,            0, I32R6},
 {"luxc1",   "D,t(b)",	0x4c000005, 0xfc00f83f, LDD|WR_D|RD_t|RD_b|FP_D, 0,		I5|I33|N55},
 {"lw",      "t,o(b)",	0x8c000000, 0xfc000000,	LDD|RD_b|WR_t,		0,		I1	},
 {"lw",      "t,A(b)",	0,    (int) M_LW_AB,	INSN_MACRO,		0,		I1	},
@@ -2255,6 +2991,8 @@ const struct mips_opcode mips_builtin_opcodes[] =
 {"tlbp",    "",         0x42000008, 0xffffffff, INSN_TLB,       	0,		I1   	},
 {"tlbr",    "",         0x42000001, 0xffffffff, INSN_TLB,       	0,		I1   	},
 {"tlbwi",   "",         0x42000002, 0xffffffff, INSN_TLB,       	0,		I1   	},
+{"tlbinv",  "",         0x42000003, 0xffffffff, INSN_TLB,             0, I32  },
+{"tlbinvf", "",         0x42000004, 0xffffffff, INSN_TLB,             0, I32  },
 {"tlbwr",   "",         0x42000006, 0xffffffff, INSN_TLB,       	0,		I1   	},
 {"tlti",    "s,j",	0x040a0000, 0xfc1f0000,	RD_s|TRAP,		0,		I2	},
 {"tlt",     "s,t",	0x00000032, 0xfc00ffff, RD_s|RD_t|TRAP,		0,		I2	},
@@ -2778,6 +3516,7 @@ struct mips_cp0sel_name
   const char * const name;
 };
 
+#if 0
 /* The mips16 registers.  */
 static const unsigned int mips16_to_32_reg_map[] =
 {
@@ -2785,7 +3524,7 @@ static const unsigned int mips16_to_32_reg_map[] =
 };
 
 #define mips16_reg_names(rn)	mips_gpr_names[mips16_to_32_reg_map[rn]]
-
+#endif
 
 static const char * const mips_gpr_names_numeric[32] =
 {
@@ -2841,6 +3580,13 @@ static const char * const mips_fpr_names_64[32] =
   "ft4",  "ft5",  "ft6",  "ft7",  "fa0",  "fa1",  "fa2",  "fa3",
   "fa4",  "fa5",  "fa6",  "fa7",  "ft8",  "ft9",  "ft10", "ft11",
   "fs0",  "fs1",  "fs2",  "fs3",  "fs4",  "fs5",  "fs6",  "fs7"
+};
+
+static const char * const mips_wr_names[32] = {
+  "w0",  "w1",  "w2",  "w3",  "w4",  "w5",  "w6",  "w7",
+  "w8",  "w9",  "w10", "w11", "w12", "w13", "w14", "w15",
+  "w16", "w17", "w18", "w19", "w20", "w21", "w22", "w23",
+  "w24", "w25", "w26", "w27", "w28", "w29", "w30", "w31"
 };
 
 static const char * const mips_cp0_names_numeric[32] =
@@ -3061,6 +3807,13 @@ static const char * const mips_hwr_names_mips3264r2[32] =
   "$24",  "$25",  "$26",  "$27",  "$28",  "$29",  "$30",  "$31"
 };
 
+static const char * const mips_msa_control_names_mips3264r2[32] = {
+  "MSAIR", "MSACSR", "$2", "$3",  "$4",   "$5",   "$6",   "$7",
+  "$8",   "$9",   "$10",  "$11",  "$12",  "$13",  "$14",  "$15",
+  "$16",  "$17",  "$18",  "$19",  "$20",  "$21",  "$22",  "$23",
+  "$24",  "$25",  "$26",  "$27",  "$28",  "$29",  "$30",  "$31"
+};
+
 struct mips_abi_choice
 {
   const char *name;
@@ -3178,7 +3931,7 @@ static const struct mips_arch_choice mips_arch_choices[] =
 
   { "mips32r2",	1, bfd_mach_mipsisa32r2, CPU_MIPS32R2,
     (ISA_MIPS32R2 | INSN_MIPS16 | INSN_SMARTMIPS | INSN_DSP | INSN_DSPR2
-     | INSN_MIPS3D | INSN_MT),
+     | INSN_MIPS3D | INSN_MT | INSN_MSA),
     mips_cp0_names_mips3264r2,
     mips_cp0sel_names_mips3264r2, ARRAY_SIZE (mips_cp0sel_names_mips3264r2),
     mips_hwr_names_mips3264r2 },
@@ -3532,6 +4285,89 @@ print_insn_args (const char *d,
 				     (l >> OP_SH_UDI4) & OP_MASK_UDI4);
 	      break;
 
+        case '5': /* 5-bit signed immediate in bit 16 */
+            delta = ((l >> OP_SH_RT) & OP_MASK_RT);
+            if (delta & 0x10) { /* test sign bit */
+                delta |= ~OP_MASK_RT;
+            }
+            (*info->fprintf_func) (info->stream, "%d", delta);
+            break;
+
+        case '6':
+            (*info->fprintf_func) (info->stream, "0x%lx",
+                    (l >> OP_SH_2BIT) & OP_MASK_2BIT);
+            break;
+
+        case '7':
+            (*info->fprintf_func) (info->stream, "0x%lx",
+                    (l >> OP_SH_3BIT) & OP_MASK_3BIT);
+            break;
+
+        case '8':
+            (*info->fprintf_func) (info->stream, "0x%lx",
+                    (l >> OP_SH_4BIT) & OP_MASK_4BIT);
+            break;
+
+        case '9':
+            (*info->fprintf_func) (info->stream, "0x%lx",
+                    (l >> OP_SH_5BIT) & OP_MASK_5BIT);
+            break;
+
+        case ':':
+            (*info->fprintf_func) (info->stream, "0x%lx",
+                    (l >> OP_SH_1BIT) & OP_MASK_1BIT);
+            break;
+
+        case '!': /* 10-bit pc-relative target in bit 11 */
+            delta = ((l >> OP_SH_10BIT) & OP_MASK_10BIT);
+            if (delta & 0x200) { /* test sign bit */
+                delta |= ~OP_MASK_10BIT;
+            }
+            info->target = (delta << 2) + pc + INSNLEN;
+            (*info->print_address_func) (info->target, info);
+            break;
+
+        case '~':
+            (*info->fprintf_func) (info->stream, "0");
+            break;
+
+        case '@':
+            (*info->fprintf_func) (info->stream, "0x%lx",
+                    ((l >> OP_SH_1_TO_4) & OP_MASK_1_TO_4)+1);
+            break;
+
+        case '^': /* 10-bit signed immediate << 0 in bit 16 */
+            delta = ((l >> OP_SH_IMM10) & OP_MASK_IMM10);
+            if (delta & 0x200) { /* test sign bit */
+                delta |= ~OP_MASK_IMM10;
+            }
+            (*info->fprintf_func) (info->stream, "%d", delta);
+            break;
+
+        case '#': /* 10-bit signed immediate << 1 in bit 16 */
+            delta = ((l >> OP_SH_IMM10) & OP_MASK_IMM10);
+            if (delta & 0x200) { /* test sign bit */
+                delta |= ~OP_MASK_IMM10;
+            }
+            (*info->fprintf_func) (info->stream, "%d", delta << 1);
+            break;
+
+        case '$': /* 10-bit signed immediate << 2 in bit 16 */
+            delta = ((l >> OP_SH_IMM10) & OP_MASK_IMM10);
+            if (delta & 0x200) { /* test sign bit */
+                delta |= ~OP_MASK_IMM10;
+            }
+            (*info->fprintf_func) (info->stream, "%d", delta << 2);
+            break;
+
+        case '%': /* 10-bit signed immediate << 3 in bit 16 */
+            delta = ((l >> OP_SH_IMM10) & OP_MASK_IMM10);
+            if (delta & 0x200) { /* test sign bit */
+                delta |= ~OP_MASK_IMM10;
+            }
+            (*info->fprintf_func) (info->stream, "%d", delta << 3);
+            break;
+
 	    case 'C':
 	    case 'H':
 	      msbd = (l >> OP_SH_EXTMSBD) & OP_MASK_EXTMSBD;
@@ -3575,6 +4411,42 @@ print_insn_args (const char *d,
 	      (*info->fprintf_func) (info->stream, "0x%x", msbd + 1);
 	      break;
 
+            case 'o':
+                switch (*(d+1)) {
+                case '1':
+                    d++;
+                    delta = l & ((1 << 18) - 1);
+                    if (delta & 0x20000) {
+                        delta |= ~0x1ffff;
+                    }
+                    break;
+                case '2':
+                    d++;
+                    delta = l & ((1 << 19) - 1);
+                    if (delta & 0x40000) {
+                        delta |= ~0x3ffff;
+                    }
+                    break;
+                default:
+                    delta = (l >> OP_SH_DELTA_R6) & OP_MASK_DELTA_R6;
+                    if (delta & 0x8000) {
+                        delta |= ~0xffff;
+                    }
+                }
+
+                (*info->fprintf_func) (info->stream, "%d", delta);
+                break;
+
+            case 'p':
+                /* Sign extend the displacement with 26 bits.  */
+                delta = (l >> OP_SH_DELTA) & OP_MASK_TARGET;
+                if (delta & 0x2000000) {
+                    delta |= ~0x3FFFFFF;
+                }
+                info->target = (delta << 2) + pc + INSNLEN;
+                (*info->print_address_func) (info->target, info);
+                break;
+
 	    case 't': /* Coprocessor 0 reg name */
 	      (*info->fprintf_func) (info->stream, "%s",
 				     mips_cp0_names[(l >> OP_SH_RT) &
@@ -3602,6 +4474,38 @@ print_insn_args (const char *d,
 		  (*info->fprintf_func) (info->stream, "$%d,%d", cp0reg, sel);
 		break;
 	      }
+
+        case 'd':
+            (*info->fprintf_func) (info->stream, "%s",
+                    mips_wr_names[(l >> OP_SH_FD) & OP_MASK_FD]);
+            break;
+
+        case 'e':
+            (*info->fprintf_func) (info->stream, "%s",
+                    mips_wr_names[(l >> OP_SH_FS) & OP_MASK_FS]);
+            break;
+
+        case 'f':
+            (*info->fprintf_func) (info->stream, "%s",
+                    mips_wr_names[(l >> OP_SH_FT) & OP_MASK_FT]);
+            break;
+
+        case 'g':
+            (*info->fprintf_func) (info->stream, "%s",
+                    mips_msa_control_names_mips3264r2[(l >> OP_SH_MSACR11)
+                                                      & OP_MASK_MSACR11]);
+            break;
+
+        case 'h':
+            (*info->fprintf_func) (info->stream, "%s",
+                    mips_msa_control_names_mips3264r2[(l >> OP_SH_MSACR6)
+                                                      & OP_MASK_MSACR6]);
+            break;
+
+        case 'i':
+            (*info->fprintf_func) (info->stream, "%s",
+                    mips_gpr_names[(l >> OP_SH_GPR) & OP_MASK_GPR]);
+            break;
 
 	    default:
 	      /* xgettext:c-format */
@@ -3726,7 +4630,8 @@ print_insn_args (const char *d,
 
 	case 'j': /* Same as i, but sign-extended.  */
 	case 'o':
-	  delta = (l >> OP_SH_DELTA) & OP_MASK_DELTA;
+            delta = (l >> OP_SH_DELTA) & OP_MASK_DELTA;
+
 	  if (delta & 0x8000)
 	    delta |= ~0xffff;
 	  (*info->fprintf_func) (info->stream, "%d",
@@ -4051,6 +4956,23 @@ print_insn_mips (bfd_vma memaddr,
 	      if (! OPCODE_IS_MEMBER (op, mips_isa, mips_processor)
 		  && strcmp (op->name, "jalx"))
 		continue;
+
+              if (strcmp(op->name, "bovc") == 0
+                  || strcmp(op->name, "bnvc") == 0) {
+                  if (((word >> OP_SH_RS) & OP_MASK_RS) <
+                      ((word >> OP_SH_RT) & OP_MASK_RT)) {
+                      continue;
+                  }
+              }
+              if (strcmp(op->name, "bgezc") == 0
+                  || strcmp(op->name, "bltzc") == 0
+                  || strcmp(op->name, "bgezalc") == 0
+                  || strcmp(op->name, "bltzalc") == 0) {
+                  if (((word >> OP_SH_RS) & OP_MASK_RS) !=
+                      ((word >> OP_SH_RT) & OP_MASK_RT)) {
+                      continue;
+                  }
+              }
 
 	      /* Figure out instruction type and branch delay information.  */
 	      if ((op->pinfo & INSN_UNCOND_BRANCH_DELAY) != 0)

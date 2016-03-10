@@ -40,7 +40,7 @@
 #include "hw/block/flash.h"
 #include "hw/devices.h"
 #include "hw/boards.h"
-#include "sysemu/blockdev.h"
+#include "sysemu/block-backend.h"
 #include "exec/address-spaces.h"
 #include "sysemu/qtest.h"
 
@@ -71,7 +71,7 @@ static void connex_init(MachineState *machine)
     be = 0;
 #endif
     if (!pflash_cfi01_register(0x00000000, NULL, "connext.rom", connex_rom,
-                               dinfo ? dinfo->bdrv : NULL,
+                               dinfo ? blk_by_legacy_dinfo(dinfo) : NULL,
                                sector_len, connex_rom / sector_len,
                                2, 0, 0, 0, 0, be)) {
         fprintf(stderr, "qemu: Error registering flash memory.\n");
@@ -109,7 +109,7 @@ static void verdex_init(MachineState *machine)
     be = 0;
 #endif
     if (!pflash_cfi01_register(0x00000000, NULL, "verdex.rom", verdex_rom,
-                               dinfo ? dinfo->bdrv : NULL,
+                               dinfo ? blk_by_legacy_dinfo(dinfo) : NULL,
                                sector_len, verdex_rom / sector_len,
                                2, 0, 0, 0, 0, be)) {
         fprintf(stderr, "qemu: Error registering flash memory.\n");
@@ -121,22 +121,38 @@ static void verdex_init(MachineState *machine)
                     qdev_get_gpio_in(cpu->gpio, 99));
 }
 
-static QEMUMachine connex_machine = {
-    .name = "connex",
-    .desc = "Gumstix Connex (PXA255)",
-    .init = connex_init,
+static void connex_class_init(ObjectClass *oc, void *data)
+{
+    MachineClass *mc = MACHINE_CLASS(oc);
+
+    mc->desc = "Gumstix Connex (PXA255)";
+    mc->init = connex_init;
+}
+
+static const TypeInfo connex_type = {
+    .name = MACHINE_TYPE_NAME("connex"),
+    .parent = TYPE_MACHINE,
+    .class_init = connex_class_init,
 };
 
-static QEMUMachine verdex_machine = {
-    .name = "verdex",
-    .desc = "Gumstix Verdex (PXA270)",
-    .init = verdex_init,
+static void verdex_class_init(ObjectClass *oc, void *data)
+{
+    MachineClass *mc = MACHINE_CLASS(oc);
+
+    mc->desc = "Gumstix Verdex (PXA270)";
+    mc->init = verdex_init;
+}
+
+static const TypeInfo verdex_type = {
+    .name = MACHINE_TYPE_NAME("verdex"),
+    .parent = TYPE_MACHINE,
+    .class_init = verdex_class_init,
 };
 
 static void gumstix_machine_init(void)
 {
-    qemu_register_machine(&connex_machine);
-    qemu_register_machine(&verdex_machine);
+    type_register_static(&connex_type);
+    type_register_static(&verdex_type);
 }
 
-machine_init(gumstix_machine_init);
+machine_init(gumstix_machine_init)

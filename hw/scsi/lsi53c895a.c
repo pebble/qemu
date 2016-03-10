@@ -276,6 +276,7 @@ typedef struct {
     uint32_t csbc;
     uint32_t scratch[18]; /* SCRATCHA-SCRATCHR */
     uint8_t sbr;
+    uint32_t adder;
 
     /* Script ram is stored as 32-bit words in host byteorder.  */
     uint32_t script_ram[2048];
@@ -780,7 +781,7 @@ static void lsi_do_command(LSIState *s)
     }
 
     assert(s->current == NULL);
-    s->current = g_malloc0(sizeof(lsi_request));
+    s->current = g_new0(lsi_request, 1);
     s->current->tag = s->select_tag;
     s->current->req = scsi_req_new(dev, s->current->tag, s->current_lun, buf,
                                    s->current);
@@ -1388,6 +1389,7 @@ again:
                 switch ((insn >> 27) & 7) {
                 case 0: /* Jump */
                     DPRINTF("Jump to 0x%08x\n", addr);
+                    s->adder = addr;
                     s->dsp = addr;
                     break;
                 case 1: /* Call */
@@ -1512,6 +1514,8 @@ static uint8_t lsi_reg_readb(LSIState *s, int offset)
         return 0x7f;
     case 0x08: /* Revision ID */
         return 0x00;
+    case 0x09: /* SOCL */
+        return s->socl;
     case 0xa: /* SSID */
         return s->ssid;
     case 0xb: /* SBCL */
@@ -1576,6 +1580,8 @@ static uint8_t lsi_reg_readb(LSIState *s, int offset)
         return s->sbr;
     case 0x3b: /* DCNTL */
         return s->dcntl;
+    /* ADDER Output (Debug of relative jump address) */
+    CASE_GET_REG32(adder, 0x3c)
     case 0x40: /* SIEN0 */
         return s->sien0;
     case 0x41: /* SIEN1 */
@@ -2072,15 +2078,6 @@ static const VMStateDescription vmstate_lsi_scsi = {
     }
 };
 
-static void lsi_scsi_uninit(PCIDevice *d)
-{
-    LSIState *s = LSI53C895A(d);
-
-    memory_region_destroy(&s->mmio_io);
-    memory_region_destroy(&s->ram_io);
-    memory_region_destroy(&s->io_io);
-}
-
 static const struct SCSIBusInfo lsi_scsi_info = {
     .tcq = true,
     .max_target = LSI_MAX_DEVS,
@@ -2091,12 +2088,11 @@ static const struct SCSIBusInfo lsi_scsi_info = {
     .cancel = lsi_request_cancelled
 };
 
-static int lsi_scsi_init(PCIDevice *dev)
+static void lsi_scsi_realize(PCIDevice *dev, Error **errp)
 {
     LSIState *s = LSI53C895A(dev);
     DeviceState *d = DEVICE(dev);
     uint8_t *pci_conf;
-    Error *err = NULL;
 
     pci_conf = dev->config;
 
@@ -2119,13 +2115,8 @@ static int lsi_scsi_init(PCIDevice *dev)
 
     scsi_bus_new(&s->bus, sizeof(s->bus), d, &lsi_scsi_info, NULL);
     if (!d->hotplugged) {
-        scsi_bus_legacy_handle_cmdline(&s->bus, &err);
-        if (err != NULL) {
-            error_free(err);
-            return -1;
-        }
+        scsi_bus_legacy_handle_cmdline(&s->bus, errp);
     }
-    return 0;
 }
 
 static void lsi_class_init(ObjectClass *klass, void *data)
@@ -2133,8 +2124,7 @@ static void lsi_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = lsi_scsi_init;
-    k->exit = lsi_scsi_uninit;
+    k->realize = lsi_scsi_realize;
     k->vendor_id = PCI_VENDOR_ID_LSI_LOGIC;
     k->device_id = PCI_DEVICE_ID_LSI_53C895A;
     k->class_id = PCI_CLASS_STORAGE_SCSI;

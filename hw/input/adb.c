@@ -118,6 +118,17 @@ static const TypeInfo adb_bus_type_info = {
     .instance_size = sizeof(ADBBusState),
 };
 
+static const VMStateDescription vmstate_adb_device = {
+    .name = "adb_device",
+    .version_id = 0,
+    .minimum_version_id = 0,
+    .fields = (VMStateField[]) {
+        VMSTATE_INT32(devaddr, ADBDevice),
+        VMSTATE_INT32(handler, ADBDevice),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 static void adb_device_realizefn(DeviceState *dev, Error **errp)
 {
     ADBDevice *d = ADB_DEVICE(dev);
@@ -301,9 +312,10 @@ static int adb_kbd_request(ADBDevice *d, uint8_t *obuf,
 
 static const VMStateDescription vmstate_adb_kbd = {
     .name = "adb_kbd",
-    .version_id = 1,
-    .minimum_version_id = 1,
+    .version_id = 2,
+    .minimum_version_id = 2,
     .fields = (VMStateField[]) {
+        VMSTATE_STRUCT(parent_obj, KBDState, 0, vmstate_adb_device, ADBDevice),
         VMSTATE_BUFFER(data, KBDState),
         VMSTATE_INT32(rptr, KBDState),
         VMSTATE_INT32(wptr, KBDState),
@@ -350,6 +362,7 @@ static void adb_kbd_class_init(ObjectClass *oc, void *data)
 
     akc->parent_realize = dc->realize;
     dc->realize = adb_kbd_realizefn;
+    set_bit(DEVICE_CATEGORY_INPUT, dc->categories);
 
     adc->devreq = adb_kbd_request;
     dc->reset = adb_kbd_reset;
@@ -515,9 +528,11 @@ static void adb_mouse_reset(DeviceState *dev)
 
 static const VMStateDescription vmstate_adb_mouse = {
     .name = "adb_mouse",
-    .version_id = 1,
-    .minimum_version_id = 1,
+    .version_id = 2,
+    .minimum_version_id = 2,
     .fields = (VMStateField[]) {
+        VMSTATE_STRUCT(parent_obj, MouseState, 0, vmstate_adb_device,
+                       ADBDevice),
         VMSTATE_INT32(buttons_state, MouseState),
         VMSTATE_INT32(last_buttons_state, MouseState),
         VMSTATE_INT32(dx, MouseState),
@@ -552,6 +567,7 @@ static void adb_mouse_class_init(ObjectClass *oc, void *data)
 
     amc->parent_realize = dc->realize;
     dc->realize = adb_mouse_realizefn;
+    set_bit(DEVICE_CATEGORY_INPUT, dc->categories);
 
     adc->devreq = adb_mouse_request;
     dc->reset = adb_mouse_reset;

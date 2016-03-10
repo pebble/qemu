@@ -16,7 +16,6 @@
 #include "qemu/queue.h"
 #include "qemu-common.h"
 #include "qapi/qmp/types.h"
-#include "qapi/qmp/qerror.h"
 
 typedef struct QStackEntry
 {
@@ -67,9 +66,13 @@ static QObject *qmp_output_first(QmpOutputVisitor *qov)
 {
     QStackEntry *e = QTAILQ_LAST(&qov->stack, QStack);
 
-    /* FIXME - find a better way to deal with NULL values */
+    /*
+     * FIXME Wrong, because qmp_output_get_qobject() will increment
+     * the refcnt *again*.  We need to think through how visitors
+     * handle null.
+     */
     if (!e) {
-        return NULL;
+        return qnull();
     }
 
     return e->value;
@@ -166,7 +169,7 @@ static void qmp_output_type_bool(Visitor *v, bool *obj, const char *name,
                                  Error **errp)
 {
     QmpOutputVisitor *qov = to_qov(v);
-    qmp_output_add(qov, name, qbool_from_int(*obj));
+    qmp_output_add(qov, name, qbool_from_bool(*obj));
 }
 
 static void qmp_output_type_str(Visitor *v, char **obj, const char *name,
@@ -185,6 +188,14 @@ static void qmp_output_type_number(Visitor *v, double *obj, const char *name,
 {
     QmpOutputVisitor *qov = to_qov(v);
     qmp_output_add(qov, name, qfloat_from_double(*obj));
+}
+
+static void qmp_output_type_any(Visitor *v, QObject **obj, const char *name,
+                                Error **errp)
+{
+    QmpOutputVisitor *qov = to_qov(v);
+    qobject_incref(*obj);
+    qmp_output_add_obj(qov, name, *obj);
 }
 
 QObject *qmp_output_get_qobject(QmpOutputVisitor *qov)
@@ -234,6 +245,7 @@ QmpOutputVisitor *qmp_output_visitor_new(void)
     v->visitor.type_bool = qmp_output_type_bool;
     v->visitor.type_str = qmp_output_type_str;
     v->visitor.type_number = qmp_output_type_number;
+    v->visitor.type_any = qmp_output_type_any;
 
     QTAILQ_INIT(&v->stack);
 

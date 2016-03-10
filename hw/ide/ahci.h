@@ -24,6 +24,8 @@
 #ifndef HW_IDE_AHCI_H
 #define HW_IDE_AHCI_H
 
+#include <hw/sysbus.h>
+
 #define AHCI_MEM_BAR_SIZE         0x1000
 #define AHCI_MAX_PORTS            32
 #define AHCI_MAX_SG               168 /* hardware max is 64K */
@@ -127,31 +129,12 @@
 #define PORT_CMD_SPIN_UP          (1 << 1) /* Spin up device */
 #define PORT_CMD_START            (1 << 0) /* Enable port DMA engine */
 
-#define PORT_CMD_ICC_MASK         (0xf << 28) /* i/f ICC state mask */
+#define PORT_CMD_ICC_MASK        (0xfU << 28) /* i/f ICC state mask */
 #define PORT_CMD_ICC_ACTIVE       (0x1 << 28) /* Put i/f in active state */
 #define PORT_CMD_ICC_PARTIAL      (0x2 << 28) /* Put i/f in partial state */
 #define PORT_CMD_ICC_SLUMBER      (0x6 << 28) /* Put i/f in slumber state */
 
-#define PORT_IRQ_STAT_DHRS        (1 << 0) /* Device to Host Register FIS */
-#define PORT_IRQ_STAT_PSS         (1 << 1) /* PIO Setup FIS */
-#define PORT_IRQ_STAT_DSS         (1 << 2) /* DMA Setup FIS */
-#define PORT_IRQ_STAT_SDBS        (1 << 3) /* Set Device Bits */
-#define PORT_IRQ_STAT_UFS         (1 << 4) /* Unknown FIS */
-#define PORT_IRQ_STAT_DPS         (1 << 5) /* Descriptor Processed */
-#define PORT_IRQ_STAT_PCS         (1 << 6) /* Port Connect Change Status */
-#define PORT_IRQ_STAT_DMPS        (1 << 7) /* Device Mechanical Presence
-                                              Status */
-#define PORT_IRQ_STAT_PRCS        (1 << 22) /* File Ready Status */
-#define PORT_IRQ_STAT_IPMS        (1 << 23) /* Incorrect Port Multiplier
-                                               Status */
-#define PORT_IRQ_STAT_OFS         (1 << 24) /* Overflow Status */
-#define PORT_IRQ_STAT_INFS        (1 << 26) /* Interface Non-Fatal Error
-                                               Status */
-#define PORT_IRQ_STAT_IFS         (1 << 27) /* Interface Fatal Error */
-#define PORT_IRQ_STAT_HBDS        (1 << 28) /* Host Bus Data Error Status */
-#define PORT_IRQ_STAT_HBFS        (1 << 29) /* Host Bus Fatal Error Status */
-#define PORT_IRQ_STAT_TFES        (1 << 30) /* Task File Error Status */
-#define PORT_IRQ_STAT_CPDS        (1U << 31) /* Code Port Detect Status */
+#define PORT_CMD_RO_MASK          0x007dffe0 /* Which CMD bits are read only? */
 
 /* ap->flags bits */
 #define AHCI_FLAG_NO_NCQ                  (1 << 24)
@@ -177,12 +160,15 @@
 #define AHCI_SCR_SCTL_DET                 0xf
 
 #define SATA_FIS_TYPE_REGISTER_H2D        0x27
-#define SATA_FIS_REG_H2D_UPDATE_COMMAND_REGISTER 0x80
+#define   SATA_FIS_REG_H2D_UPDATE_COMMAND_REGISTER 0x80
+#define SATA_FIS_TYPE_REGISTER_D2H        0x34
+#define SATA_FIS_TYPE_PIO_SETUP           0x5f
+#define SATA_FIS_TYPE_SDB                 0xA1
 
 #define AHCI_CMD_HDR_CMD_FIS_LEN           0x1f
 #define AHCI_CMD_HDR_PRDT_LEN              16
 
-#define SATA_SIGNATURE_CDROM               0xeb140000
+#define SATA_SIGNATURE_CDROM               0xeb140101
 #define SATA_SIGNATURE_DISK                0x00000101
 
 #define AHCI_GENERIC_HOST_CONTROL_REGS_MAX_ADDR 0x20
@@ -207,6 +193,12 @@
 
 #define READ_FPDMA_QUEUED                  0x60
 #define WRITE_FPDMA_QUEUED                 0x61
+#define NCQ_NON_DATA                       0x63
+#define RECEIVE_FPDMA_QUEUED               0x65
+#define SEND_FPDMA_QUEUED                  0x64
+
+#define NCQ_FIS_FUA_MASK                   0x80
+#define NCQ_FIS_RARC_MASK                  0x01
 
 #define RES_FIS_DSFIS                      0x00
 #define RES_FIS_PSFIS                      0x20
@@ -246,7 +238,8 @@ typedef struct AHCIPortRegs {
 } AHCIPortRegs;
 
 typedef struct AHCICmdHdr {
-    uint32_t    opts;
+    uint16_t    opts;
+    uint16_t    prdtl;
     uint32_t    status;
     uint64_t    tbl_addr;
     uint32_t    reserved[4];
@@ -262,14 +255,17 @@ typedef struct AHCIDevice AHCIDevice;
 
 typedef struct NCQTransferState {
     AHCIDevice *drive;
-    BlockDriverAIOCB *aiocb;
+    BlockAIOCB *aiocb;
+    AHCICmdHdr *cmdh;
     QEMUSGList sglist;
     BlockAcctCookie acct;
-    uint16_t sector_count;
+    uint32_t sector_count;
     uint64_t lba;
     uint8_t tag;
-    int slot;
-    int used;
+    uint8_t cmd;
+    uint8_t slot;
+    bool used;
+    bool halt;
 } NCQTransferState;
 
 struct AHCIDevice {
@@ -291,6 +287,8 @@ struct AHCIDevice {
 };
 
 typedef struct AHCIState {
+    DeviceState *container;
+
     AHCIDevice *dev;
     AHCIControlRegs control_regs;
     MemoryRegion mem;
@@ -325,32 +323,83 @@ extern const VMStateDescription vmstate_ahci;
     .offset     = vmstate_offset_value(_state, _field, AHCIState),   \
 }
 
+/**
+ * NCQFrame is the same as a Register H2D FIS (described in SATA 3.2),
+ * but some fields have been re-mapped and re-purposed, as seen in
+ * SATA 3.2 section 13.6.4.1 ("READ FPDMA QUEUED")
+ *
+ * cmd_fis[3], feature 7:0, becomes sector count 7:0.
+ * cmd_fis[7], device 7:0, uses bit 7 as the Force Unit Access bit.
+ * cmd_fis[11], feature 15:8, becomes sector count 15:8.
+ * cmd_fis[12], count 7:0, becomes the NCQ TAG (7:3) and RARC bit (0)
+ * cmd_fis[13], count 15:8, becomes the priority value (7:6)
+ * bytes 16-19 become an le32 "auxiliary" field.
+ */
 typedef struct NCQFrame {
     uint8_t fis_type;
     uint8_t c;
     uint8_t command;
-    uint8_t sector_count_low;
+    uint8_t sector_count_low;  /* (feature 7:0) */
     uint8_t lba0;
     uint8_t lba1;
     uint8_t lba2;
-    uint8_t fua;
+    uint8_t fua;               /* (device 7:0) */
     uint8_t lba3;
     uint8_t lba4;
     uint8_t lba5;
-    uint8_t sector_count_high;
-    uint8_t tag;
-    uint8_t reserved5;
-    uint8_t reserved6;
+    uint8_t sector_count_high; /* (feature 15:8) */
+    uint8_t tag;               /* (count 0:7) */
+    uint8_t prio;              /* (count 15:8) */
+    uint8_t icc;
     uint8_t control;
-    uint8_t reserved7;
-    uint8_t reserved8;
-    uint8_t reserved9;
-    uint8_t reserved10;
+    uint8_t aux0;
+    uint8_t aux1;
+    uint8_t aux2;
+    uint8_t aux3;
 } QEMU_PACKED NCQFrame;
 
-void ahci_init(AHCIState *s, DeviceState *qdev, AddressSpace *as, int ports);
+typedef struct SDBFIS {
+    uint8_t type;
+    uint8_t flags;
+    uint8_t status;
+    uint8_t error;
+    uint32_t payload;
+} QEMU_PACKED SDBFIS;
+
+void ahci_realize(AHCIState *s, DeviceState *qdev, AddressSpace *as, int ports);
+void ahci_init(AHCIState *s, DeviceState *qdev);
 void ahci_uninit(AHCIState *s);
 
 void ahci_reset(AHCIState *s);
+
+void ahci_ide_create_devs(PCIDevice *dev, DriveInfo **hd);
+
+#define TYPE_SYSBUS_AHCI "sysbus-ahci"
+#define SYSBUS_AHCI(obj) OBJECT_CHECK(SysbusAHCIState, (obj), TYPE_SYSBUS_AHCI)
+
+typedef struct SysbusAHCIState {
+    /*< private >*/
+    SysBusDevice parent_obj;
+    /*< public >*/
+
+    AHCIState ahci;
+    uint32_t num_ports;
+} SysbusAHCIState;
+
+#define TYPE_ALLWINNER_AHCI "allwinner-ahci"
+#define ALLWINNER_AHCI(obj) OBJECT_CHECK(AllwinnerAHCIState, (obj), \
+                       TYPE_ALLWINNER_AHCI)
+
+#define ALLWINNER_AHCI_MMIO_OFF  0x80
+#define ALLWINNER_AHCI_MMIO_SIZE 0x80
+
+struct AllwinnerAHCIState {
+    /*< private >*/
+    SysbusAHCIState parent_obj;
+    /*< public >*/
+
+    MemoryRegion mmio;
+    uint32_t regs[ALLWINNER_AHCI_MMIO_SIZE/4];
+};
 
 #endif /* HW_IDE_AHCI_H */

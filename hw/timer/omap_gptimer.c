@@ -444,7 +444,7 @@ static void omap_gp_timer_writeh(void *opaque, hwaddr addr,
     struct omap_gp_timer_s *s = (struct omap_gp_timer_s *) opaque;
 
     if (addr & 2)
-        return omap_gp_timer_write(opaque, addr, (value << 16) | s->writeh);
+        omap_gp_timer_write(opaque, addr, (value << 16) | s->writeh);
     else
         s->writeh = (uint16_t) value;
 }
@@ -468,8 +468,7 @@ static const MemoryRegionOps omap_gp_timer_ops = {
 struct omap_gp_timer_s *omap_gp_timer_init(struct omap_target_agent_s *ta,
                 qemu_irq irq, omap_clk fclk, omap_clk iclk)
 {
-    struct omap_gp_timer_s *s = (struct omap_gp_timer_s *)
-            g_malloc0(sizeof(struct omap_gp_timer_s));
+    struct omap_gp_timer_s *s = g_new0(struct omap_gp_timer_s, 1);
 
     s->ta = ta;
     s->irq = irq;

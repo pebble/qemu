@@ -42,6 +42,7 @@ typedef struct MacIOState
     void *dbdma;
     MemoryRegion *pic_mem;
     MemoryRegion *escc_mem;
+    uint64_t frequency;
 } MacIOState;
 
 #define OLDWORLD_MACIO(obj) \
@@ -104,10 +105,10 @@ static void macio_escc_legacy_setup(MacIOState *macio_state)
         0xF0, 0xE0,
     };
 
-    memory_region_init(escc_legacy, NULL, "escc-legacy", 256);
+    memory_region_init(escc_legacy, OBJECT(macio_state), "escc-legacy", 256);
     for (i = 0; i < ARRAY_SIZE(maps); i += 2) {
         MemoryRegion *port = g_new(MemoryRegion, 1);
-        memory_region_init_alias(port, NULL, "escc-legacy-port",
+        memory_region_init_alias(port, OBJECT(macio_state), "escc-legacy-port",
                                  macio_state->escc_mem, maps[i+1], 0x2);
         memory_region_add_subregion(escc_legacy, maps[i], port);
     }
@@ -125,17 +126,20 @@ static void macio_bar_setup(MacIOState *macio_state)
     }
 }
 
-static int macio_common_initfn(PCIDevice *d)
+static void macio_common_realize(PCIDevice *d, Error **errp)
 {
     MacIOState *s = MACIO(d);
     SysBusDevice *sysbus_dev;
-    int ret;
+    Error *err = NULL;
+    MemoryRegion *dbdma_mem;
 
-    d->config[0x3d] = 0x01; // interrupt on pin 1
+    s->dbdma = DBDMA_init(&dbdma_mem);
+    memory_region_add_subregion(&s->bar, 0x08000, dbdma_mem);
 
-    ret = qdev_init(DEVICE(&s->cuda));
-    if (ret < 0) {
-        return ret;
+    object_property_set_bool(OBJECT(&s->cuda), true, "realized", &err);
+    if (err) {
+        error_propagate(errp, err);
+        return;
     }
     sysbus_dev = SYS_BUS_DEVICE(&s->cuda);
     memory_region_add_subregion(&s->bar, 0x16000,
@@ -143,12 +147,11 @@ static int macio_common_initfn(PCIDevice *d)
 
     macio_bar_setup(s);
     pci_register_bar(d, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->bar);
-
-    return 0;
 }
 
-static int macio_initfn_ide(MacIOState *s, MACIOIDEState *ide, qemu_irq irq0,
-                            qemu_irq irq1, int dmaid)
+static void macio_realize_ide(MacIOState *s, MACIOIDEState *ide,
+                              qemu_irq irq0, qemu_irq irq1, int dmaid,
+                              Error **errp)
 {
     SysBusDevice *sysbus_dev;
 
@@ -156,27 +159,31 @@ static int macio_initfn_ide(MacIOState *s, MACIOIDEState *ide, qemu_irq irq0,
     sysbus_connect_irq(sysbus_dev, 0, irq0);
     sysbus_connect_irq(sysbus_dev, 1, irq1);
     macio_ide_register_dma(ide, s->dbdma, dmaid);
-    return qdev_init(DEVICE(ide));
+    object_property_set_bool(OBJECT(ide), true, "realized", errp);
 }
 
-static int macio_oldworld_initfn(PCIDevice *d)
+static void macio_oldworld_realize(PCIDevice *d, Error **errp)
 {
     MacIOState *s = MACIO(d);
     OldWorldMacIOState *os = OLDWORLD_MACIO(d);
+    Error *err = NULL;
     SysBusDevice *sysbus_dev;
     int i;
     int cur_irq = 0;
-    int ret = macio_common_initfn(d);
-    if (ret < 0) {
-        return ret;
+
+    macio_common_realize(d, &err);
+    if (err) {
+        error_propagate(errp, err);
+        return;
     }
 
     sysbus_dev = SYS_BUS_DEVICE(&s->cuda);
     sysbus_connect_irq(sysbus_dev, 0, os->irqs[cur_irq++]);
 
-    ret = qdev_init(DEVICE(&os->nvram));
-    if (ret < 0) {
-        return ret;
+    object_property_set_bool(OBJECT(&os->nvram), true, "realized", &err);
+    if (err) {
+        error_propagate(errp, err);
+        return;
     }
     sysbus_dev = SYS_BUS_DEVICE(&os->nvram);
     memory_region_add_subregion(&s->bar, 0x60000,
@@ -193,13 +200,12 @@ static int macio_oldworld_initfn(PCIDevice *d)
         qemu_irq irq0 = os->irqs[cur_irq++];
         qemu_irq irq1 = os->irqs[cur_irq++];
 
-        ret = macio_initfn_ide(s, &os->ide[i], irq0, irq1, 0x16 + (i * 4));
-        if (ret < 0) {
-            return ret;
+        macio_realize_ide(s, &os->ide[i], irq0, irq1, 0x16 + (i * 4), &err);
+        if (err) {
+            error_propagate(errp, err);
+            return;
         }
     }
-
-    return 0;
 }
 
 static void macio_init_ide(MacIOState *s, MACIOIDEState *ide, size_t ide_size,
@@ -243,13 +249,18 @@ static void timer_write(void *opaque, hwaddr addr, uint64_t value,
 static uint64_t timer_read(void *opaque, hwaddr addr, unsigned size)
 {
     uint32_t value = 0;
+    uint64_t systime = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    uint64_t kltime;
+
+    kltime = muldiv64(systime, 4194300, get_ticks_per_sec() * 4);
+    kltime = muldiv64(kltime, 18432000, 1048575);
 
     switch (addr) {
     case 0x38:
-        value = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+        value = kltime;
         break;
     case 0x3c:
-        value = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) >> 32;
+        value = kltime >> 32;
         break;
     }
 
@@ -262,17 +273,20 @@ static const MemoryRegionOps timer_ops = {
     .endianness = DEVICE_LITTLE_ENDIAN,
 };
 
-static int macio_newworld_initfn(PCIDevice *d)
+static void macio_newworld_realize(PCIDevice *d, Error **errp)
 {
     MacIOState *s = MACIO(d);
     NewWorldMacIOState *ns = NEWWORLD_MACIO(d);
+    Error *err = NULL;
     SysBusDevice *sysbus_dev;
-    MemoryRegion *timer_memory = g_new(MemoryRegion, 1);
+    MemoryRegion *timer_memory = NULL;
     int i;
     int cur_irq = 0;
-    int ret = macio_common_initfn(d);
-    if (ret < 0) {
-        return ret;
+
+    macio_common_realize(d, &err);
+    if (err) {
+        error_propagate(errp, err);
+        return;
     }
 
     sysbus_dev = SYS_BUS_DEVICE(&s->cuda);
@@ -288,18 +302,18 @@ static int macio_newworld_initfn(PCIDevice *d)
         qemu_irq irq0 = ns->irqs[cur_irq++];
         qemu_irq irq1 = ns->irqs[cur_irq++];
 
-        ret = macio_initfn_ide(s, &ns->ide[i], irq0, irq1, 0x16 + (i * 4));
-        if (ret < 0) {
-            return ret;
+        macio_realize_ide(s, &ns->ide[i], irq0, irq1, 0x16 + (i * 4), &err);
+        if (err) {
+            error_propagate(errp, err);
+            return;
         }
     }
 
     /* Timer */
+    timer_memory = g_new(MemoryRegion, 1);
     memory_region_init_io(timer_memory, OBJECT(s), &timer_ops, NULL, "timer",
                           0x1000);
     memory_region_add_subregion(&s->bar, 0x15000, timer_memory);
-
-    return 0;
 }
 
 static void macio_newworld_init(Object *obj)
@@ -318,40 +332,68 @@ static void macio_newworld_init(Object *obj)
 static void macio_instance_init(Object *obj)
 {
     MacIOState *s = MACIO(obj);
-    MemoryRegion *dbdma_mem;
 
-    memory_region_init(&s->bar, NULL, "macio", 0x80000);
+    memory_region_init(&s->bar, obj, "macio", 0x80000);
 
     object_initialize(&s->cuda, sizeof(s->cuda), TYPE_CUDA);
     qdev_set_parent_bus(DEVICE(&s->cuda), sysbus_get_default());
     object_property_add_child(obj, "cuda", OBJECT(&s->cuda), NULL);
-
-    s->dbdma = DBDMA_init(&dbdma_mem);
-    memory_region_add_subregion(&s->bar, 0x08000, dbdma_mem);
 }
+
+static const VMStateDescription vmstate_macio_oldworld = {
+    .name = "macio-oldworld",
+    .version_id = 0,
+    .minimum_version_id = 0,
+    .fields = (VMStateField[]) {
+        VMSTATE_PCI_DEVICE(parent_obj.parent, OldWorldMacIOState),
+        VMSTATE_END_OF_LIST()
+    }
+};
 
 static void macio_oldworld_class_init(ObjectClass *oc, void *data)
 {
     PCIDeviceClass *pdc = PCI_DEVICE_CLASS(oc);
+    DeviceClass *dc = DEVICE_CLASS(oc);
 
-    pdc->init = macio_oldworld_initfn;
+    pdc->realize = macio_oldworld_realize;
     pdc->device_id = PCI_DEVICE_ID_APPLE_343S1201;
+    dc->vmsd = &vmstate_macio_oldworld;
 }
+
+static const VMStateDescription vmstate_macio_newworld = {
+    .name = "macio-newworld",
+    .version_id = 0,
+    .minimum_version_id = 0,
+    .fields = (VMStateField[]) {
+        VMSTATE_PCI_DEVICE(parent_obj.parent, NewWorldMacIOState),
+        VMSTATE_END_OF_LIST()
+    }
+};
 
 static void macio_newworld_class_init(ObjectClass *oc, void *data)
 {
     PCIDeviceClass *pdc = PCI_DEVICE_CLASS(oc);
+    DeviceClass *dc = DEVICE_CLASS(oc);
 
-    pdc->init = macio_newworld_initfn;
+    pdc->realize = macio_newworld_realize;
     pdc->device_id = PCI_DEVICE_ID_APPLE_UNI_N_KEYL;
+    dc->vmsd = &vmstate_macio_newworld;
 }
+
+static Property macio_properties[] = {
+    DEFINE_PROP_UINT64("frequency", MacIOState, frequency, 0),
+    DEFINE_PROP_END_OF_LIST()
+};
 
 static void macio_class_init(ObjectClass *klass, void *data)
 {
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+    DeviceClass *dc = DEVICE_CLASS(klass);
 
     k->vendor_id = PCI_VENDOR_ID_APPLE;
     k->class_id = PCI_CLASS_OTHERS << 8;
+    dc->props = macio_properties;
+    set_bit(DEVICE_CATEGORY_BRIDGE, dc->categories);
 }
 
 static const TypeInfo macio_oldworld_type_info = {
@@ -398,6 +440,8 @@ void macio_init(PCIDevice *d,
     macio_state->escc_mem = escc_mem;
     /* Note: this code is strongly inspirated from the corresponding code
        in PearPC */
+    qdev_prop_set_uint64(DEVICE(&macio_state->cuda), "frequency",
+                         macio_state->frequency);
 
     qdev_init_nofail(DEVICE(d));
 }

@@ -47,8 +47,40 @@ void kvm_arm_register_device(MemoryRegion *mr, uint64_t devid, uint64_t group,
                              uint64_t attr, int dev_fd);
 
 /**
+ * kvm_arm_init_cpreg_list:
+ * @cs: CPUState
+ *
+ * Initialize the CPUState's cpreg list according to the kernel's
+ * definition of what CPU registers it knows about (and throw away
+ * the previous TCG-created cpreg list).
+ *
+ * Returns: 0 if success, else < 0 error code
+ */
+int kvm_arm_init_cpreg_list(ARMCPU *cpu);
+
+/**
+ * kvm_arm_reg_syncs_via_cpreg_list
+ * regidx: KVM register index
+ *
+ * Return true if this KVM register should be synchronized via the
+ * cpreg list of arbitrary system registers, false if it is synchronized
+ * by hand using code in kvm_arch_get/put_registers().
+ */
+bool kvm_arm_reg_syncs_via_cpreg_list(uint64_t regidx);
+
+/**
+ * kvm_arm_cpreg_level
+ * regidx: KVM register index
+ *
+ * Return the level of this coprocessor/system register.  Return value is
+ * either KVM_PUT_RUNTIME_STATE, KVM_PUT_RESET_STATE, or KVM_PUT_FULL_STATE.
+ */
+int kvm_arm_cpreg_level(uint64_t regidx);
+
+/**
  * write_list_to_kvmstate:
  * @cpu: ARMCPU
+ * @level: the state level to sync
  *
  * For each register listed in the ARMCPU cpreg_indexes list, write
  * its value from the cpreg_values list into the kernel (via ioctl).
@@ -61,7 +93,7 @@ void kvm_arm_register_device(MemoryRegion *mr, uint64_t devid, uint64_t group,
  * Note that we do not stop early on failure -- we will attempt
  * writing all registers in the list.
  */
-bool write_list_to_kvmstate(ARMCPU *cpu);
+bool write_list_to_kvmstate(ARMCPU *cpu, int level);
 
 /**
  * write_kvmstate_to_list:
@@ -140,6 +172,47 @@ typedef struct ARMHostCPUClass {
  */
 bool kvm_arm_get_host_cpu_features(ARMHostCPUClass *ahcc);
 
+
+/**
+ * kvm_arm_sync_mpstate_to_kvm
+ * @cpu: ARMCPU
+ *
+ * If supported set the KVM MP_STATE based on QEMU's model.
+ */
+int kvm_arm_sync_mpstate_to_kvm(ARMCPU *cpu);
+
+/**
+ * kvm_arm_sync_mpstate_to_qemu
+ * @cpu: ARMCPU
+ *
+ * If supported get the MP_STATE from KVM and store in QEMU's model.
+ */
+int kvm_arm_sync_mpstate_to_qemu(ARMCPU *cpu);
+
+int kvm_arm_vgic_probe(void);
+
+#else
+
+static inline int kvm_arm_vgic_probe(void)
+{
+    return 0;
+}
+
 #endif
+
+static inline const char *gic_class_name(void)
+{
+    return kvm_irqchip_in_kernel() ? "kvm-arm-gic" : "arm_gic";
+}
+
+/**
+ * gicv3_class_name
+ *
+ * Return name of GICv3 class to use depending on whether KVM acceleration is
+ * in use. May throw an error if the chosen implementation is not available.
+ *
+ * Returns: class name to use
+ */
+const char *gicv3_class_name(void);
 
 #endif

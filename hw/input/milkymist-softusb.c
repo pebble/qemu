@@ -194,10 +194,13 @@ static void softusb_kbd_hid_datain(HIDState *hs)
         return;
     }
 
-    len = hid_keyboard_poll(hs, s->kbd_hid_buffer, sizeof(s->kbd_hid_buffer));
+    while (hid_has_events(hs)) {
+        len = hid_keyboard_poll(hs, s->kbd_hid_buffer,
+                sizeof(s->kbd_hid_buffer));
 
-    if (len == 8) {
-        softusb_kbd_changed(s);
+        if (len == 8) {
+            softusb_kbd_changed(s);
+        }
     }
 }
 
@@ -212,11 +215,13 @@ static void softusb_mouse_hid_datain(HIDState *hs)
         return;
     }
 
-    len = hid_pointer_poll(hs, s->mouse_hid_buffer,
-            sizeof(s->mouse_hid_buffer));
+    while (hid_has_events(hs)) {
+        len = hid_pointer_poll(hs, s->mouse_hid_buffer,
+                sizeof(s->mouse_hid_buffer));
 
-    if (len == 4) {
-        softusb_mouse_changed(s);
+        if (len == 4) {
+            softusb_mouse_changed(s);
+        }
     }
 }
 
@@ -250,12 +255,12 @@ static int milkymist_softusb_init(SysBusDevice *dev)
 
     /* register pmem and dmem */
     memory_region_init_ram(&s->pmem, OBJECT(s), "milkymist-softusb.pmem",
-                           s->pmem_size);
+                           s->pmem_size, &error_fatal);
     vmstate_register_ram_global(&s->pmem);
     s->pmem_ptr = memory_region_get_ram_ptr(&s->pmem);
     sysbus_init_mmio(dev, &s->pmem);
     memory_region_init_ram(&s->dmem, OBJECT(s), "milkymist-softusb.dmem",
-                           s->dmem_size);
+                           s->dmem_size, &error_fatal);
     vmstate_register_ram_global(&s->dmem);
     s->dmem_ptr = memory_region_get_ram_ptr(&s->dmem);
     sysbus_init_mmio(dev, &s->dmem);

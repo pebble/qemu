@@ -106,6 +106,7 @@ static void cg3_update_display(void *opaque)
     pix = memory_region_get_ram_ptr(&s->vram_mem);
     data = (uint32_t *)surface_data(surface);
 
+    memory_region_sync_dirty_bitmap(&s->vram_mem);
     for (y = 0; y < height; y++) {
         int update = s->full_update;
 
@@ -279,11 +280,12 @@ static void cg3_initfn(Object *obj)
     SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
     CG3State *s = CG3(obj);
 
-    memory_region_init_ram(&s->rom, NULL, "cg3.prom", FCODE_MAX_ROM_SIZE);
+    memory_region_init_ram(&s->rom, obj, "cg3.prom", FCODE_MAX_ROM_SIZE,
+                           &error_fatal);
     memory_region_set_readonly(&s->rom, true);
     sysbus_init_mmio(sbd, &s->rom);
 
-    memory_region_init_io(&s->reg, NULL, &cg3_reg_ops, s, "cg3.reg",
+    memory_region_init_io(&s->reg, obj, &cg3_reg_ops, s, "cg3.reg",
                           CG3_REG_SIZE);
     sysbus_init_mmio(sbd, &s->reg);
 }
@@ -301,12 +303,15 @@ static void cg3_realizefn(DeviceState *dev, Error **errp)
     if (fcode_filename) {
         ret = load_image_targphys(fcode_filename, s->prom_addr,
                                   FCODE_MAX_ROM_SIZE);
+        g_free(fcode_filename);
         if (ret < 0 || ret > FCODE_MAX_ROM_SIZE) {
             error_report("cg3: could not load prom '%s'", CG3_ROM_FILE);
         }
     }
 
-    memory_region_init_ram(&s->vram_mem, NULL, "cg3.vram", s->vram_size);
+    memory_region_init_ram(&s->vram_mem, NULL, "cg3.vram", s->vram_size,
+                           &error_fatal);
+    memory_region_set_log(&s->vram_mem, true, DIRTY_MEMORY_VGA);
     vmstate_register_ram_global(&s->vram_mem);
     sysbus_init_mmio(sbd, &s->vram_mem);
 

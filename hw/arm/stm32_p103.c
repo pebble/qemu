@@ -102,8 +102,8 @@ static void stm32_p103_init(MachineState *machine) {
 
     s = (Stm32P103 *)g_malloc0(sizeof(Stm32P103));
 
-    stm32f1xx_init(/*flash_size*/ 128,
-               /*ram_size*/ 20,
+    stm32f1xx_init(/*flash_size in bytes */ 128 * 1024,
+               /*ram_size in bytes */ 20 * 1024,
                kernel_filename,
                s->stm32_gpio,
                s->stm32_uart,
@@ -123,18 +123,12 @@ static void stm32_p103_init(MachineState *machine) {
             s->stm32_uart[STM32_UART2_INDEX],
             serial_hds[0],
             STM32_USART2_NO_REMAP);
- }
-
-static QEMUMachine stm32_p103_machine = {
-    .name = "stm32-p103",
-    .desc = "Olimex STM32 p103 Dev Board",
-    .init = stm32_p103_init,
-};
-
-
-static void stm32_p103_machine_init(void)
-{
-    qemu_register_machine(&stm32_p103_machine);
 }
 
-machine_init(stm32_p103_machine_init);
+static void stm32_p103_machine_init(MachineClass *mc)
+{
+    mc->desc = "Olimex STM32 p103 Dev Board";
+    mc->init = stm32_p103_init;
+}
+
+DEFINE_MACHINE("stm32-p103", stm32_p103_machine_init)

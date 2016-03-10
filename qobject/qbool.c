@@ -23,11 +23,11 @@ static const QType qbool_type = {
 };
 
 /**
- * qbool_from_int(): Create a new QBool from an int
+ * qbool_from_bool(): Create a new QBool from a bool
  *
  * Return strong reference.
  */
-QBool *qbool_from_int(int value)
+QBool *qbool_from_bool(bool value)
 {
     QBool *qb;
 
@@ -39,9 +39,9 @@ QBool *qbool_from_int(int value)
 }
 
 /**
- * qbool_get_int(): Get the stored int
+ * qbool_get_bool(): Get the stored bool
  */
-int qbool_get_int(const QBool *qb)
+bool qbool_get_bool(const QBool *qb)
 {
     return qb->value;
 }
@@ -51,9 +51,9 @@ int qbool_get_int(const QBool *qb)
  */
 QBool *qobject_to_qbool(const QObject *obj)
 {
-    if (qobject_type(obj) != QTYPE_QBOOL)
+    if (!obj || qobject_type(obj) != QTYPE_QBOOL) {
         return NULL;
-
+    }
     return container_of(obj, QBool, base);
 }
 

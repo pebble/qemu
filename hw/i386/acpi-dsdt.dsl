@@ -31,50 +31,6 @@ DefinitionBlock (
 
 #include "acpi-dsdt-dbug.dsl"
 
-
-/****************************************************************
- * PCI Bus definition
- ****************************************************************/
-#define BOARD_SPECIFIC_PCI_RESOURSES \
-     WordIO(ResourceProducer, MinFixed, MaxFixed, PosDecode, EntireRange, \
-         0x0000, \
-         0x0000, \
-         0x0CF7, \
-         0x0000, \
-         0x0CF8, \
-         ,, , TypeStatic) \
-     WordIO(ResourceProducer, MinFixed, MaxFixed, PosDecode, EntireRange, \
-         0x0000, \
-         0x0D00, \
-         0xADFF, \
-         0x0000, \
-         0xA100, \
-         ,, , TypeStatic) \
-     /* 0xae00-0xae0e hole for PCI hotplug, hw/acpi/piix4.c:PCI_HOTPLUG_ADDR */ \
-     WordIO(ResourceProducer, MinFixed, MaxFixed, PosDecode, EntireRange, \
-         0x0000, \
-         0xAE0F, \
-         0xAEFF, \
-         0x0000, \
-         0x00F1, \
-         ,, , TypeStatic) \
-     /* 0xaf00-0xaf1f hole for CPU hotplug, hw/acpi/piix4.c:PIIX4_PROC_BASE */ \
-     WordIO(ResourceProducer, MinFixed, MaxFixed, PosDecode, EntireRange, \
-         0x0000, \
-         0xAF20, \
-         0xAFDF, \
-         0x0000, \
-         0x00C0, \
-         ,, , TypeStatic) \
-     /* 0xafe0-0xafe3 hole for ACPI.GPE0, hw/acpi/piix4.c:GPE_BASE */ \
-     WordIO(ResourceProducer, MinFixed, MaxFixed, PosDecode, EntireRange, \
-         0x0000, \
-         0xAFE4, \
-         0xFFFF, \
-         0x0000, \
-         0x501C, \
-         ,, , TypeStatic)
-
     Scope(\_SB) {
         Device(PCI0) {
             Name(_HID, EisaId("PNP0A03"))
@@ -85,9 +41,7 @@ DefinitionBlock (
         }
     }
 
-#include "acpi-dsdt-pci-crs.dsl"
 #include "acpi-dsdt-hpet.dsl"
-
 
 /****************************************************************
  * PIIX4 PM
@@ -130,7 +84,6 @@ DefinitionBlock (
         }
     }
 
-#define DSDT_APPLESMC_STA piix_dsdt_applesmc_sta
 #include "acpi-dsdt-isa.dsl"
 
 
@@ -297,13 +250,12 @@ DefinitionBlock (
 #include "hw/acpi/pc-hotplug.h"
 #define CPU_STATUS_BASE PIIX4_CPU_HOTPLUG_IO_BASE
 #include "acpi-dsdt-cpu-hotplug.dsl"
+#include "acpi-dsdt-mem-hotplug.dsl"
 
 
 /****************************************************************
  * General purpose events
  ****************************************************************/
-    External(\_SB.PCI0.MEMORY_HOTPLUG_DEVICE.MEMORY_SLOT_SCAN_METHOD, MethodObj)
-
     Scope(\_GPE) {
         Name(_HID, "ACPI0006")
 

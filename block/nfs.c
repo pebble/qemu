@@ -35,12 +35,15 @@
 #include "sysemu/sysemu.h"
 #include <nfsc/libnfs.h>
 
+#define QEMU_NFS_MAX_READAHEAD_SIZE 1048576
+
 typedef struct NFSClient {
     struct nfs_context *context;
     struct nfsfh *fh;
     int events;
     bool has_zero_init;
     AioContext *aio_context;
+    blkcnt_t st_blocks;
 } NFSClient;
 
 typedef struct NFSRPC {
@@ -60,11 +63,10 @@ static void nfs_set_events(NFSClient *client)
 {
     int ev = nfs_which_events(client->context);
     if (ev != client->events) {
-        aio_set_fd_handler(client->aio_context,
-                           nfs_get_fd(client->context),
+        aio_set_fd_handler(client->aio_context, nfs_get_fd(client->context),
+                           false,
                            (ev & POLLIN) ? nfs_process_read : NULL,
-                           (ev & POLLOUT) ? nfs_process_write : NULL,
-                           client);
+                           (ev & POLLOUT) ? nfs_process_write : NULL, client);
 
     }
     client->events = ev;
@@ -172,7 +174,11 @@ static int coroutine_fn nfs_co_writev(BlockDriverState *bs,
 
     nfs_co_init_task(client, &task);
 
-    buf = g_malloc(nb_sectors * BDRV_SECTOR_SIZE);
+    buf = g_try_malloc(nb_sectors * BDRV_SECTOR_SIZE);
+    if (nb_sectors && buf == NULL) {
+        return -ENOMEM;
+    }
+
     qemu_iovec_to_buf(iov, 0, buf, nb_sectors * BDRV_SECTOR_SIZE);
 
     if (nfs_pwrite_async(client->context, client->fh,
@@ -235,9 +241,8 @@ static void nfs_detach_aio_context(BlockDriverState *bs)
 {
     NFSClient *client = bs->opaque;
 
-    aio_set_fd_handler(client->aio_context,
-                       nfs_get_fd(client->context),
-                       NULL, NULL, NULL);
+    aio_set_fd_handler(client->aio_context, nfs_get_fd(client->context),
+                       false, NULL, NULL, NULL);
     client->events = 0;
 }
 
@@ -256,9 +261,8 @@ static void nfs_client_close(NFSClient *client)
         if (client->fh) {
             nfs_close(client->context, client->fh);
         }
-        aio_set_fd_handler(client->aio_context,
-                           nfs_get_fd(client->context),
-                           NULL, NULL, NULL);
+        aio_set_fd_handler(client->aio_context, nfs_get_fd(client->context),
+                           false, NULL, NULL, NULL);
         nfs_destroy_context(client->context);
     }
     memset(client, 0, sizeof(NFSClient));
@@ -323,6 +327,11 @@ static int64_t nfs_client_open(NFSClient *client, const char *filename,
             nfs_set_tcp_syncnt(client->context, val);
 #ifdef LIBNFS_FEATURE_READAHEAD
         } else if (!strcmp(qp->p[i].name, "readahead")) {
+            if (val > QEMU_NFS_MAX_READAHEAD_SIZE) {
+                error_report("NFS Warning: Truncating NFS readahead"
+                             " size to %d", QEMU_NFS_MAX_READAHEAD_SIZE);
+                val = QEMU_NFS_MAX_READAHEAD_SIZE;
+            }
             nfs_set_readahead(client->context, val);
 #endif
         } else {
@@ -363,6 +372,7 @@ static int64_t nfs_client_open(NFSClient *client, const char *filename,
     }
 
     ret = DIV_ROUND_UP(st.st_size, BDRV_SECTOR_SIZE);
+    client->st_blocks = st.st_blocks;
     client->has_zero_init = S_ISREG(st.st_mode);
     goto out;
 fail:
@@ -389,28 +399,46 @@ static int nfs_file_open(BlockDriverState *bs, QDict *options, int flags,
     qemu_opts_absorb_qdict(opts, options, &local_err);
     if (local_err) {
         error_propagate(errp, local_err);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto out;
     }
     ret = nfs_client_open(client, qemu_opt_get(opts, "filename"),
                           (flags & BDRV_O_RDWR) ? O_RDWR : O_RDONLY,
                           errp);
     if (ret < 0) {
-        return ret;
+        goto out;
     }
     bs->total_sectors = ret;
-    return 0;
+    ret = 0;
+out:
+    qemu_opts_del(opts);
+    return ret;
 }
+
+static QemuOptsList nfs_create_opts = {
+    .name = "nfs-create-opts",
+    .head = QTAILQ_HEAD_INITIALIZER(nfs_create_opts.head),
+    .desc = {
+        {
+            .name = BLOCK_OPT_SIZE,
+            .type = QEMU_OPT_SIZE,
+            .help = "Virtual disk size"
+        },
+        { /* end of list */ }
+    }
+};
 
 static int nfs_file_create(const char *url, QemuOpts *opts, Error **errp)
 {
     int ret = 0;
     int64_t total_size = 0;
-    NFSClient *client = g_malloc0(sizeof(NFSClient));
+    NFSClient *client = g_new0(NFSClient, 1);
 
     client->aio_context = qemu_get_aio_context();
 
     /* Read out options */
-    total_size = qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0);
+    total_size = ROUND_UP(qemu_opt_get_size_del(opts, BLOCK_OPT_SIZE, 0),
+                          BDRV_SECTOR_SIZE);
 
     ret = nfs_client_open(client, url, O_CREAT, errp);
     if (ret < 0) {
@@ -435,6 +463,11 @@ static int64_t nfs_get_allocated_file_size(BlockDriverState *bs)
     NFSRPC task = {0};
     struct stat st;
 
+    if (bdrv_is_read_only(bs) &&
+        !(bs->open_flags & BDRV_O_NOCACHE)) {
+        return client->st_blocks * 512;
+    }
+
     task.st = &st;
     if (nfs_fstat_async(client->context, client->fh, nfs_co_generic_cb,
                         &task) != 0) {
@@ -446,7 +479,7 @@ static int64_t nfs_get_allocated_file_size(BlockDriverState *bs)
         aio_poll(client->aio_context, true);
     }
 
-    return (task.ret < 0 ? task.ret : st.st_blocks * st.st_blksize);
+    return (task.ret < 0 ? task.ret : st.st_blocks * 512);
 }
 
 static int nfs_file_truncate(BlockDriverState *bs, int64_t offset)
@@ -455,12 +488,42 @@ static int nfs_file_truncate(BlockDriverState *bs, int64_t offset)
     return nfs_ftruncate(client->context, client->fh, offset);
 }
 
+/* Note that this will not re-establish a connection with the NFS server
+ * - it is effectively a NOP.  */
+static int nfs_reopen_prepare(BDRVReopenState *state,
+                              BlockReopenQueue *queue, Error **errp)
+{
+    NFSClient *client = state->bs->opaque;
+    struct stat st;
+    int ret = 0;
+
+    if (state->flags & BDRV_O_RDWR && bdrv_is_read_only(state->bs)) {
+        error_setg(errp, "Cannot open a read-only mount as read-write");
+        return -EACCES;
+    }
+
+    /* Update cache for read-only reopens */
+    if (!(state->flags & BDRV_O_RDWR)) {
+        ret = nfs_fstat(client->context, client->fh, &st);
+        if (ret < 0) {
+            error_setg(errp, "Failed to fstat file: %s",
+                       nfs_get_error(client->context));
+            return ret;
+        }
+        client->st_blocks = st.st_blocks;
+    }
+
+    return 0;
+}
+
 static BlockDriver bdrv_nfs = {
     .format_name                    = "nfs",
     .protocol_name                  = "nfs",
 
     .instance_size                  = sizeof(NFSClient),
     .bdrv_needs_filename            = true,
+    .create_opts                    = &nfs_create_opts,
+
     .bdrv_has_zero_init             = nfs_has_zero_init,
     .bdrv_get_allocated_file_size   = nfs_get_allocated_file_size,
     .bdrv_truncate                  = nfs_file_truncate,
@@ -468,6 +531,7 @@ static BlockDriver bdrv_nfs = {
     .bdrv_file_open                 = nfs_file_open,
     .bdrv_close                     = nfs_file_close,
     .bdrv_create                    = nfs_file_create,
+    .bdrv_reopen_prepare            = nfs_reopen_prepare,
 
     .bdrv_co_readv                  = nfs_co_readv,
     .bdrv_co_writev                 = nfs_co_writev,

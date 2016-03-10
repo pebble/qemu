@@ -15,7 +15,7 @@
 #include "strongarm.h"
 #include "hw/arm/arm.h"
 #include "hw/block/flash.h"
-#include "sysemu/blockdev.h"
+#include "sysemu/block-backend.h"
 #include "exec/address-spaces.h"
 
 static struct arm_boot_info collie_binfo = {
@@ -41,13 +41,13 @@ static void collie_init(MachineState *machine)
 
     dinfo = drive_get(IF_PFLASH, 0, 0);
     pflash_cfi01_register(SA_CS0, NULL, "collie.fl1", 0x02000000,
-                    dinfo ? dinfo->bdrv : NULL, (64 * 1024),
-                    512, 4, 0x00, 0x00, 0x00, 0x00, 0);
+                    dinfo ? blk_by_legacy_dinfo(dinfo) : NULL,
+                    (64 * 1024), 512, 4, 0x00, 0x00, 0x00, 0x00, 0);
 
     dinfo = drive_get(IF_PFLASH, 0, 1);
     pflash_cfi01_register(SA_CS1, NULL, "collie.fl2", 0x02000000,
-                    dinfo ? dinfo->bdrv : NULL, (64 * 1024),
-                    512, 4, 0x00, 0x00, 0x00, 0x00, 0);
+                    dinfo ? blk_by_legacy_dinfo(dinfo) : NULL,
+                    (64 * 1024), 512, 4, 0x00, 0x00, 0x00, 0x00, 0);
 
     sysbus_create_simple("scoop", 0x40800000, NULL);
 
@@ -58,15 +58,10 @@ static void collie_init(MachineState *machine)
     arm_load_kernel(s->cpu, &collie_binfo);
 }
 
-static QEMUMachine collie_machine = {
-    .name = "collie",
-    .desc = "Collie PDA (SA-1110)",
-    .init = collie_init,
-};
-
-static void collie_machine_init(void)
+static void collie_machine_init(MachineClass *mc)
 {
-    qemu_register_machine(&collie_machine);
+    mc->desc = "Sharp SL-5500 (Collie) PDA (SA-1110)";
+    mc->init = collie_init;
 }
 
-machine_init(collie_machine_init)
+DEFINE_MACHINE("collie", collie_machine_init)

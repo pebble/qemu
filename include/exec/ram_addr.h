@@ -22,17 +22,65 @@
 #ifndef CONFIG_USER_ONLY
 #include "hw/xen/xen.h"
 
+struct RAMBlock {
+    struct rcu_head rcu;
+    struct MemoryRegion *mr;
+    uint8_t *host;
+    ram_addr_t offset;
+    ram_addr_t used_length;
+    ram_addr_t max_length;
+    void (*resized)(const char*, uint64_t length, void *host);
+    uint32_t flags;
+    /* Protected by iothread lock.  */
+    char idstr[256];
+    /* RCU-enabled, writes protected by the ramlist lock */
+    QLIST_ENTRY(RAMBlock) next;
+    int fd;
+};
+
+static inline void *ramblock_ptr(RAMBlock *block, ram_addr_t offset)
+{
+    assert(offset < block->used_length);
+    assert(block->host);
+    return (char *)block->host + offset;
+}
+
+typedef struct RAMList {
+    QemuMutex mutex;
+    /* Protected by the iothread lock.  */
+    unsigned long *dirty_memory[DIRTY_MEMORY_NUM];
+    RAMBlock *mru_block;
+    /* RCU-enabled, writes protected by the ramlist lock. */
+    QLIST_HEAD(, RAMBlock) blocks;
+    uint32_t version;
+} RAMList;
+extern RAMList ram_list;
+
+ram_addr_t last_ram_offset(void);
+void qemu_mutex_lock_ramlist(void);
+void qemu_mutex_unlock_ramlist(void);
+
 ram_addr_t qemu_ram_alloc_from_file(ram_addr_t size, MemoryRegion *mr,
                                     bool share, const char *mem_path,
                                     Error **errp);
 ram_addr_t qemu_ram_alloc_from_ptr(ram_addr_t size, void *host,
-                                   MemoryRegion *mr);
-ram_addr_t qemu_ram_alloc(ram_addr_t size, MemoryRegion *mr);
+                                   MemoryRegion *mr, Error **errp);
+ram_addr_t qemu_ram_alloc(ram_addr_t size, MemoryRegion *mr, Error **errp);
+ram_addr_t qemu_ram_alloc_resizeable(ram_addr_t size, ram_addr_t max_size,
+                                     void (*resized)(const char*,
+                                                     uint64_t length,
+                                                     void *host),
+                                     MemoryRegion *mr, Error **errp);
 int qemu_get_ram_fd(ram_addr_t addr);
 void *qemu_get_ram_block_host_ptr(ram_addr_t addr);
 void *qemu_get_ram_ptr(ram_addr_t addr);
 void qemu_ram_free(ram_addr_t addr);
 void qemu_ram_free_from_ptr(ram_addr_t addr);
+
+int qemu_ram_resize(ram_addr_t base, ram_addr_t newsize, Error **errp);
+
+#define DIRTY_CLIENTS_ALL     ((1 << DIRTY_MEMORY_NUM) - 1)
+#define DIRTY_CLIENTS_NOCODE  (DIRTY_CLIENTS_ALL & ~(1 << DIRTY_MEMORY_CODE))
 
 static inline bool cpu_physical_memory_get_dirty(ram_addr_t start,
                                                  ram_addr_t length,
@@ -47,6 +95,21 @@ static inline bool cpu_physical_memory_get_dirty(ram_addr_t start,
     next = find_next_bit(ram_list.dirty_memory[client], end, page);
 
     return next < end;
+}
+
+static inline bool cpu_physical_memory_all_dirty(ram_addr_t start,
+                                                 ram_addr_t length,
+                                                 unsigned client)
+{
+    unsigned long end, page, next;
+
+    assert(client < DIRTY_MEMORY_NUM);
+
+    end = TARGET_PAGE_ALIGN(start + length) >> TARGET_PAGE_BITS;
+    page = start >> TARGET_PAGE_BITS;
+    next = find_next_zero_bit(ram_list.dirty_memory[client], end, page);
+
+    return next >= end;
 }
 
 static inline bool cpu_physical_memory_get_dirty_flag(ram_addr_t addr,
@@ -64,34 +127,52 @@ static inline bool cpu_physical_memory_is_clean(ram_addr_t addr)
     return !(vga && code && migration);
 }
 
+static inline uint8_t cpu_physical_memory_range_includes_clean(ram_addr_t start,
+                                                               ram_addr_t length,
+                                                               uint8_t mask)
+{
+    uint8_t ret = 0;
+
+    if (mask & (1 << DIRTY_MEMORY_VGA) &&
+        !cpu_physical_memory_all_dirty(start, length, DIRTY_MEMORY_VGA)) {
+        ret |= (1 << DIRTY_MEMORY_VGA);
+    }
+    if (mask & (1 << DIRTY_MEMORY_CODE) &&
+        !cpu_physical_memory_all_dirty(start, length, DIRTY_MEMORY_CODE)) {
+        ret |= (1 << DIRTY_MEMORY_CODE);
+    }
+    if (mask & (1 << DIRTY_MEMORY_MIGRATION) &&
+        !cpu_physical_memory_all_dirty(start, length, DIRTY_MEMORY_MIGRATION)) {
+        ret |= (1 << DIRTY_MEMORY_MIGRATION);
+    }
+    return ret;
+}
+
 static inline void cpu_physical_memory_set_dirty_flag(ram_addr_t addr,
                                                       unsigned client)
 {
     assert(client < DIRTY_MEMORY_NUM);
-    set_bit(addr >> TARGET_PAGE_BITS, ram_list.dirty_memory[client]);
-}
-
-static inline void cpu_physical_memory_set_dirty_range_nocode(ram_addr_t start,
-                                                              ram_addr_t length)
-{
-    unsigned long end, page;
-
-    end = TARGET_PAGE_ALIGN(start + length) >> TARGET_PAGE_BITS;
-    page = start >> TARGET_PAGE_BITS;
-    bitmap_set(ram_list.dirty_memory[DIRTY_MEMORY_MIGRATION], page, end - page);
-    bitmap_set(ram_list.dirty_memory[DIRTY_MEMORY_VGA], page, end - page);
+    set_bit_atomic(addr >> TARGET_PAGE_BITS, ram_list.dirty_memory[client]);
 }
 
 static inline void cpu_physical_memory_set_dirty_range(ram_addr_t start,
-                                                       ram_addr_t length)
+                                                       ram_addr_t length,
+                                                       uint8_t mask)
 {
     unsigned long end, page;
+    unsigned long **d = ram_list.dirty_memory;
 
     end = TARGET_PAGE_ALIGN(start + length) >> TARGET_PAGE_BITS;
     page = start >> TARGET_PAGE_BITS;
-    bitmap_set(ram_list.dirty_memory[DIRTY_MEMORY_MIGRATION], page, end - page);
-    bitmap_set(ram_list.dirty_memory[DIRTY_MEMORY_VGA], page, end - page);
-    bitmap_set(ram_list.dirty_memory[DIRTY_MEMORY_CODE], page, end - page);
+    if (likely(mask & (1 << DIRTY_MEMORY_MIGRATION))) {
+        bitmap_set_atomic(d[DIRTY_MEMORY_MIGRATION], page, end - page);
+    }
+    if (unlikely(mask & (1 << DIRTY_MEMORY_VGA))) {
+        bitmap_set_atomic(d[DIRTY_MEMORY_VGA], page, end - page);
+    }
+    if (unlikely(mask & (1 << DIRTY_MEMORY_CODE))) {
+        bitmap_set_atomic(d[DIRTY_MEMORY_CODE], page, end - page);
+    }
     xen_modified_memory(start, length);
 }
 
@@ -117,14 +198,18 @@ static inline void cpu_physical_memory_set_dirty_lebitmap(unsigned long *bitmap,
         for (k = 0; k < nr; k++) {
             if (bitmap[k]) {
                 unsigned long temp = leul_to_cpu(bitmap[k]);
+                unsigned long **d = ram_list.dirty_memory;
 
-                ram_list.dirty_memory[DIRTY_MEMORY_MIGRATION][page + k] |= temp;
-                ram_list.dirty_memory[DIRTY_MEMORY_VGA][page + k] |= temp;
-                ram_list.dirty_memory[DIRTY_MEMORY_CODE][page + k] |= temp;
+                atomic_or(&d[DIRTY_MEMORY_MIGRATION][page + k], temp);
+                atomic_or(&d[DIRTY_MEMORY_VGA][page + k], temp);
+                if (tcg_enabled()) {
+                    atomic_or(&d[DIRTY_MEMORY_CODE][page + k], temp);
+                }
             }
         }
-        xen_modified_memory(start, pages);
+        xen_modified_memory(start, pages << TARGET_PAGE_BITS);
     } else {
+        uint8_t clients = tcg_enabled() ? DIRTY_CLIENTS_ALL : DIRTY_CLIENTS_NOCODE;
         /*
          * bitmap-traveling is faster than memory-traveling (for addr...)
          * especially when most of the memory is not dirty.
@@ -139,7 +224,7 @@ static inline void cpu_physical_memory_set_dirty_lebitmap(unsigned long *bitmap,
                     addr = page_number * TARGET_PAGE_SIZE;
                     ram_addr = start + addr;
                     cpu_physical_memory_set_dirty_range(ram_addr,
-                                       TARGET_PAGE_SIZE * hpratio);
+                                       TARGET_PAGE_SIZE * hpratio, clients);
                 } while (c != 0);
             }
         }
@@ -147,20 +232,61 @@ static inline void cpu_physical_memory_set_dirty_lebitmap(unsigned long *bitmap,
 }
 #endif /* not _WIN32 */
 
-static inline void cpu_physical_memory_clear_dirty_range(ram_addr_t start,
-                                                         ram_addr_t length,
-                                                         unsigned client)
-{
-    unsigned long end, page;
+bool cpu_physical_memory_test_and_clear_dirty(ram_addr_t start,
+                                              ram_addr_t length,
+                                              unsigned client);
 
-    assert(client < DIRTY_MEMORY_NUM);
-    end = TARGET_PAGE_ALIGN(start + length) >> TARGET_PAGE_BITS;
-    page = start >> TARGET_PAGE_BITS;
-    bitmap_clear(ram_list.dirty_memory[client], page, end - page);
+static inline void cpu_physical_memory_clear_dirty_range(ram_addr_t start,
+                                                         ram_addr_t length)
+{
+    cpu_physical_memory_test_and_clear_dirty(start, length, DIRTY_MEMORY_MIGRATION);
+    cpu_physical_memory_test_and_clear_dirty(start, length, DIRTY_MEMORY_VGA);
+    cpu_physical_memory_test_and_clear_dirty(start, length, DIRTY_MEMORY_CODE);
 }
 
-void cpu_physical_memory_reset_dirty(ram_addr_t start, ram_addr_t length,
-                                     unsigned client);
 
+static inline
+uint64_t cpu_physical_memory_sync_dirty_bitmap(unsigned long *dest,
+                                               ram_addr_t start,
+                                               ram_addr_t length)
+{
+    ram_addr_t addr;
+    unsigned long page = BIT_WORD(start >> TARGET_PAGE_BITS);
+    uint64_t num_dirty = 0;
+
+    /* start address is aligned at the start of a word? */
+    if (((page * BITS_PER_LONG) << TARGET_PAGE_BITS) == start) {
+        int k;
+        int nr = BITS_TO_LONGS(length >> TARGET_PAGE_BITS);
+        unsigned long *src = ram_list.dirty_memory[DIRTY_MEMORY_MIGRATION];
+
+        for (k = page; k < page + nr; k++) {
+            if (src[k]) {
+                unsigned long bits = atomic_xchg(&src[k], 0);
+                unsigned long new_dirty;
+                new_dirty = ~dest[k];
+                dest[k] |= bits;
+                new_dirty &= bits;
+                num_dirty += ctpopl(new_dirty);
+            }
+        }
+    } else {
+        for (addr = 0; addr < length; addr += TARGET_PAGE_SIZE) {
+            if (cpu_physical_memory_test_and_clear_dirty(
+                        start + addr,
+                        TARGET_PAGE_SIZE,
+                        DIRTY_MEMORY_MIGRATION)) {
+                long k = (start + addr) >> TARGET_PAGE_BITS;
+                if (!test_and_set_bit(k, dest)) {
+                    num_dirty++;
+                }
+            }
+        }
+    }
+
+    return num_dirty;
+}
+
+void migration_bitmap_extend(ram_addr_t old, ram_addr_t new);
 #endif
 #endif

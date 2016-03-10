@@ -18,11 +18,10 @@
 #include "hw/char/serial.h"
 #include "qemu/timer.h"
 #include "hw/ptimer.h"
-#include "block/block.h"
 #include "hw/block/flash.h"
 #include "ui/console.h"
 #include "hw/i2c/i2c.h"
-#include "sysemu/blockdev.h"
+#include "sysemu/block-backend.h"
 #include "exec/address-spaces.h"
 #include "ui/pixel_ops.h"
 
@@ -186,11 +185,6 @@ static void eth_rx_desc_get(uint32_t addr, mv88w8618_rx_desc *desc)
     le16_to_cpus(&desc->buffer_size);
     le32_to_cpus(&desc->buffer);
     le32_to_cpus(&desc->next);
-}
-
-static int eth_can_receive(NetClientState *nc)
-{
-    return 1;
 }
 
 static ssize_t eth_receive(NetClientState *nc, const uint8_t *buf, size_t size)
@@ -382,7 +376,6 @@ static void eth_cleanup(NetClientState *nc)
 static NetClientInfo net_mv88w8618_info = {
     .type = NET_CLIENT_OPTIONS_KIND_NIC,
     .size = sizeof(NICState),
-    .can_receive = eth_can_receive,
     .receive = eth_receive,
     .cleanup = eth_cleanup,
 };
@@ -1601,11 +1594,12 @@ static void musicpal_init(MachineState *machine)
     }
 
     /* For now we use a fixed - the original - RAM size */
-    memory_region_init_ram(ram, NULL, "musicpal.ram", MP_RAM_DEFAULT_SIZE);
-    vmstate_register_ram_global(ram);
+    memory_region_allocate_system_memory(ram, NULL, "musicpal.ram",
+                                         MP_RAM_DEFAULT_SIZE);
     memory_region_add_subregion(address_space_mem, 0, ram);
 
-    memory_region_init_ram(sram, NULL, "musicpal.sram", MP_SRAM_SIZE);
+    memory_region_init_ram(sram, NULL, "musicpal.sram", MP_SRAM_SIZE,
+                           &error_fatal);
     vmstate_register_ram_global(sram);
     memory_region_add_subregion(address_space_mem, MP_SRAM_BASE, sram);
 
@@ -1630,7 +1624,9 @@ static void musicpal_init(MachineState *machine)
     /* Register flash */
     dinfo = drive_get(IF_PFLASH, 0, 0);
     if (dinfo) {
-        flash_size = bdrv_getlength(dinfo->bdrv);
+        BlockBackend *blk = blk_by_legacy_dinfo(dinfo);
+
+        flash_size = blk_getlength(blk);
         if (flash_size != 8*1024*1024 && flash_size != 16*1024*1024 &&
             flash_size != 32*1024*1024) {
             fprintf(stderr, "Invalid flash image size\n");
@@ -1645,16 +1641,14 @@ static void musicpal_init(MachineState *machine)
 #ifdef TARGET_WORDS_BIGENDIAN
         pflash_cfi02_register(0x100000000ULL-MP_FLASH_SIZE_MAX, NULL,
                               "musicpal.flash", flash_size,
-                              dinfo->bdrv, 0x10000,
-                              (flash_size + 0xffff) >> 16,
+                              blk, 0x10000, (flash_size + 0xffff) >> 16,
                               MP_FLASH_SIZE_MAX / flash_size,
                               2, 0x00BF, 0x236D, 0x0000, 0x0000,
                               0x5555, 0x2AAA, 1);
 #else
         pflash_cfi02_register(0x100000000ULL-MP_FLASH_SIZE_MAX, NULL,
                               "musicpal.flash", flash_size,
-                              dinfo->bdrv, 0x10000,
-                              (flash_size + 0xffff) >> 16,
+                              blk, 0x10000, (flash_size + 0xffff) >> 16,
                               MP_FLASH_SIZE_MAX / flash_size,
                               2, 0x00BF, 0x236D, 0x0000, 0x0000,
                               0x5555, 0x2AAA, 0);
@@ -1715,18 +1709,13 @@ static void musicpal_init(MachineState *machine)
     arm_load_kernel(cpu, &musicpal_binfo);
 }
 
-static QEMUMachine musicpal_machine = {
-    .name = "musicpal",
-    .desc = "Marvell 88w8618 / MusicPal (ARM926EJ-S)",
-    .init = musicpal_init,
-};
-
-static void musicpal_machine_init(void)
+static void musicpal_machine_init(MachineClass *mc)
 {
-    qemu_register_machine(&musicpal_machine);
+    mc->desc = "Marvell 88w8618 / MusicPal (ARM926EJ-S)";
+    mc->init = musicpal_init;
 }
 
-machine_init(musicpal_machine_init);
+DEFINE_MACHINE("musicpal", musicpal_machine_init)
 
 static void mv88w8618_wlan_class_init(ObjectClass *klass, void *data)
 {

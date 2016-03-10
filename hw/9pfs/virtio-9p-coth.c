@@ -12,86 +12,30 @@
  *
  */
 
-#include "fsdev/qemu-fsdev.h"
-#include "qemu/thread.h"
-#include "block/coroutine.h"
+#include "qemu-common.h"
+#include "block/thread-pool.h"
+#include "qemu/coroutine.h"
+#include "qemu/main-loop.h"
 #include "virtio-9p-coth.h"
 
-/* v9fs glib thread pool */
-static V9fsThPool v9fs_pool;
+/* Called from QEMU I/O thread.  */
+static void coroutine_enter_cb(void *opaque, int ret)
+{
+    Coroutine *co = opaque;
+    qemu_coroutine_enter(co, NULL);
+}
+
+/* Called from worker thread.  */
+static int coroutine_enter_func(void *arg)
+{
+    Coroutine *co = arg;
+    qemu_coroutine_enter(co, NULL);
+    return 0;
+}
 
 void co_run_in_worker_bh(void *opaque)
 {
     Coroutine *co = opaque;
-    g_thread_pool_push(v9fs_pool.pool, co, NULL);
-}
-
-static void v9fs_qemu_process_req_done(void *arg)
-{
-    char byte;
-    ssize_t len;
-    Coroutine *co;
-
-    do {
-        len = read(v9fs_pool.rfd, &byte, sizeof(byte));
-    } while (len == -1 &&  errno == EINTR);
-
-    while ((co = g_async_queue_try_pop(v9fs_pool.completed)) != NULL) {
-        qemu_coroutine_enter(co, NULL);
-    }
-}
-
-static void v9fs_thread_routine(gpointer data, gpointer user_data)
-{
-    ssize_t len;
-    char byte = 0;
-    Coroutine *co = data;
-
-    qemu_coroutine_enter(co, NULL);
-
-    g_async_queue_push(v9fs_pool.completed, co);
-    do {
-        len = write(v9fs_pool.wfd, &byte, sizeof(byte));
-    } while (len == -1 && errno == EINTR);
-}
-
-int v9fs_init_worker_threads(void)
-{
-    int ret = 0;
-    int notifier_fds[2];
-    V9fsThPool *p = &v9fs_pool;
-    sigset_t set, oldset;
-
-    sigfillset(&set);
-    /* Leave signal handling to the iothread.  */
-    pthread_sigmask(SIG_SETMASK, &set, &oldset);
-
-    if (qemu_pipe(notifier_fds) == -1) {
-        ret = -1;
-        goto err_out;
-    }
-    p->pool = g_thread_pool_new(v9fs_thread_routine, p, -1, FALSE, NULL);
-    if (!p->pool) {
-        ret = -1;
-        goto err_out;
-    }
-    p->completed = g_async_queue_new();
-    if (!p->completed) {
-        /*
-         * We are going to terminate.
-         * So don't worry about cleanup
-         */
-        ret = -1;
-        goto err_out;
-    }
-    p->rfd = notifier_fds[0];
-    p->wfd = notifier_fds[1];
-
-    fcntl(p->rfd, F_SETFL, O_NONBLOCK);
-    fcntl(p->wfd, F_SETFL, O_NONBLOCK);
-
-    qemu_set_fd_handler(p->rfd, v9fs_qemu_process_req_done, NULL, NULL);
-err_out:
-    pthread_sigmask(SIG_SETMASK, &oldset, NULL);
-    return ret;
+    thread_pool_submit_aio(qemu_get_aio_context()->thread_pool,
+                           coroutine_enter_func, co, coroutine_enter_cb, co);
 }

@@ -45,6 +45,7 @@
 # define TARGET_VIRT_ADDR_SPACE_BITS 64
 #endif
 
+#define TARGET_PAGE_BITS_64K 16
 #define TARGET_PAGE_BITS_16M 24
 
 #else /* defined (TARGET_PPC64) */
@@ -79,12 +80,10 @@
 
 #include "fpu/softfloat.h"
 
-#define TARGET_HAS_ICE 1
-
 #if defined (TARGET_PPC64)
-#define ELF_MACHINE     EM_PPC64
+#define PPC_ELF_MACHINE     EM_PPC64
 #else
-#define ELF_MACHINE     EM_PPC
+#define PPC_ELF_MACHINE     EM_PPC
 #endif
 
 /*****************************************************************************/
@@ -118,14 +117,20 @@ enum powerpc_mmu_t {
 #define POWERPC_MMU_AMR      0x00040000
     /* 64 bits PowerPC MMU                                     */
     POWERPC_MMU_64B        = POWERPC_MMU_64 | 0x00000001,
+    /* Architecture 2.03 and later (has LPCR) */
+    POWERPC_MMU_2_03       = POWERPC_MMU_64 | 0x00000002,
     /* Architecture 2.06 variant                               */
     POWERPC_MMU_2_06       = POWERPC_MMU_64 | POWERPC_MMU_1TSEG
                              | POWERPC_MMU_AMR | 0x00000003,
     /* Architecture 2.06 "degraded" (no 1T segments)           */
     POWERPC_MMU_2_06a      = POWERPC_MMU_64 | POWERPC_MMU_AMR
                              | 0x00000003,
-    /* Architecture 2.06 "degraded" (no 1T segments or AMR)    */
-    POWERPC_MMU_2_06d      = POWERPC_MMU_64 | 0x00000003,
+    /* Architecture 2.07 variant                               */
+    POWERPC_MMU_2_07       = POWERPC_MMU_64 | POWERPC_MMU_1TSEG
+                             | POWERPC_MMU_AMR | 0x00000004,
+    /* Architecture 2.07 "degraded" (no 1T segments)           */
+    POWERPC_MMU_2_07a      = POWERPC_MMU_64 | POWERPC_MMU_AMR
+                             | 0x00000004,
 #endif /* defined(TARGET_PPC64) */
 };
 
@@ -320,6 +325,7 @@ typedef struct opc_handler_t opc_handler_t;
 /*****************************************************************************/
 /* Types used to describe some PowerPC registers */
 typedef struct CPUPPCState CPUPPCState;
+typedef struct DisasContext DisasContext;
 typedef struct ppc_tb_t ppc_tb_t;
 typedef struct ppc_spr_t ppc_spr_t;
 typedef struct ppc_dcr_t ppc_dcr_t;
@@ -328,13 +334,13 @@ typedef union ppc_tlb_t ppc_tlb_t;
 
 /* SPR access micro-ops generations callbacks */
 struct ppc_spr_t {
-    void (*uea_read)(void *opaque, int gpr_num, int spr_num);
-    void (*uea_write)(void *opaque, int spr_num, int gpr_num);
+    void (*uea_read)(DisasContext *ctx, int gpr_num, int spr_num);
+    void (*uea_write)(DisasContext *ctx, int spr_num, int gpr_num);
 #if !defined(CONFIG_USER_ONLY)
-    void (*oea_read)(void *opaque, int gpr_num, int spr_num);
-    void (*oea_write)(void *opaque, int spr_num, int gpr_num);
-    void (*hea_read)(void *opaque, int gpr_num, int spr_num);
-    void (*hea_write)(void *opaque, int spr_num, int gpr_num);
+    void (*oea_read)(DisasContext *ctx, int gpr_num, int spr_num);
+    void (*oea_write)(DisasContext *ctx, int spr_num, int gpr_num);
+    void (*hea_read)(DisasContext *ctx, int gpr_num, int spr_num);
+    void (*hea_write)(DisasContext *ctx, int spr_num, int gpr_num);
 #endif
     const char *name;
     target_ulong default_value;
@@ -558,6 +564,26 @@ struct ppc_slb_t {
 #define ESR_VLEMI (1 << (63 - 58)) /* VLE operation                          */
 #define ESR_MIF   (1 << (63 - 62)) /* Misaligned instruction (VLE)           */
 
+/* Transaction EXception And Summary Register bits                           */
+#define TEXASR_FAILURE_PERSISTENT                (63 - 7)
+#define TEXASR_DISALLOWED                        (63 - 8)
+#define TEXASR_NESTING_OVERFLOW                  (63 - 9)
+#define TEXASR_FOOTPRINT_OVERFLOW                (63 - 10)
+#define TEXASR_SELF_INDUCED_CONFLICT             (63 - 11)
+#define TEXASR_NON_TRANSACTIONAL_CONFLICT        (63 - 12)
+#define TEXASR_TRANSACTION_CONFLICT              (63 - 13)
+#define TEXASR_TRANSLATION_INVALIDATION_CONFLICT (63 - 14)
+#define TEXASR_IMPLEMENTATION_SPECIFIC           (63 - 15)
+#define TEXASR_INSTRUCTION_FETCH_CONFLICT        (63 - 16)
+#define TEXASR_ABORT                             (63 - 31)
+#define TEXASR_SUSPENDED                         (63 - 32)
+#define TEXASR_PRIVILEGE_HV                      (63 - 34)
+#define TEXASR_PRIVILEGE_PR                      (63 - 35)
+#define TEXASR_FAILURE_SUMMARY                   (63 - 36)
+#define TEXASR_TFIAR_EXACT                       (63 - 37)
+#define TEXASR_ROT                               (63 - 38)
+#define TEXASR_TRANSACTION_LEVEL                 (63 - 52) /* 12 bits */
+
 enum {
     POWERPC_FLAG_NONE     = 0x00000000,
     /* Flag for MSR bit 25 signification (VRE/SPE)                           */
@@ -584,6 +610,8 @@ enum {
     POWERPC_FLAG_CFAR     = 0x00040000,
     /* Has VSX                                                               */
     POWERPC_FLAG_VSX      = 0x00080000,
+    /* Has Transaction Memory (ISA 2.07)                                     */
+    POWERPC_FLAG_TM       = 0x00100000,
 };
 
 /*****************************************************************************/
@@ -655,6 +683,27 @@ enum {
 /* enabled exception summary */
 #define fpscr_eex (((env->fpscr) >> FPSCR_XX) & ((env->fpscr) >> FPSCR_XE) &  \
                    0x1F)
+
+#define FP_FX		(1ull << FPSCR_FX)
+#define FP_FEX		(1ull << FPSCR_FEX)
+#define FP_OX		(1ull << FPSCR_OX)
+#define FP_OE		(1ull << FPSCR_OE)
+#define FP_UX		(1ull << FPSCR_UX)
+#define FP_UE		(1ull << FPSCR_UE)
+#define FP_XX		(1ull << FPSCR_XX)
+#define FP_XE		(1ull << FPSCR_XE)
+#define FP_ZX		(1ull << FPSCR_ZX)
+#define FP_ZE		(1ull << FPSCR_ZE)
+#define FP_VX		(1ull << FPSCR_VX)
+#define FP_VXSNAN	(1ull << FPSCR_VXSNAN)
+#define FP_VXISI	(1ull << FPSCR_VXISI)
+#define FP_VXIMZ	(1ull << FPSCR_VXIMZ)
+#define FP_VXZDZ	(1ull << FPSCR_VXZDZ)
+#define FP_VXIDI	(1ull << FPSCR_VXIDI)
+#define FP_VXVC		(1ull << FPSCR_VXVC)
+#define FP_VXCVI	(1ull << FPSCR_VXCVI)
+#define FP_VE		(1ull << FPSCR_VE)
+#define FP_FI		(1ull << FPSCR_FI)
 
 /*****************************************************************************/
 /* Vector status and control register */
@@ -924,7 +973,8 @@ struct ppc_segment_page_sizes {
 /* The whole PowerPC CPU context */
 #define NB_MMU_MODES 3
 
-#define PPC_CPU_OPCODES_LEN 0x40
+#define PPC_CPU_OPCODES_LEN          0x40
+#define PPC_CPU_INDIRECT_OPCODES_LEN 0x20
 
 struct CPUPPCState {
     /* First are the most commonly used resources
@@ -1050,6 +1100,7 @@ struct CPUPPCState {
     uint64_t insns_flags2;
 #if defined(TARGET_PPC64)
     struct ppc_segment_page_sizes sps;
+    bool ci_large_pages;
 #endif
 
 #if defined(TARGET_PPC64) && !defined(CONFIG_USER_ONLY)
@@ -1141,13 +1192,12 @@ do {                                            \
 PowerPCCPU *cpu_ppc_init(const char *cpu_model);
 void ppc_translate_init(void);
 void gen_update_current_nip(void *opaque);
-int cpu_ppc_exec (CPUPPCState *s);
+int cpu_ppc_exec (CPUState *s);
 /* you can call this signal handler from your SIGBUS and SIGSEGV
    signal handlers to inform the virtual CPU of exceptions. non zero
    is returned if the signal was handled by the virtual CPU.  */
 int cpu_ppc_signal_handler (int host_signum, void *pinfo,
                             void *puc);
-void ppc_hw_interrupt (CPUPPCState *env);
 #if defined(CONFIG_USER_ONLY)
 int ppc_cpu_handle_mmu_fault(CPUState *cpu, vaddr address, int rw,
                              int mmu_idx);
@@ -1216,17 +1266,9 @@ static inline uint64_t ppc_dump_gpr(CPUPPCState *env, int gprn)
 int ppc_dcr_read (ppc_dcr_t *dcr_env, int dcrn, uint32_t *valp);
 int ppc_dcr_write (ppc_dcr_t *dcr_env, int dcrn, uint32_t val);
 
-static inline CPUPPCState *cpu_init(const char *cpu_model)
-{
-    PowerPCCPU *cpu = cpu_ppc_init(cpu_model);
-    if (cpu == NULL) {
-        return NULL;
-    }
-    return &cpu->env;
-}
+#define cpu_init(cpu_model) CPU(cpu_ppc_init(cpu_model))
 
 #define cpu_exec cpu_ppc_exec
-#define cpu_gen_code cpu_ppc_gen_code
 #define cpu_signal_handler cpu_ppc_signal_handler
 #define cpu_list ppc_cpu_list
 
@@ -1235,7 +1277,7 @@ static inline CPUPPCState *cpu_init(const char *cpu_model)
 #define MMU_MODE1_SUFFIX _kernel
 #define MMU_MODE2_SUFFIX _hypv
 #define MMU_USER_IDX 0
-static inline int cpu_mmu_index (CPUPPCState *env)
+static inline int cpu_mmu_index (CPUPPCState *env, bool ifetch)
 {
     return env->mmu_idx;
 }
@@ -1602,6 +1644,7 @@ static inline int cpu_mmu_index (CPUPPCState *env)
 #define SPR_MPC_MD_DBRAM1     (0x32A)
 #define SPR_RCPU_L2U_RA3      (0x32B)
 #define SPR_TAR               (0x32F)
+#define SPR_VTB               (0x351)
 #define SPR_440_INV0          (0x370)
 #define SPR_440_INV1          (0x371)
 #define SPR_440_INV2          (0x372)
@@ -2008,13 +2051,18 @@ enum {
     PPC2_ALTIVEC_207   = 0x0000000000004000ULL,
     /* PowerISA 2.07 Book3s specification                                    */
     PPC2_ISA207S       = 0x0000000000008000ULL,
+    /* Double precision floating point conversion for signed integer 64      */
+    PPC2_FP_CVT_S64    = 0x0000000000010000ULL,
+    /* Transactional Memory (ISA 2.07, Book II)                              */
+    PPC2_TM            = 0x0000000000020000ULL,
 
 #define PPC_TCG_INSNS2 (PPC2_BOOKE206 | PPC2_VSX | PPC2_PRCNTL | PPC2_DBRX | \
                         PPC2_ISA205 | PPC2_VSX207 | PPC2_PERM_ISA206 | \
                         PPC2_DIVE_ISA206 | PPC2_ATOMIC_ISA206 | \
                         PPC2_FP_CVT_ISA206 | PPC2_FP_TST_ISA206 | \
                         PPC2_BCTAR_ISA207 | PPC2_LSQ_ISA207 | \
-                        PPC2_ALTIVEC_207 | PPC2_ISA207S | PPC2_DFP)
+                        PPC2_ALTIVEC_207 | PPC2_ISA207S | PPC2_DFP | \
+                        PPC2_FP_CVT_S64 | PPC2_TM)
 };
 
 /*****************************************************************************/
@@ -2230,8 +2278,8 @@ static inline ppcmas_tlb_t *booke206_get_tlbm(CPUPPCState *env, const int tlbn,
 {
     int r;
     uint32_t ways = booke206_tlb_ways(env, tlbn);
-    int ways_bits = ffs(ways) - 1;
-    int tlb_bits = ffs(booke206_tlb_size(env, tlbn)) - 1;
+    int ways_bits = ctz32(ways);
+    int tlb_bits = ctz32(booke206_tlb_size(env, tlbn));
     int i;
 
     way &= ways - 1;

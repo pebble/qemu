@@ -33,6 +33,8 @@
 #include "ui/console.h"
 #include "audio/audio.h"
 #include "qemu/bitmap.h"
+#include "crypto/tlssession.h"
+#include "qemu/buffer.h"
 #include <zlib.h>
 #include <stdbool.h>
 
@@ -54,13 +56,6 @@
  * Core data structures
  *
  *****************************************************************************/
-
-typedef struct Buffer
-{
-    size_t capacity;
-    size_t offset;
-    uint8_t *buffer;
-} Buffer;
 
 typedef struct VncState VncState;
 typedef struct VncJob VncJob;
@@ -101,16 +96,11 @@ typedef void VncSendHextileTile(VncState *vs,
 
 typedef struct VncDisplay VncDisplay;
 
-#ifdef CONFIG_VNC_TLS
-#include "vnc-tls.h"
 #include "vnc-auth-vencrypt.h"
-#endif
 #ifdef CONFIG_VNC_SASL
 #include "vnc-auth-sasl.h"
 #endif
-#ifdef CONFIG_VNC_WS
 #include "vnc-ws.h"
-#endif
 
 struct VncRectStat
 {
@@ -150,14 +140,14 @@ typedef enum VncSharePolicy {
 struct VncDisplay
 {
     QTAILQ_HEAD(, VncState) clients;
+    int num_connecting;
+    int num_shared;
     int num_exclusive;
+    int connections_limit;
     VncSharePolicy share_policy;
     int lsock;
-#ifdef CONFIG_VNC_WS
     int lwebsock;
-    bool websocket;
-    char *ws_display;
-#endif
+    bool ws_enabled;
     DisplaySurface *ds;
     DisplayChangeListener dcl;
     kbd_layout_t *kbd_layout;
@@ -171,16 +161,20 @@ struct VncDisplay
     struct VncSurface guest;   /* guest visible surface (aka ds->surface) */
     pixman_image_t *server;    /* vnc server surface */
 
-    char *display;
+    const char *id;
+    QTAILQ_ENTRY(VncDisplay) next;
+    bool enabled;
+    bool is_unix;
     char *password;
     time_t expires;
     int auth;
+    int subauth; /* Used by VeNCrypt */
+    int ws_auth; /* Used by websockets */
+    bool ws_tls; /* Used by websockets */
     bool lossy;
     bool non_adaptive;
-#ifdef CONFIG_VNC_TLS
-    int subauth; /* Used by VeNCrypt */
-    VncDisplayTLS tls;
-#endif
+    QCryptoTLSCreds *tlscreds;
+    char *tlsaclname;
 #ifdef CONFIG_VNC_SASL
     VncDisplaySASL sasl;
 #endif
@@ -279,30 +273,23 @@ struct VncState
     int minor;
 
     int auth;
-    char challenge[VNC_AUTH_CHALLENGE_SIZE];
-#ifdef CONFIG_VNC_TLS
     int subauth; /* Used by VeNCrypt */
-    VncStateTLS tls;
-#endif
+    char challenge[VNC_AUTH_CHALLENGE_SIZE];
+    QCryptoTLSSession *tls;
 #ifdef CONFIG_VNC_SASL
     VncStateSASL sasl;
 #endif
-#ifdef CONFIG_VNC_WS
-#ifdef CONFIG_VNC_TLS
-    VncStateTLS ws_tls;
-#endif /* CONFIG_VNC_TLS */
     bool encode_ws;
     bool websocket;
-#endif /* CONFIG_VNC_WS */
 
     VncClientInfo *info;
 
     Buffer output;
     Buffer input;
-#ifdef CONFIG_VNC_WS
     Buffer ws_input;
     Buffer ws_output;
-#endif
+    size_t ws_payload_remain;
+    WsMask ws_payload_mask;
     /* current output mode information */
     VncWritePixels *write_pixels;
     PixelFormat client_pf;
@@ -515,8 +502,10 @@ enum {
 void vnc_client_read(void *opaque);
 void vnc_client_write(void *opaque);
 
-long vnc_client_read_buf(VncState *vs, uint8_t *data, size_t datalen);
-long vnc_client_write_buf(VncState *vs, const uint8_t *data, size_t datalen);
+ssize_t vnc_client_read_buf(VncState *vs, uint8_t *data, size_t datalen);
+ssize_t vnc_client_write_buf(VncState *vs, const uint8_t *data, size_t datalen);
+ssize_t vnc_tls_pull(char *buf, size_t len, void *opaque);
+ssize_t vnc_tls_push(const char *buf, size_t len, void *opaque);
 
 /* Protocol I/O functions */
 void vnc_write(VncState *vs, const void *data, size_t len);
@@ -535,18 +524,10 @@ uint32_t read_u32(uint8_t *data, size_t offset);
 
 /* Protocol stage functions */
 void vnc_client_error(VncState *vs);
-int vnc_client_io_error(VncState *vs, int ret, int last_errno);
+ssize_t vnc_client_io_error(VncState *vs, ssize_t ret, int last_errno);
 
 void start_client_init(VncState *vs);
 void start_auth_vnc(VncState *vs);
-
-/* Buffer management */
-void buffer_reserve(Buffer *buffer, size_t len);
-void buffer_reset(Buffer *buffer);
-void buffer_free(Buffer *buffer);
-void buffer_append(Buffer *buffer, const void *data, size_t len);
-void buffer_advance(Buffer *buf, size_t len);
-uint8_t *buffer_end(Buffer *buffer);
 
 
 /* Misc helpers */

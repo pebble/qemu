@@ -35,6 +35,17 @@ static void e500plat_init(MachineState *machine)
         .pci_nr_slots = PCI_SLOT_MAX - 1,
         .fixup_devtree = e500plat_fixup_devtree,
         .mpic_version = OPENPIC_MODEL_FSL_MPIC_42,
+        .has_mpc8xxx_gpio = true,
+        .has_platform_bus = true,
+        .platform_bus_base = 0xf00000000ULL,
+        .platform_bus_size = (128ULL * 1024 * 1024),
+        .platform_bus_first_irq = 5,
+        .platform_bus_num_irqs = 10,
+        .ccsrbar_base = 0xFE0000000ULL,
+        .pci_pio_base = 0xFE1000000ULL,
+        .pci_mmio_base = 0xC00000000ULL,
+        .pci_mmio_bus_base = 0xE0000000ULL,
+        .spin_base = 0xFEF000000ULL,
     };
 
     /* Older KVM versions don't support EPR which breaks guests when we announce
@@ -46,16 +57,12 @@ static void e500plat_init(MachineState *machine)
     ppce500_init(machine, &params);
 }
 
-static QEMUMachine e500plat_machine = {
-    .name = "ppce500",
-    .desc = "generic paravirt e500 platform",
-    .init = e500plat_init,
-    .max_cpus = 32,
-};
-
-static void e500plat_machine_init(void)
+static void e500plat_machine_init(MachineClass *mc)
 {
-    qemu_register_machine(&e500plat_machine);
+    mc->desc = "generic paravirt e500 platform";
+    mc->init = e500plat_init;
+    mc->max_cpus = 32;
+    mc->has_dynamic_sysbus = true;
 }
 
-machine_init(e500plat_machine_init);
+DEFINE_MACHINE("ppce500", e500plat_machine_init)

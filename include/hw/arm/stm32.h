@@ -282,7 +282,7 @@ const char *stm32_periph_name(stm32_periph_t periph);
 #define STM32_SPI5_IRQ 85
 #define STM32_SPI6_IRQ 86
 
-#define STM32_MAX_IRQ  90
+#define STM32_MAX_IRQ  95
 
 
 

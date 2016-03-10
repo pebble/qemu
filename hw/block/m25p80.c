@@ -22,6 +22,7 @@
  */
 
 #include "hw/hw.h"
+#include "sysemu/block-backend.h"
 #include "sysemu/blockdev.h"
 #include "hw/ssi.h"
 
@@ -117,6 +118,7 @@ static const FlashPartInfo known_devices[] = {
     { INFO("mx25l1606e",  0xc22015,      0,  64 << 10,  32, ER_4K) },
     { INFO("mx25l3205d",  0xc22016,      0,  64 << 10,  64, 0) },
     { INFO("mx25l6405d",  0xc22017,      0,  64 << 10, 128, 0) },
+    { INFO("mx25u6435f",  0xc22537,      0,  64 << 10, 128, ER_4K | ER_32K) },
     { INFO("mx25l12805d", 0xc22018,      0,  64 << 10, 256, 0) },
     { INFO("mx25l12855e", 0xc22618,      0,  64 << 10, 256, 0) },
     { INFO("mx25l25635e", 0xc22019,      0,  64 << 10, 512, 0) },
@@ -248,7 +250,7 @@ typedef struct Flash {
 
     uint32_t r;
 
-    BlockDriverState *bdrv;
+    BlockBackend *blk;
 
     uint8_t *storage;
     uint32_t size;
@@ -282,7 +284,7 @@ typedef struct M25P80Class {
 #define M25P80_GET_CLASS(obj) \
      OBJECT_GET_CLASS(M25P80Class, (obj), TYPE_M25P80)
 
-static void bdrv_sync_complete(void *opaque, int ret)
+static void blk_sync_complete(void *opaque, int ret)
 {
     /* do nothing. Masters do not directly interact with the backing store,
      * only the working copy so no mutexing required.
@@ -291,20 +293,20 @@ static void bdrv_sync_complete(void *opaque, int ret)
 
 static void flash_sync_page(Flash *s, int page)
 {
-    int bdrv_sector, nb_sectors;
+    int blk_sector, nb_sectors;
     QEMUIOVector iov;
 
-    if (!s->bdrv || bdrv_is_read_only(s->bdrv)) {
+    if (!s->blk || blk_is_read_only(s->blk)) {
         return;
     }
 
-    bdrv_sector = (page * s->pi->page_size) / BDRV_SECTOR_SIZE;
+    blk_sector = (page * s->pi->page_size) / BDRV_SECTOR_SIZE;
     nb_sectors = DIV_ROUND_UP(s->pi->page_size, BDRV_SECTOR_SIZE);
     qemu_iovec_init(&iov, 1);
-    qemu_iovec_add(&iov, s->storage + bdrv_sector * BDRV_SECTOR_SIZE,
+    qemu_iovec_add(&iov, s->storage + blk_sector * BDRV_SECTOR_SIZE,
                    nb_sectors * BDRV_SECTOR_SIZE);
-    bdrv_aio_writev(s->bdrv, bdrv_sector, &iov, nb_sectors, bdrv_sync_complete,
-                    NULL);
+    blk_aio_writev(s->blk, blk_sector, &iov, nb_sectors, blk_sync_complete,
+                   NULL);
 }
 
 static inline void flash_sync_area(Flash *s, int64_t off, int64_t len)
@@ -312,7 +314,7 @@ static inline void flash_sync_area(Flash *s, int64_t off, int64_t len)
     int64_t start, end, nb_sectors;
     QEMUIOVector iov;
 
-    if (!s->bdrv || bdrv_is_read_only(s->bdrv)) {
+    if (!s->blk || blk_is_read_only(s->blk)) {
         return;
     }
 
@@ -323,7 +325,7 @@ static inline void flash_sync_area(Flash *s, int64_t off, int64_t len)
     qemu_iovec_init(&iov, 1);
     qemu_iovec_add(&iov, s->storage + (start * BDRV_SECTOR_SIZE),
                                         nb_sectors * BDRV_SECTOR_SIZE);
-    bdrv_aio_writev(s->bdrv, start, &iov, nb_sectors, bdrv_sync_complete, NULL);
+    blk_aio_writev(s->blk, start, &iov, nb_sectors, blk_sync_complete, NULL);
 }
 
 static void flash_erase(Flash *s, int offset, FlashCMD cmd)
@@ -625,22 +627,26 @@ static int m25p80_init(SSISlave *ss)
 
     s->size = s->pi->sector_size * s->pi->n_sectors;
     s->dirty_page = -1;
-    s->storage = qemu_blockalign(s->bdrv, s->size);
 
+    /* FIXME use a qdev drive property instead of drive_get_next() */
     dinfo = drive_get_next(IF_MTD);
 
-    if (dinfo && dinfo->bdrv) {
+    if (dinfo) {
         DB_PRINT_L(0, "Binding to IF_MTD drive\n");
-        s->bdrv = dinfo->bdrv;
+        s->blk = blk_by_legacy_dinfo(dinfo);
+        blk_attach_dev_nofail(s->blk, s);
+
+        s->storage = blk_blockalign(s->blk, s->size);
 
         /* FIXME: Move to late init */
-        if (bdrv_read(s->bdrv, 0, s->storage, DIV_ROUND_UP(s->size,
-                                                    BDRV_SECTOR_SIZE))) {
+        if (blk_read(s->blk, 0, s->storage,
+                     DIV_ROUND_UP(s->size, BDRV_SECTOR_SIZE))) {
             fprintf(stderr, "Failed to initialize SPI flash!\n");
             return 1;
         }
     } else {
         DB_PRINT_L(0, "No BDRV - binding to RAM\n");
+        s->storage = blk_blockalign(NULL, s->size);
         memset(s->storage, 0xFF, s->size);
     }
 

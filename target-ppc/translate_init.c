@@ -65,7 +65,7 @@ static void spr_load_dump_spr(int sprn)
 #endif
 }
 
-static void spr_read_generic (void *opaque, int gprn, int sprn)
+static void spr_read_generic (DisasContext *ctx, int gprn, int sprn)
 {
     gen_load_spr(cpu_gpr[gprn], sprn);
     spr_load_dump_spr(sprn);
@@ -80,14 +80,14 @@ static void spr_store_dump_spr(int sprn)
 #endif
 }
 
-static void spr_write_generic (void *opaque, int sprn, int gprn)
+static void spr_write_generic (DisasContext *ctx, int sprn, int gprn)
 {
     gen_store_spr(sprn, cpu_gpr[gprn]);
     spr_store_dump_spr(sprn);
 }
 
 #if !defined(CONFIG_USER_ONLY)
-static void spr_write_generic32(void *opaque, int sprn, int gprn)
+static void spr_write_generic32(DisasContext *ctx, int sprn, int gprn)
 {
 #ifdef TARGET_PPC64
     TCGv t0 = tcg_temp_new();
@@ -96,11 +96,11 @@ static void spr_write_generic32(void *opaque, int sprn, int gprn)
     tcg_temp_free(t0);
     spr_store_dump_spr(sprn);
 #else
-    spr_write_generic(opaque, sprn, gprn);
+    spr_write_generic(ctx, sprn, gprn);
 #endif
 }
 
-static void spr_write_clear (void *opaque, int sprn, int gprn)
+static void spr_write_clear (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv t0 = tcg_temp_new();
     TCGv t1 = tcg_temp_new();
@@ -112,7 +112,7 @@ static void spr_write_clear (void *opaque, int sprn, int gprn)
     tcg_temp_free(t1);
 }
 
-static void spr_access_nop(void *opaque, int sprn, int gprn)
+static void spr_access_nop(DisasContext *ctx, int sprn, int gprn)
 {
 }
 
@@ -120,47 +120,47 @@ static void spr_access_nop(void *opaque, int sprn, int gprn)
 
 /* SPR common to all PowerPC */
 /* XER */
-static void spr_read_xer (void *opaque, int gprn, int sprn)
+static void spr_read_xer (DisasContext *ctx, int gprn, int sprn)
 {
     gen_read_xer(cpu_gpr[gprn]);
 }
 
-static void spr_write_xer (void *opaque, int sprn, int gprn)
+static void spr_write_xer (DisasContext *ctx, int sprn, int gprn)
 {
     gen_write_xer(cpu_gpr[gprn]);
 }
 
 /* LR */
-static void spr_read_lr (void *opaque, int gprn, int sprn)
+static void spr_read_lr (DisasContext *ctx, int gprn, int sprn)
 {
     tcg_gen_mov_tl(cpu_gpr[gprn], cpu_lr);
 }
 
-static void spr_write_lr (void *opaque, int sprn, int gprn)
+static void spr_write_lr (DisasContext *ctx, int sprn, int gprn)
 {
     tcg_gen_mov_tl(cpu_lr, cpu_gpr[gprn]);
 }
 
 /* CFAR */
 #if defined(TARGET_PPC64) && !defined(CONFIG_USER_ONLY)
-static void spr_read_cfar (void *opaque, int gprn, int sprn)
+static void spr_read_cfar (DisasContext *ctx, int gprn, int sprn)
 {
     tcg_gen_mov_tl(cpu_gpr[gprn], cpu_cfar);
 }
 
-static void spr_write_cfar (void *opaque, int sprn, int gprn)
+static void spr_write_cfar (DisasContext *ctx, int sprn, int gprn)
 {
     tcg_gen_mov_tl(cpu_cfar, cpu_gpr[gprn]);
 }
 #endif /* defined(TARGET_PPC64) && !defined(CONFIG_USER_ONLY) */
 
 /* CTR */
-static void spr_read_ctr (void *opaque, int gprn, int sprn)
+static void spr_read_ctr (DisasContext *ctx, int gprn, int sprn)
 {
     tcg_gen_mov_tl(cpu_gpr[gprn], cpu_ctr);
 }
 
-static void spr_write_ctr (void *opaque, int sprn, int gprn)
+static void spr_write_ctr (DisasContext *ctx, int sprn, int gprn)
 {
     tcg_gen_mov_tl(cpu_ctr, cpu_gpr[gprn]);
 }
@@ -171,13 +171,13 @@ static void spr_write_ctr (void *opaque, int sprn, int gprn)
 /* UPMCx */
 /* USIA */
 /* UDECR */
-static void spr_read_ureg (void *opaque, int gprn, int sprn)
+static void spr_read_ureg (DisasContext *ctx, int gprn, int sprn)
 {
     gen_load_spr(cpu_gpr[gprn], sprn + 0x10);
 }
 
 #if defined(TARGET_PPC64) && !defined(CONFIG_USER_ONLY)
-static void spr_write_ureg(void *opaque, int sprn, int gprn)
+static void spr_write_ureg(DisasContext *ctx, int sprn, int gprn)
 {
     gen_store_spr(sprn + 0x10, cpu_gpr[gprn]);
 }
@@ -186,109 +186,109 @@ static void spr_write_ureg(void *opaque, int sprn, int gprn)
 /* SPR common to all non-embedded PowerPC */
 /* DECR */
 #if !defined(CONFIG_USER_ONLY)
-static void spr_read_decr (void *opaque, int gprn, int sprn)
+static void spr_read_decr (DisasContext *ctx, int gprn, int sprn)
 {
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_start();
     }
     gen_helper_load_decr(cpu_gpr[gprn], cpu_env);
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_end();
-        gen_stop_exception(opaque);
+        gen_stop_exception(ctx);
     }
 }
 
-static void spr_write_decr (void *opaque, int sprn, int gprn)
+static void spr_write_decr (DisasContext *ctx, int sprn, int gprn)
 {
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_start();
     }
     gen_helper_store_decr(cpu_env, cpu_gpr[gprn]);
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_end();
-        gen_stop_exception(opaque);
+        gen_stop_exception(ctx);
     }
 }
 #endif
 
 /* SPR common to all non-embedded PowerPC, except 601 */
 /* Time base */
-static void spr_read_tbl (void *opaque, int gprn, int sprn)
+static void spr_read_tbl (DisasContext *ctx, int gprn, int sprn)
 {
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_start();
     }
     gen_helper_load_tbl(cpu_gpr[gprn], cpu_env);
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_end();
-        gen_stop_exception(opaque);
+        gen_stop_exception(ctx);
     }
 }
 
-static void spr_read_tbu (void *opaque, int gprn, int sprn)
+static void spr_read_tbu (DisasContext *ctx, int gprn, int sprn)
 {
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_start();
     }
     gen_helper_load_tbu(cpu_gpr[gprn], cpu_env);
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_end();
-        gen_stop_exception(opaque);
+        gen_stop_exception(ctx);
     }
 }
 
 __attribute__ (( unused ))
-static void spr_read_atbl (void *opaque, int gprn, int sprn)
+static void spr_read_atbl (DisasContext *ctx, int gprn, int sprn)
 {
     gen_helper_load_atbl(cpu_gpr[gprn], cpu_env);
 }
 
 __attribute__ (( unused ))
-static void spr_read_atbu (void *opaque, int gprn, int sprn)
+static void spr_read_atbu (DisasContext *ctx, int gprn, int sprn)
 {
     gen_helper_load_atbu(cpu_gpr[gprn], cpu_env);
 }
 
 #if !defined(CONFIG_USER_ONLY)
-static void spr_write_tbl (void *opaque, int sprn, int gprn)
+static void spr_write_tbl (DisasContext *ctx, int sprn, int gprn)
 {
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_start();
     }
     gen_helper_store_tbl(cpu_env, cpu_gpr[gprn]);
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_end();
-        gen_stop_exception(opaque);
+        gen_stop_exception(ctx);
     }
 }
 
-static void spr_write_tbu (void *opaque, int sprn, int gprn)
+static void spr_write_tbu (DisasContext *ctx, int sprn, int gprn)
 {
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_start();
     }
     gen_helper_store_tbu(cpu_env, cpu_gpr[gprn]);
-    if (use_icount) {
+    if (ctx->tb->cflags & CF_USE_ICOUNT) {
         gen_io_end();
-        gen_stop_exception(opaque);
+        gen_stop_exception(ctx);
     }
 }
 
 __attribute__ (( unused ))
-static void spr_write_atbl (void *opaque, int sprn, int gprn)
+static void spr_write_atbl (DisasContext *ctx, int sprn, int gprn)
 {
     gen_helper_store_atbl(cpu_env, cpu_gpr[gprn]);
 }
 
 __attribute__ (( unused ))
-static void spr_write_atbu (void *opaque, int sprn, int gprn)
+static void spr_write_atbu (DisasContext *ctx, int sprn, int gprn)
 {
     gen_helper_store_atbu(cpu_env, cpu_gpr[gprn]);
 }
 
 #if defined(TARGET_PPC64)
 __attribute__ (( unused ))
-static void spr_read_purr (void *opaque, int gprn, int sprn)
+static void spr_read_purr (DisasContext *ctx, int gprn, int sprn)
 {
     gen_helper_load_purr(cpu_gpr[gprn], cpu_env);
 }
@@ -298,38 +298,38 @@ static void spr_read_purr (void *opaque, int gprn, int sprn)
 #if !defined(CONFIG_USER_ONLY)
 /* IBAT0U...IBAT0U */
 /* IBAT0L...IBAT7L */
-static void spr_read_ibat (void *opaque, int gprn, int sprn)
+static void spr_read_ibat (DisasContext *ctx, int gprn, int sprn)
 {
     tcg_gen_ld_tl(cpu_gpr[gprn], cpu_env, offsetof(CPUPPCState, IBAT[sprn & 1][(sprn - SPR_IBAT0U) / 2]));
 }
 
-static void spr_read_ibat_h (void *opaque, int gprn, int sprn)
+static void spr_read_ibat_h (DisasContext *ctx, int gprn, int sprn)
 {
-    tcg_gen_ld_tl(cpu_gpr[gprn], cpu_env, offsetof(CPUPPCState, IBAT[sprn & 1][(sprn - SPR_IBAT4U) / 2]));
+    tcg_gen_ld_tl(cpu_gpr[gprn], cpu_env, offsetof(CPUPPCState, IBAT[sprn & 1][((sprn - SPR_IBAT4U) / 2) + 4]));
 }
 
-static void spr_write_ibatu (void *opaque, int sprn, int gprn)
+static void spr_write_ibatu (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32((sprn - SPR_IBAT0U) / 2);
     gen_helper_store_ibatu(cpu_env, t0, cpu_gpr[gprn]);
     tcg_temp_free_i32(t0);
 }
 
-static void spr_write_ibatu_h (void *opaque, int sprn, int gprn)
+static void spr_write_ibatu_h (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32(((sprn - SPR_IBAT4U) / 2) + 4);
     gen_helper_store_ibatu(cpu_env, t0, cpu_gpr[gprn]);
     tcg_temp_free_i32(t0);
 }
 
-static void spr_write_ibatl (void *opaque, int sprn, int gprn)
+static void spr_write_ibatl (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32((sprn - SPR_IBAT0L) / 2);
     gen_helper_store_ibatl(cpu_env, t0, cpu_gpr[gprn]);
     tcg_temp_free_i32(t0);
 }
 
-static void spr_write_ibatl_h (void *opaque, int sprn, int gprn)
+static void spr_write_ibatl_h (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32(((sprn - SPR_IBAT4L) / 2) + 4);
     gen_helper_store_ibatl(cpu_env, t0, cpu_gpr[gprn]);
@@ -338,38 +338,38 @@ static void spr_write_ibatl_h (void *opaque, int sprn, int gprn)
 
 /* DBAT0U...DBAT7U */
 /* DBAT0L...DBAT7L */
-static void spr_read_dbat (void *opaque, int gprn, int sprn)
+static void spr_read_dbat (DisasContext *ctx, int gprn, int sprn)
 {
     tcg_gen_ld_tl(cpu_gpr[gprn], cpu_env, offsetof(CPUPPCState, DBAT[sprn & 1][(sprn - SPR_DBAT0U) / 2]));
 }
 
-static void spr_read_dbat_h (void *opaque, int gprn, int sprn)
+static void spr_read_dbat_h (DisasContext *ctx, int gprn, int sprn)
 {
     tcg_gen_ld_tl(cpu_gpr[gprn], cpu_env, offsetof(CPUPPCState, DBAT[sprn & 1][((sprn - SPR_DBAT4U) / 2) + 4]));
 }
 
-static void spr_write_dbatu (void *opaque, int sprn, int gprn)
+static void spr_write_dbatu (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32((sprn - SPR_DBAT0U) / 2);
     gen_helper_store_dbatu(cpu_env, t0, cpu_gpr[gprn]);
     tcg_temp_free_i32(t0);
 }
 
-static void spr_write_dbatu_h (void *opaque, int sprn, int gprn)
+static void spr_write_dbatu_h (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32(((sprn - SPR_DBAT4U) / 2) + 4);
     gen_helper_store_dbatu(cpu_env, t0, cpu_gpr[gprn]);
     tcg_temp_free_i32(t0);
 }
 
-static void spr_write_dbatl (void *opaque, int sprn, int gprn)
+static void spr_write_dbatl (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32((sprn - SPR_DBAT0L) / 2);
     gen_helper_store_dbatl(cpu_env, t0, cpu_gpr[gprn]);
     tcg_temp_free_i32(t0);
 }
 
-static void spr_write_dbatl_h (void *opaque, int sprn, int gprn)
+static void spr_write_dbatl_h (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32(((sprn - SPR_DBAT4L) / 2) + 4);
     gen_helper_store_dbatl(cpu_env, t0, cpu_gpr[gprn]);
@@ -377,19 +377,19 @@ static void spr_write_dbatl_h (void *opaque, int sprn, int gprn)
 }
 
 /* SDR1 */
-static void spr_write_sdr1 (void *opaque, int sprn, int gprn)
+static void spr_write_sdr1 (DisasContext *ctx, int sprn, int gprn)
 {
     gen_helper_store_sdr1(cpu_env, cpu_gpr[gprn]);
 }
 
 /* 64 bits PowerPC specific SPRs */
 #if defined(TARGET_PPC64)
-static void spr_read_hior (void *opaque, int gprn, int sprn)
+static void spr_read_hior (DisasContext *ctx, int gprn, int sprn)
 {
     tcg_gen_ld_tl(cpu_gpr[gprn], cpu_env, offsetof(CPUPPCState, excp_prefix));
 }
 
-static void spr_write_hior (void *opaque, int sprn, int gprn)
+static void spr_write_hior (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv t0 = tcg_temp_new();
     tcg_gen_andi_tl(t0, cpu_gpr[gprn], 0x3FFFFF00000ULL);
@@ -401,31 +401,29 @@ static void spr_write_hior (void *opaque, int sprn, int gprn)
 
 /* PowerPC 601 specific registers */
 /* RTC */
-static void spr_read_601_rtcl (void *opaque, int gprn, int sprn)
+static void spr_read_601_rtcl (DisasContext *ctx, int gprn, int sprn)
 {
     gen_helper_load_601_rtcl(cpu_gpr[gprn], cpu_env);
 }
 
-static void spr_read_601_rtcu (void *opaque, int gprn, int sprn)
+static void spr_read_601_rtcu (DisasContext *ctx, int gprn, int sprn)
 {
     gen_helper_load_601_rtcu(cpu_gpr[gprn], cpu_env);
 }
 
 #if !defined(CONFIG_USER_ONLY)
-static void spr_write_601_rtcu (void *opaque, int sprn, int gprn)
+static void spr_write_601_rtcu (DisasContext *ctx, int sprn, int gprn)
 {
     gen_helper_store_601_rtcu(cpu_env, cpu_gpr[gprn]);
 }
 
-static void spr_write_601_rtcl (void *opaque, int sprn, int gprn)
+static void spr_write_601_rtcl (DisasContext *ctx, int sprn, int gprn)
 {
     gen_helper_store_601_rtcl(cpu_env, cpu_gpr[gprn]);
 }
 
-static void spr_write_hid0_601 (void *opaque, int sprn, int gprn)
+static void spr_write_hid0_601 (DisasContext *ctx, int sprn, int gprn)
 {
-    DisasContext *ctx = opaque;
-
     gen_helper_store_hid0_601(cpu_env, cpu_gpr[gprn]);
     /* Must stop the translation as endianness may have changed */
     gen_stop_exception(ctx);
@@ -434,19 +432,19 @@ static void spr_write_hid0_601 (void *opaque, int sprn, int gprn)
 
 /* Unified bats */
 #if !defined(CONFIG_USER_ONLY)
-static void spr_read_601_ubat (void *opaque, int gprn, int sprn)
+static void spr_read_601_ubat (DisasContext *ctx, int gprn, int sprn)
 {
     tcg_gen_ld_tl(cpu_gpr[gprn], cpu_env, offsetof(CPUPPCState, IBAT[sprn & 1][(sprn - SPR_IBAT0U) / 2]));
 }
 
-static void spr_write_601_ubatu (void *opaque, int sprn, int gprn)
+static void spr_write_601_ubatu (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32((sprn - SPR_IBAT0U) / 2);
     gen_helper_store_601_batl(cpu_env, t0, cpu_gpr[gprn]);
     tcg_temp_free_i32(t0);
 }
 
-static void spr_write_601_ubatl (void *opaque, int sprn, int gprn)
+static void spr_write_601_ubatl (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32((sprn - SPR_IBAT0U) / 2);
     gen_helper_store_601_batu(cpu_env, t0, cpu_gpr[gprn]);
@@ -456,36 +454,34 @@ static void spr_write_601_ubatl (void *opaque, int sprn, int gprn)
 
 /* PowerPC 40x specific registers */
 #if !defined(CONFIG_USER_ONLY)
-static void spr_read_40x_pit (void *opaque, int gprn, int sprn)
+static void spr_read_40x_pit (DisasContext *ctx, int gprn, int sprn)
 {
     gen_helper_load_40x_pit(cpu_gpr[gprn], cpu_env);
 }
 
-static void spr_write_40x_pit (void *opaque, int sprn, int gprn)
+static void spr_write_40x_pit (DisasContext *ctx, int sprn, int gprn)
 {
     gen_helper_store_40x_pit(cpu_env, cpu_gpr[gprn]);
 }
 
-static void spr_write_40x_dbcr0 (void *opaque, int sprn, int gprn)
+static void spr_write_40x_dbcr0 (DisasContext *ctx, int sprn, int gprn)
 {
-    DisasContext *ctx = opaque;
-
     gen_helper_store_40x_dbcr0(cpu_env, cpu_gpr[gprn]);
     /* We must stop translation as we may have rebooted */
     gen_stop_exception(ctx);
 }
 
-static void spr_write_40x_sler (void *opaque, int sprn, int gprn)
+static void spr_write_40x_sler (DisasContext *ctx, int sprn, int gprn)
 {
     gen_helper_store_40x_sler(cpu_env, cpu_gpr[gprn]);
 }
 
-static void spr_write_booke_tcr (void *opaque, int sprn, int gprn)
+static void spr_write_booke_tcr (DisasContext *ctx, int sprn, int gprn)
 {
     gen_helper_store_booke_tcr(cpu_env, cpu_gpr[gprn]);
 }
 
-static void spr_write_booke_tsr (void *opaque, int sprn, int gprn)
+static void spr_write_booke_tsr (DisasContext *ctx, int sprn, int gprn)
 {
     gen_helper_store_booke_tsr(cpu_env, cpu_gpr[gprn]);
 }
@@ -494,19 +490,19 @@ static void spr_write_booke_tsr (void *opaque, int sprn, int gprn)
 /* PowerPC 403 specific registers */
 /* PBL1 / PBU1 / PBL2 / PBU2 */
 #if !defined(CONFIG_USER_ONLY)
-static void spr_read_403_pbr (void *opaque, int gprn, int sprn)
+static void spr_read_403_pbr (DisasContext *ctx, int gprn, int sprn)
 {
     tcg_gen_ld_tl(cpu_gpr[gprn], cpu_env, offsetof(CPUPPCState, pb[sprn - SPR_403_PBL1]));
 }
 
-static void spr_write_403_pbr (void *opaque, int sprn, int gprn)
+static void spr_write_403_pbr (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32(sprn - SPR_403_PBL1);
     gen_helper_store_403_pbr(cpu_env, t0, cpu_gpr[gprn]);
     tcg_temp_free_i32(t0);
 }
 
-static void spr_write_pir (void *opaque, int sprn, int gprn)
+static void spr_write_pir (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv t0 = tcg_temp_new();
     tcg_gen_andi_tl(t0, cpu_gpr[gprn], 0xF);
@@ -516,7 +512,7 @@ static void spr_write_pir (void *opaque, int sprn, int gprn)
 #endif
 
 /* SPE specific registers */
-static void spr_read_spefscr (void *opaque, int gprn, int sprn)
+static void spr_read_spefscr (DisasContext *ctx, int gprn, int sprn)
 {
     TCGv_i32 t0 = tcg_temp_new_i32();
     tcg_gen_ld_i32(t0, cpu_env, offsetof(CPUPPCState, spe_fscr));
@@ -524,7 +520,7 @@ static void spr_read_spefscr (void *opaque, int gprn, int sprn)
     tcg_temp_free_i32(t0);
 }
 
-static void spr_write_spefscr (void *opaque, int sprn, int gprn)
+static void spr_write_spefscr (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_temp_new_i32();
     tcg_gen_trunc_tl_i32(t0, cpu_gpr[gprn]);
@@ -534,7 +530,7 @@ static void spr_write_spefscr (void *opaque, int sprn, int gprn)
 
 #if !defined(CONFIG_USER_ONLY)
 /* Callback used to write the exception vector base */
-static void spr_write_excp_prefix (void *opaque, int sprn, int gprn)
+static void spr_write_excp_prefix (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv t0 = tcg_temp_new();
     tcg_gen_ld_tl(t0, cpu_env, offsetof(CPUPPCState, ivpr_mask));
@@ -544,9 +540,8 @@ static void spr_write_excp_prefix (void *opaque, int sprn, int gprn)
     tcg_temp_free(t0);
 }
 
-static void spr_write_excp_vector (void *opaque, int sprn, int gprn)
+static void spr_write_excp_vector (DisasContext *ctx, int sprn, int gprn)
 {
-    DisasContext *ctx = opaque;
     int sprn_offs;
 
     if (sprn >= SPR_BOOKE_IVOR0 && sprn <= SPR_BOOKE_IVOR15) {
@@ -604,12 +599,12 @@ static inline void vscr_init (CPUPPCState *env, uint32_t val)
 
 static inline void _spr_register(CPUPPCState *env, int num,
                                  const char *name,
-                                 void (*uea_read)(void *opaque, int gprn, int sprn),
-                                 void (*uea_write)(void *opaque, int sprn, int gprn),
+                                 void (*uea_read)(DisasContext *ctx, int gprn, int sprn),
+                                 void (*uea_write)(DisasContext *ctx, int sprn, int gprn),
 #if !defined(CONFIG_USER_ONLY)
 
-                                 void (*oea_read)(void *opaque, int gprn, int sprn),
-                                 void (*oea_write)(void *opaque, int sprn, int gprn),
+                                 void (*oea_read)(DisasContext *ctx, int gprn, int sprn),
+                                 void (*oea_write)(DisasContext *ctx, int sprn, int gprn),
 #endif
 #if defined(CONFIG_KVM)
                                  uint64_t one_reg_id,
@@ -1040,19 +1035,19 @@ static void gen_spr_7xx (CPUPPCState *env)
 
 #ifdef TARGET_PPC64
 #ifndef CONFIG_USER_ONLY
-static void spr_read_uamr (void *opaque, int gprn, int sprn)
+static void spr_read_uamr (DisasContext *ctx, int gprn, int sprn)
 {
     gen_load_spr(cpu_gpr[gprn], SPR_AMR);
     spr_load_dump_spr(SPR_AMR);
 }
 
-static void spr_write_uamr (void *opaque, int sprn, int gprn)
+static void spr_write_uamr (DisasContext *ctx, int sprn, int gprn)
 {
     gen_store_spr(SPR_AMR, cpu_gpr[gprn]);
     spr_store_dump_spr(SPR_AMR);
 }
 
-static void spr_write_uamr_pr (void *opaque, int sprn, int gprn)
+static void spr_write_uamr_pr (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv t0 = tcg_temp_new();
 
@@ -1454,7 +1449,7 @@ static void gen_74xx_soft_tlb (CPUPPCState *env, int nb_tlbs, int nb_ways)
 }
 
 #if !defined(CONFIG_USER_ONLY)
-static void spr_write_e500_l1csr0 (void *opaque, int sprn, int gprn)
+static void spr_write_e500_l1csr0 (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv t0 = tcg_temp_new();
 
@@ -1463,7 +1458,7 @@ static void spr_write_e500_l1csr0 (void *opaque, int sprn, int gprn)
     tcg_temp_free(t0);
 }
 
-static void spr_write_e500_l1csr1(void *opaque, int sprn, int gprn)
+static void spr_write_e500_l1csr1(DisasContext *ctx, int sprn, int gprn)
 {
     TCGv t0 = tcg_temp_new();
 
@@ -1472,12 +1467,12 @@ static void spr_write_e500_l1csr1(void *opaque, int sprn, int gprn)
     tcg_temp_free(t0);
 }
 
-static void spr_write_booke206_mmucsr0 (void *opaque, int sprn, int gprn)
+static void spr_write_booke206_mmucsr0 (DisasContext *ctx, int sprn, int gprn)
 {
     gen_helper_booke206_tlbflush(cpu_env, cpu_gpr[gprn]);
 }
 
-static void spr_write_booke_pid (void *opaque, int sprn, int gprn)
+static void spr_write_booke_pid (DisasContext *ctx, int sprn, int gprn)
 {
     TCGv_i32 t0 = tcg_const_i32(sprn);
     gen_helper_booke_setpid(cpu_env, t0, cpu_gpr[gprn]);
@@ -1693,7 +1688,7 @@ static void gen_spr_BookE206(CPUPPCState *env, uint32_t mas_mask,
     /* TLB assist registers */
     /* XXX : not implemented */
     for (i = 0; i < 8; i++) {
-        void (*uea_write)(void *o, int sprn, int gprn) = &spr_write_generic32;
+        void (*uea_write)(DisasContext *ctx, int sprn, int gprn) = &spr_write_generic32;
         if (i == 2 && (mas_mask & (1 << i)) && (env->insns_flags & PPC_64B)) {
             uea_write = &spr_write_generic;
         }
@@ -2786,7 +2781,7 @@ static void init_excp_BookE (CPUPPCState *env)
     env->excp_vectors[POWERPC_EXCP_DTLB]     = 0x00000000;
     env->excp_vectors[POWERPC_EXCP_ITLB]     = 0x00000000;
     env->excp_vectors[POWERPC_EXCP_DEBUG]    = 0x00000000;
-    env->ivor_mask = 0x0000FFE0UL;
+    env->ivor_mask = 0x0000FFF0UL;
     env->ivpr_mask = 0xFFFF0000UL;
     /* Hardware reset vector */
     env->hreset_vector = 0xFFFFFFFCUL;
@@ -3923,6 +3918,44 @@ POWERPC_FAMILY(440x5)(ObjectClass *oc, void *data)
                  POWERPC_FLAG_DE | POWERPC_FLAG_BUS_CLK;
 }
 
+POWERPC_FAMILY(440x5wDFPU)(ObjectClass *oc, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(oc);
+    PowerPCCPUClass *pcc = POWERPC_CPU_CLASS(oc);
+
+    dc->desc = "PowerPC 440x5 with double precision FPU";
+    pcc->init_proc = init_proc_440x5;
+    pcc->check_pow = check_pow_nocheck;
+    pcc->insns_flags = PPC_INSNS_BASE | PPC_STRING |
+                       PPC_FLOAT | PPC_FLOAT_FSQRT |
+                       PPC_FLOAT_STFIWX |
+                       PPC_DCR | PPC_WRTEE | PPC_RFMCI |
+                       PPC_CACHE | PPC_CACHE_ICBI |
+                       PPC_CACHE_DCBZ | PPC_CACHE_DCBA |
+                       PPC_MEM_TLBSYNC | PPC_MFTB |
+                       PPC_BOOKE | PPC_4xx_COMMON | PPC_405_MAC |
+                       PPC_440_SPEC;
+    pcc->insns_flags2 = PPC2_FP_CVT_S64;
+    pcc->msr_mask = (1ull << MSR_POW) |
+                    (1ull << MSR_CE) |
+                    (1ull << MSR_EE) |
+                    (1ull << MSR_PR) |
+                    (1ull << MSR_FP) |
+                    (1ull << MSR_ME) |
+                    (1ull << MSR_FE0) |
+                    (1ull << MSR_DWE) |
+                    (1ull << MSR_DE) |
+                    (1ull << MSR_FE1) |
+                    (1ull << MSR_IR) |
+                    (1ull << MSR_DR);
+    pcc->mmu_model = POWERPC_MMU_BOOKE;
+    pcc->excp_model = POWERPC_EXCP_BOOKE;
+    pcc->bus_model = PPC_FLAGS_INPUT_BookE;
+    pcc->bfd_mach = bfd_mach_ppc_403;
+    pcc->flags = POWERPC_FLAG_CE | POWERPC_FLAG_DWE |
+                 POWERPC_FLAG_DE | POWERPC_FLAG_BUS_CLK;
+}
+
 static void init_proc_460 (CPUPPCState *env)
 {
     /* Time base */
@@ -4336,32 +4369,6 @@ static void init_proc_G2LE (CPUPPCState *env)
                  SPR_NOACCESS, SPR_NOACCESS,
                  &spr_read_generic, &spr_write_generic,
                  0x00000000);
-    /* Breakpoints */
-    /* XXX : not implemented */
-    spr_register(env, SPR_DABR, "DABR",
-                 SPR_NOACCESS, SPR_NOACCESS,
-                 &spr_read_generic, &spr_write_generic,
-                 0x00000000);
-    /* XXX : not implemented */
-    spr_register(env, SPR_DABR2, "DABR2",
-                 SPR_NOACCESS, SPR_NOACCESS,
-                 &spr_read_generic, &spr_write_generic,
-                 0x00000000);
-    /* XXX : not implemented */
-    spr_register(env, SPR_IABR2, "IABR2",
-                 SPR_NOACCESS, SPR_NOACCESS,
-                 &spr_read_generic, &spr_write_generic,
-                 0x00000000);
-    /* XXX : not implemented */
-    spr_register(env, SPR_IBCR, "IBCR",
-                 SPR_NOACCESS, SPR_NOACCESS,
-                 &spr_read_generic, &spr_write_generic,
-                 0x00000000);
-    /* XXX : not implemented */
-    spr_register(env, SPR_DBCR, "DBCR",
-                 SPR_NOACCESS, SPR_NOACCESS,
-                 &spr_read_generic, &spr_write_generic,
-                 0x00000000);
 
     /* Memory management */
     gen_low_BATs(env);
@@ -4590,6 +4597,32 @@ static void init_proc_e300 (CPUPPCState *env)
                  SPR_NOACCESS, SPR_NOACCESS,
                  &spr_read_generic, &spr_write_generic,
                  0x00000000);
+    /* Breakpoints */
+    /* XXX : not implemented */
+    spr_register(env, SPR_DABR, "DABR",
+                 SPR_NOACCESS, SPR_NOACCESS,
+                 &spr_read_generic, &spr_write_generic,
+                 0x00000000);
+    /* XXX : not implemented */
+    spr_register(env, SPR_DABR2, "DABR2",
+                 SPR_NOACCESS, SPR_NOACCESS,
+                 &spr_read_generic, &spr_write_generic,
+                 0x00000000);
+    /* XXX : not implemented */
+    spr_register(env, SPR_IABR2, "IABR2",
+                 SPR_NOACCESS, SPR_NOACCESS,
+                 &spr_read_generic, &spr_write_generic,
+                 0x00000000);
+    /* XXX : not implemented */
+    spr_register(env, SPR_IBCR, "IBCR",
+                 SPR_NOACCESS, SPR_NOACCESS,
+                 &spr_read_generic, &spr_write_generic,
+                 0x00000000);
+    /* XXX : not implemented */
+    spr_register(env, SPR_DBCR, "DBCR",
+                 SPR_NOACCESS, SPR_NOACCESS,
+                 &spr_read_generic, &spr_write_generic,
+                 0x00000000);
     /* Memory management */
     gen_low_BATs(env);
     gen_high_BATs(env);
@@ -4642,7 +4675,7 @@ POWERPC_FAMILY(e300)(ObjectClass *oc, void *data)
 }
 
 #if !defined(CONFIG_USER_ONLY)
-static void spr_write_mas73(void *opaque, int sprn, int gprn)
+static void spr_write_mas73(DisasContext *ctx, int sprn, int gprn)
 {
     TCGv val = tcg_temp_new();
     tcg_gen_ext32u_tl(val, cpu_gpr[gprn]);
@@ -4652,7 +4685,7 @@ static void spr_write_mas73(void *opaque, int sprn, int gprn)
     tcg_temp_free(val);
 }
 
-static void spr_read_mas73(void *opaque, int gprn, int sprn)
+static void spr_read_mas73(DisasContext *ctx, int gprn, int sprn)
 {
     TCGv mas7 = tcg_temp_new();
     TCGv mas3 = tcg_temp_new();
@@ -5010,7 +5043,8 @@ POWERPC_FAMILY(e5500)(ObjectClass *oc, void *data)
                        PPC_FLOAT_STFIWX | PPC_WAIT |
                        PPC_MEM_TLBSYNC | PPC_TLBIVAX | PPC_MEM_SYNC |
                        PPC_64B | PPC_POPCNTB | PPC_POPCNTWD;
-    pcc->insns_flags2 = PPC2_BOOKE206 | PPC2_PRCNTL | PPC2_PERM_ISA206;
+    pcc->insns_flags2 = PPC2_BOOKE206 | PPC2_PRCNTL | PPC2_PERM_ISA206 | \
+                        PPC2_FP_CVT_S64;
     pcc->msr_mask = (1ull << MSR_CM) |
                     (1ull << MSR_GS) |
                     (1ull << MSR_UCLE) |
@@ -7283,14 +7317,14 @@ enum BOOK3S_CPU_TYPE {
     BOOK3S_CPU_POWER8
 };
 
-static void gen_fscr_facility_check(void *opaque, int facility_sprn, int bit,
-                                    int sprn, int cause)
+static void gen_fscr_facility_check(DisasContext *ctx, int facility_sprn,
+                                    int bit, int sprn, int cause)
 {
     TCGv_i32 t1 = tcg_const_i32(bit);
     TCGv_i32 t2 = tcg_const_i32(sprn);
     TCGv_i32 t3 = tcg_const_i32(cause);
 
-    gen_update_current_nip(opaque);
+    gen_update_current_nip(ctx);
     gen_helper_fscr_facility_check(cpu_env, t1, t2, t3);
 
     tcg_temp_free_i32(t3);
@@ -7298,14 +7332,14 @@ static void gen_fscr_facility_check(void *opaque, int facility_sprn, int bit,
     tcg_temp_free_i32(t1);
 }
 
-static void gen_msr_facility_check(void *opaque, int facility_sprn, int bit,
-                                   int sprn, int cause)
+static void gen_msr_facility_check(DisasContext *ctx, int facility_sprn,
+                                   int bit, int sprn, int cause)
 {
     TCGv_i32 t1 = tcg_const_i32(bit);
     TCGv_i32 t2 = tcg_const_i32(sprn);
     TCGv_i32 t3 = tcg_const_i32(cause);
 
-    gen_update_current_nip(opaque);
+    gen_update_current_nip(ctx);
     gen_helper_msr_facility_check(cpu_env, t1, t2, t3);
 
     tcg_temp_free_i32(t3);
@@ -7313,7 +7347,7 @@ static void gen_msr_facility_check(void *opaque, int facility_sprn, int bit,
     tcg_temp_free_i32(t1);
 }
 
-static void spr_read_prev_upper32(void *opaque, int gprn, int sprn)
+static void spr_read_prev_upper32(DisasContext *ctx, int gprn, int sprn)
 {
     TCGv spr_up = tcg_temp_new();
     TCGv spr = tcg_temp_new();
@@ -7326,7 +7360,7 @@ static void spr_read_prev_upper32(void *opaque, int gprn, int sprn)
     tcg_temp_free(spr_up);
 }
 
-static void spr_write_prev_upper32(void *opaque, int sprn, int gprn)
+static void spr_write_prev_upper32(DisasContext *ctx, int sprn, int gprn)
 {
     TCGv spr = tcg_temp_new();
 
@@ -7665,16 +7699,16 @@ static void gen_spr_power6_common(CPUPPCState *env)
                  0x00000000);
 }
 
-static void spr_read_tar(void *opaque, int gprn, int sprn)
+static void spr_read_tar(DisasContext *ctx, int gprn, int sprn)
 {
-    gen_fscr_facility_check(opaque, SPR_FSCR, FSCR_TAR, sprn, FSCR_IC_TAR);
-    spr_read_generic(opaque, gprn, sprn);
+    gen_fscr_facility_check(ctx, SPR_FSCR, FSCR_TAR, sprn, FSCR_IC_TAR);
+    spr_read_generic(ctx, gprn, sprn);
 }
 
-static void spr_write_tar(void *opaque, int sprn, int gprn)
+static void spr_write_tar(DisasContext *ctx, int sprn, int gprn)
 {
-    gen_fscr_facility_check(opaque, SPR_FSCR, FSCR_TAR, sprn, FSCR_IC_TAR);
-    spr_write_generic(opaque, sprn, gprn);
+    gen_fscr_facility_check(ctx, SPR_FSCR, FSCR_TAR, sprn, FSCR_IC_TAR);
+    spr_write_generic(ctx, sprn, gprn);
 }
 
 static void gen_spr_power8_tce_address_control(CPUPPCState *env)
@@ -7685,28 +7719,28 @@ static void gen_spr_power8_tce_address_control(CPUPPCState *env)
                  0x00000000);
 }
 
-static void spr_read_tm(void *opaque, int gprn, int sprn)
+static void spr_read_tm(DisasContext *ctx, int gprn, int sprn)
 {
-    gen_msr_facility_check(opaque, SPR_FSCR, MSR_TM, sprn, FSCR_IC_TM);
-    spr_read_generic(opaque, gprn, sprn);
+    gen_msr_facility_check(ctx, SPR_FSCR, MSR_TM, sprn, FSCR_IC_TM);
+    spr_read_generic(ctx, gprn, sprn);
 }
 
-static void spr_write_tm(void *opaque, int sprn, int gprn)
+static void spr_write_tm(DisasContext *ctx, int sprn, int gprn)
 {
-    gen_msr_facility_check(opaque, SPR_FSCR, MSR_TM, sprn, FSCR_IC_TM);
-    spr_write_generic(opaque, sprn, gprn);
+    gen_msr_facility_check(ctx, SPR_FSCR, MSR_TM, sprn, FSCR_IC_TM);
+    spr_write_generic(ctx, sprn, gprn);
 }
 
-static void spr_read_tm_upper32(void *opaque, int gprn, int sprn)
+static void spr_read_tm_upper32(DisasContext *ctx, int gprn, int sprn)
 {
-    gen_msr_facility_check(opaque, SPR_FSCR, MSR_TM, sprn, FSCR_IC_TM);
-    spr_read_prev_upper32(opaque, gprn, sprn);
+    gen_msr_facility_check(ctx, SPR_FSCR, MSR_TM, sprn, FSCR_IC_TM);
+    spr_read_prev_upper32(ctx, gprn, sprn);
 }
 
-static void spr_write_tm_upper32(void *opaque, int sprn, int gprn)
+static void spr_write_tm_upper32(DisasContext *ctx, int sprn, int gprn)
 {
-    gen_msr_facility_check(opaque, SPR_FSCR, MSR_TM, sprn, FSCR_IC_TM);
-    spr_write_prev_upper32(opaque, sprn, gprn);
+    gen_msr_facility_check(ctx, SPR_FSCR, MSR_TM, sprn, FSCR_IC_TM);
+    spr_write_prev_upper32(ctx, sprn, gprn);
 }
 
 static void gen_spr_power8_tm(CPUPPCState *env)
@@ -7729,28 +7763,28 @@ static void gen_spr_power8_tm(CPUPPCState *env)
                  0x00000000);
 }
 
-static void spr_read_ebb(void *opaque, int gprn, int sprn)
+static void spr_read_ebb(DisasContext *ctx, int gprn, int sprn)
 {
-    gen_fscr_facility_check(opaque, SPR_FSCR, FSCR_EBB, sprn, FSCR_IC_EBB);
-    spr_read_generic(opaque, gprn, sprn);
+    gen_fscr_facility_check(ctx, SPR_FSCR, FSCR_EBB, sprn, FSCR_IC_EBB);
+    spr_read_generic(ctx, gprn, sprn);
 }
 
-static void spr_write_ebb(void *opaque, int sprn, int gprn)
+static void spr_write_ebb(DisasContext *ctx, int sprn, int gprn)
 {
-    gen_fscr_facility_check(opaque, SPR_FSCR, FSCR_EBB, sprn, FSCR_IC_EBB);
-    spr_write_generic(opaque, sprn, gprn);
+    gen_fscr_facility_check(ctx, SPR_FSCR, FSCR_EBB, sprn, FSCR_IC_EBB);
+    spr_write_generic(ctx, sprn, gprn);
 }
 
-static void spr_read_ebb_upper32(void *opaque, int gprn, int sprn)
+static void spr_read_ebb_upper32(DisasContext *ctx, int gprn, int sprn)
 {
-    gen_fscr_facility_check(opaque, SPR_FSCR, FSCR_EBB, sprn, FSCR_IC_EBB);
-    spr_read_prev_upper32(opaque, gprn, sprn);
+    gen_fscr_facility_check(ctx, SPR_FSCR, FSCR_EBB, sprn, FSCR_IC_EBB);
+    spr_read_prev_upper32(ctx, gprn, sprn);
 }
 
-static void spr_write_ebb_upper32(void *opaque, int sprn, int gprn)
+static void spr_write_ebb_upper32(DisasContext *ctx, int sprn, int gprn)
 {
-    gen_fscr_facility_check(opaque, SPR_FSCR, FSCR_EBB, sprn, FSCR_IC_EBB);
-    spr_write_prev_upper32(opaque, sprn, gprn);
+    gen_fscr_facility_check(ctx, SPR_FSCR, FSCR_EBB, sprn, FSCR_IC_EBB);
+    spr_write_prev_upper32(ctx, sprn, gprn);
 }
 
 static void gen_spr_power8_ebb(CPUPPCState *env)
@@ -7783,6 +7817,15 @@ static void gen_spr_power8_ebb(CPUPPCState *env)
                      &spr_read_ebb, &spr_write_ebb,
                      &spr_read_generic, &spr_write_generic,
                      KVM_REG_PPC_BESCR, 0x00000000);
+}
+
+/* Virtual Time Base */
+static void gen_spr_vtb(CPUPPCState *env)
+{
+    spr_register(env, SPR_VTB, "VTB",
+                 SPR_NOACCESS, SPR_NOACCESS,
+                 &spr_read_tbl, SPR_NOACCESS,
+                 0x00000000);
 }
 
 static void gen_spr_power8_fscr(CPUPPCState *env)
@@ -7821,6 +7864,7 @@ static void init_proc_book3s_64(CPUPPCState *env, int version)
         gen_spr_book3s_ids(env);
         gen_spr_amr(env);
         gen_spr_book3s_purr(env);
+        env->ci_large_pages = true;
         break;
     default:
         g_assert_not_reached();
@@ -7847,6 +7891,7 @@ static void init_proc_book3s_64(CPUPPCState *env, int version)
         gen_spr_power8_pmu_sup(env);
         gen_spr_power8_pmu_user(env);
         gen_spr_power8_tm(env);
+        gen_spr_vtb(env);
     }
     if (version < BOOK3S_CPU_POWER8) {
         gen_spr_book3s_dbg(env);
@@ -7906,6 +7951,7 @@ POWERPC_FAMILY(970)(ObjectClass *oc, void *data)
                        PPC_MEM_TLBIE | PPC_MEM_TLBSYNC |
                        PPC_64B | PPC_ALTIVEC |
                        PPC_SEGMENT_64B | PPC_SLBI;
+    pcc->insns_flags2 = PPC2_FP_CVT_S64;
     pcc->msr_mask = (1ull << MSR_SF) |
                     (1ull << MSR_VR) |
                     (1ull << MSR_POW) |
@@ -7958,6 +8004,7 @@ POWERPC_FAMILY(POWER5P)(ObjectClass *oc, void *data)
                        PPC_MEM_TLBIE | PPC_MEM_TLBSYNC |
                        PPC_64B |
                        PPC_SEGMENT_64B | PPC_SLBI;
+    pcc->insns_flags2 = PPC2_FP_CVT_S64;
     pcc->msr_mask = (1ull << MSR_SF) |
                     (1ull << MSR_VR) |
                     (1ull << MSR_POW) |
@@ -7973,7 +8020,7 @@ POWERPC_FAMILY(POWER5P)(ObjectClass *oc, void *data)
                     (1ull << MSR_DR) |
                     (1ull << MSR_PMM) |
                     (1ull << MSR_RI);
-    pcc->mmu_model = POWERPC_MMU_64B;
+    pcc->mmu_model = POWERPC_MMU_2_03;
 #if defined(CONFIG_SOFTMMU)
     pcc->handle_mmu_fault = ppc_hash64_handle_mmu_fault;
 #endif
@@ -8044,7 +8091,7 @@ static void powerpc_set_compat(Object *obj, Visitor *v,
 
 static PropertyInfo powerpc_compat_propinfo = {
     .name = "str",
-    .legacy_name = "powerpc-server-compat",
+    .description = "compatibility mode, power6/power7/power8",
     .get = powerpc_get_compat,
     .set = powerpc_set_compat,
 };
@@ -8100,7 +8147,7 @@ POWERPC_FAMILY(POWER7)(ObjectClass *oc, void *data)
     pcc->insns_flags2 = PPC2_VSX | PPC2_DFP | PPC2_DBRX | PPC2_ISA205 |
                         PPC2_PERM_ISA206 | PPC2_DIVE_ISA206 |
                         PPC2_ATOMIC_ISA206 | PPC2_FP_CVT_ISA206 |
-                        PPC2_FP_TST_ISA206;
+                        PPC2_FP_TST_ISA206 | PPC2_FP_CVT_S64;
     pcc->msr_mask = (1ull << MSR_SF) |
                     (1ull << MSR_VR) |
                     (1ull << MSR_VSX) |
@@ -8178,7 +8225,8 @@ POWERPC_FAMILY(POWER8)(ObjectClass *oc, void *data)
                         PPC2_ATOMIC_ISA206 | PPC2_FP_CVT_ISA206 |
                         PPC2_FP_TST_ISA206 | PPC2_BCTAR_ISA207 |
                         PPC2_LSQ_ISA207 | PPC2_ALTIVEC_207 |
-                        PPC2_ISA205 | PPC2_ISA207S;
+                        PPC2_ISA205 | PPC2_ISA207S | PPC2_FP_CVT_S64 |
+                        PPC2_TM;
     pcc->msr_mask = (1ull << MSR_SF) |
                     (1ull << MSR_TM) |
                     (1ull << MSR_VR) |
@@ -8196,7 +8244,7 @@ POWERPC_FAMILY(POWER8)(ObjectClass *oc, void *data)
                     (1ull << MSR_PMM) |
                     (1ull << MSR_RI) |
                     (1ull << MSR_LE);
-    pcc->mmu_model = POWERPC_MMU_2_06;
+    pcc->mmu_model = POWERPC_MMU_2_07;
 #if defined(CONFIG_SOFTMMU)
     pcc->handle_mmu_fault = ppc_hash64_handle_mmu_fault;
 #endif
@@ -8206,7 +8254,7 @@ POWERPC_FAMILY(POWER8)(ObjectClass *oc, void *data)
     pcc->flags = POWERPC_FLAG_VRE | POWERPC_FLAG_SE |
                  POWERPC_FLAG_BE | POWERPC_FLAG_PMM |
                  POWERPC_FLAG_BUS_CLK | POWERPC_FLAG_CFAR |
-                 POWERPC_FLAG_VSX;
+                 POWERPC_FLAG_VSX | POWERPC_FLAG_TM;
     pcc->l1_dcache_size = 0x8000;
     pcc->l1_icache_size = 0x8000;
     pcc->interrupts_big_endian = ppc_cpu_interrupts_big_endian_lpcr;
@@ -8432,14 +8480,16 @@ enum {
     PPC_INDIRECT = 1, /* Indirect opcode table */
 };
 
+#define PPC_OPCODE_MASK 0x3
+
 static inline int is_indirect_opcode (void *handler)
 {
-    return ((uintptr_t)handler & 0x03) == PPC_INDIRECT;
+    return ((uintptr_t)handler & PPC_OPCODE_MASK) == PPC_INDIRECT;
 }
 
 static inline opc_handler_t **ind_table(void *handler)
 {
-    return (opc_handler_t **)((uintptr_t)handler & ~3);
+    return (opc_handler_t **)((uintptr_t)handler & ~PPC_OPCODE_MASK);
 }
 
 /* Instruction table creation */
@@ -8456,8 +8506,8 @@ static int create_new_table (opc_handler_t **table, unsigned char idx)
 {
     opc_handler_t **tmp;
 
-    tmp = g_new(opc_handler_t *, 0x20);
-    fill_new_table(tmp, 0x20);
+    tmp = g_new(opc_handler_t *, PPC_CPU_INDIRECT_OPCODES_LEN);
+    fill_new_table(tmp, PPC_CPU_INDIRECT_OPCODES_LEN);
     table[idx] = (opc_handler_t *)((uintptr_t)tmp | PPC_INDIRECT);
 
     return 0;
@@ -8528,11 +8578,7 @@ static int register_ind_insn (opc_handler_t **ppc_opcodes,
                               unsigned char idx1, unsigned char idx2,
                               opc_handler_t *handler)
 {
-    int ret;
-
-    ret = register_ind_in_table(ppc_opcodes, idx1, idx2, handler);
-
-    return ret;
+    return register_ind_in_table(ppc_opcodes, idx1, idx2, handler);
 }
 
 static int register_dblind_insn (opc_handler_t **ppc_opcodes,
@@ -8584,7 +8630,8 @@ static int test_opcode_table (opc_handler_t **table, int len)
             table[i] = &invalid_handler;
         if (table[i] != &invalid_handler) {
             if (is_indirect_opcode(table[i])) {
-                tmp = test_opcode_table(ind_table(table[i]), 0x20);
+                tmp = test_opcode_table(ind_table(table[i]),
+                    PPC_CPU_INDIRECT_OPCODES_LEN);
                 if (tmp == 0) {
                     free(table[i]);
                     table[i] = &invalid_handler;
@@ -8602,7 +8649,7 @@ static int test_opcode_table (opc_handler_t **table, int len)
 
 static void fix_opcode_tables (opc_handler_t **ppc_opcodes)
 {
-    if (test_opcode_table(ppc_opcodes, 0x40) == 0)
+    if (test_opcode_table(ppc_opcodes, PPC_CPU_OPCODES_LEN) == 0)
         printf("*** WARNING: no opcode defined !\n");
 }
 
@@ -8613,7 +8660,7 @@ static void create_ppc_opcodes(PowerPCCPU *cpu, Error **errp)
     CPUPPCState *env = &cpu->env;
     opcode_t *opc;
 
-    fill_new_table(env->opcodes, 0x40);
+    fill_new_table(env->opcodes, PPC_CPU_OPCODES_LEN);
     for (opc = opcodes; opc < &opcodes[ARRAY_SIZE(opcodes)]; opc++) {
         if (((opc->handler.type & pcc->insns_flags) != 0) ||
             ((opc->handler.type2 & pcc->insns_flags2) != 0)) {
@@ -8639,12 +8686,12 @@ static void dump_ppc_insns (CPUPPCState *env)
 
     printf("Instructions set:\n");
     /* opc1 is 6 bits long */
-    for (opc1 = 0x00; opc1 < 0x40; opc1++) {
+    for (opc1 = 0x00; opc1 < PPC_CPU_OPCODES_LEN; opc1++) {
         table = env->opcodes;
         handler = table[opc1];
         if (is_indirect_opcode(handler)) {
             /* opc2 is 5 bits long */
-            for (opc2 = 0; opc2 < 0x20; opc2++) {
+            for (opc2 = 0; opc2 < PPC_CPU_INDIRECT_OPCODES_LEN; opc2++) {
                 table = env->opcodes;
                 handler = env->opcodes[opc1];
                 table = ind_table(handler);
@@ -8652,7 +8699,8 @@ static void dump_ppc_insns (CPUPPCState *env)
                 if (is_indirect_opcode(handler)) {
                     table = ind_table(handler);
                     /* opc3 is 5 bits long */
-                    for (opc3 = 0; opc3 < 0x20; opc3++) {
+                    for (opc3 = 0; opc3 < PPC_CPU_INDIRECT_OPCODES_LEN;
+                            opc3++) {
                         handler = table[opc3];
                         if (handler->handler != &gen_invalid) {
                             /* Special hack to properly dump SPE insns */
@@ -8876,7 +8924,15 @@ static void ppc_cpu_realizefn(DeviceState *dev, Error **errp)
                    smp_threads, kvm_enabled() ? "KVM" : "TCG");
         return;
     }
+#endif
 
+    cpu_exec_init(cs, &local_err);
+    if (local_err != NULL) {
+        error_propagate(errp, local_err);
+        return;
+    }
+
+#if !defined(CONFIG_USER_ONLY)
     cpu->cpu_dt_id = (cs->cpu_index / smp_threads) * max_smt
         + (cs->cpu_index % smp_threads);
 #endif
@@ -9087,11 +9143,26 @@ static void ppc_cpu_unrealizefn(DeviceState *dev, Error **errp)
 {
     PowerPCCPU *cpu = POWERPC_CPU(dev);
     CPUPPCState *env = &cpu->env;
-    int i;
+    opc_handler_t **table;
+    int i, j;
+
+    cpu_exec_exit(CPU(dev));
 
     for (i = 0; i < PPC_CPU_OPCODES_LEN; i++) {
-        if (env->opcodes[i] != &invalid_handler) {
-            g_free(env->opcodes[i]);
+        if (env->opcodes[i] == &invalid_handler) {
+            continue;
+        }
+        if (is_indirect_opcode(env->opcodes[i])) {
+            table = ind_table(env->opcodes[i]);
+            for (j = 0; j < PPC_CPU_INDIRECT_OPCODES_LEN; j++) {
+                if (table[j] != &invalid_handler &&
+                        is_indirect_opcode(table[j])) {
+                    g_free((opc_handler_t *)((uintptr_t)table[j] &
+                        ~PPC_INDIRECT));
+                }
+            }
+            g_free((opc_handler_t *)((uintptr_t)env->opcodes[i] &
+                ~PPC_INDIRECT));
         }
     }
 }
@@ -9137,7 +9208,7 @@ int ppc_set_compat(PowerPCCPU *cpu, uint32_t cpu_version)
         break;
     }
 
-    if (kvm_enabled() && kvmppc_set_compat(cpu, cpu->max_compat) < 0) {
+    if (kvm_enabled() && kvmppc_set_compat(cpu, cpu->cpu_version) < 0) {
         error_report("Unable to set compatibility mode in KVM");
         ret = -1;
     }
@@ -9276,8 +9347,7 @@ static ObjectClass *ppc_cpu_class_by_name(const char *name)
                 break;
         }
         if (i == 8) {
-            ret = OBJECT_CLASS(ppc_cpu_class_by_pvr(strtoul(name, NULL, 16)));
-            return ret;
+            return OBJECT_CLASS(ppc_cpu_class_by_pvr(strtoul(name, NULL, 16)));
         }
     }
 
@@ -9456,6 +9526,14 @@ static bool ppc_cpu_has_work(CPUState *cs)
     return msr_ee && (cs->interrupt_request & CPU_INTERRUPT_HARD);
 }
 
+static void ppc_cpu_exec_enter(CPUState *cs)
+{
+    PowerPCCPU *cpu = POWERPC_CPU(cs);
+    CPUPPCState *env = &cpu->env;
+
+    env->reserve_addr = -1;
+}
+
 /* CPUClass::reset() */
 static void ppc_cpu_reset(CPUState *s)
 {
@@ -9561,8 +9639,6 @@ static void ppc_cpu_initfn(Object *obj)
     CPUPPCState *env = &cpu->env;
 
     cs->env_ptr = env;
-    cpu_exec_init(env);
-    cpu->cpu_dt_id = cs->cpu_index;
 
     env->msr_mask = pcc->msr_mask;
     env->mmu_model = pcc->mmu_model;
@@ -9623,6 +9699,7 @@ static void ppc_cpu_class_init(ObjectClass *oc, void *data)
     cc->class_by_name = ppc_cpu_class_by_name;
     cc->has_work = ppc_cpu_has_work;
     cc->do_interrupt = ppc_cpu_do_interrupt;
+    cc->cpu_exec_interrupt = ppc_cpu_exec_interrupt;
     cc->dump_state = ppc_cpu_dump_state;
     cc->dump_statistics = ppc_cpu_dump_statistics;
     cc->set_pc = ppc_cpu_set_pc;
@@ -9638,6 +9715,7 @@ static void ppc_cpu_class_init(ObjectClass *oc, void *data)
     cc->write_elf64_qemunote = ppc64_cpu_write_elf64_qemunote;
 #endif
 #endif
+    cc->cpu_exec_enter = ppc_cpu_exec_enter;
 
     cc->gdb_num_core_regs = 71;
 

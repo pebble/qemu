@@ -19,28 +19,11 @@
 #include "cpu.h"
 #include "qemu/host-utils.h"
 #include "exec/helper-proto.h"
-#include "qemu/aes.h"
+#include "crypto/aes.h"
 
 #include "helper_regs.h"
 /*****************************************************************************/
 /* Fixed point operations helpers */
-#if defined(TARGET_PPC64)
-
-uint64_t helper_mulldo(CPUPPCState *env, uint64_t arg1, uint64_t arg2)
-{
-    int64_t th;
-    uint64_t tl;
-
-    muls64(&tl, (uint64_t *)&th, arg1, arg2);
-    /* If th != 0 && th != -1, then we had an overflow */
-    if (likely((uint64_t)(th + 1) <= 1)) {
-        env->ov = 0;
-    } else {
-        env->so = env->ov = 1;
-    }
-    return (int64_t)tl;
-}
-#endif
 
 target_ulong helper_divweu(CPUPPCState *env, target_ulong ra, target_ulong rb,
                            uint32_t oe)
@@ -238,7 +221,7 @@ target_ulong helper_srad(CPUPPCState *env, target_ulong value,
         if (likely((uint64_t)shift != 0)) {
             shift &= 0x3f;
             ret = (int64_t)value >> shift;
-            if (likely(ret >= 0 || (value & ((1 << shift) - 1)) == 0)) {
+            if (likely(ret >= 0 || (value & ((1ULL << shift) - 1)) == 0)) {
                 env->ca = 0;
             } else {
                 env->ca = 1;
@@ -725,7 +708,7 @@ static inline void vcmpbfp_internal(CPUPPCState *env, ppc_avr_t *r,
         int le_rel = float32_compare_quiet(a->f[i], b->f[i], &env->vec_status);
         if (le_rel == float_relation_unordered) {
             r->u32[i] = 0xc0000000;
-            /* ALL_IN does not need to be updated here.  */
+            all_in = 1;
         } else {
             float32 bneg = float32_chs(b->f[i]);
             int ge_rel = float32_compare_quiet(a->f[i], bneg, &env->vec_status);
@@ -1569,13 +1552,6 @@ void helper_vlogefp(CPUPPCState *env, ppc_avr_t *r, ppc_avr_t *b)
     }
 }
 
-#if defined(HOST_WORDS_BIGENDIAN)
-#define LEFT 0
-#define RIGHT 1
-#else
-#define LEFT 1
-#define RIGHT 0
-#endif
 /* The specification says that the results are undefined if all of the
  * shift counts are not identical.  We check to make sure that they are
  * to conform to what real hardware appears to do.  */
@@ -1605,11 +1581,9 @@ void helper_vlogefp(CPUPPCState *env, ppc_avr_t *r, ppc_avr_t *b)
             }                                                           \
         }                                                               \
     }
-VSHIFT(l, LEFT)
-VSHIFT(r, RIGHT)
+VSHIFT(l, 1)
+VSHIFT(r, 0)
 #undef VSHIFT
-#undef LEFT
-#undef RIGHT
 
 #define VSL(suffix, element, mask)                                      \
     void helper_vsl##suffix(ppc_avr_t *r, ppc_avr_t *a, ppc_avr_t *b)   \
@@ -2303,25 +2277,25 @@ uint32_t helper_bcdadd(ppc_avr_t *r,  ppc_avr_t *a, ppc_avr_t *b, uint32_t ps)
         if (sgna == sgnb) {
             result.u8[BCD_DIG_BYTE(0)] = bcd_preferred_sgn(sgna, ps);
             zero = bcd_add_mag(&result, a, b, &invalid, &overflow);
-            cr = (sgna > 0) ? 4 : 8;
+            cr = (sgna > 0) ? 1 << CRF_GT : 1 << CRF_LT;
         } else if (bcd_cmp_mag(a, b) > 0) {
             result.u8[BCD_DIG_BYTE(0)] = bcd_preferred_sgn(sgna, ps);
             zero = bcd_sub_mag(&result, a, b, &invalid, &overflow);
-            cr = (sgna > 0) ? 4 : 8;
+            cr = (sgna > 0) ? 1 << CRF_GT : 1 << CRF_LT;
         } else {
             result.u8[BCD_DIG_BYTE(0)] = bcd_preferred_sgn(sgnb, ps);
             zero = bcd_sub_mag(&result, b, a, &invalid, &overflow);
-            cr = (sgnb > 0) ? 4 : 8;
+            cr = (sgnb > 0) ? 1 << CRF_GT : 1 << CRF_LT;
         }
     }
 
     if (unlikely(invalid)) {
         result.u64[HI_IDX] = result.u64[LO_IDX] = -1;
-        cr = 1;
+        cr = 1 << CRF_SO;
     } else if (overflow) {
-        cr |= 1;
+        cr |= 1 << CRF_SO;
     } else if (zero) {
-        cr = 2;
+        cr = 1 << CRF_EQ;
     }
 
     *r = result;
@@ -2353,24 +2327,28 @@ void helper_vsbox(ppc_avr_t *r, ppc_avr_t *a)
 
 void helper_vcipher(ppc_avr_t *r, ppc_avr_t *a, ppc_avr_t *b)
 {
+    ppc_avr_t result;
     int i;
 
     VECTOR_FOR_INORDER_I(i, u32) {
-        r->AVRW(i) = b->AVRW(i) ^
+        result.AVRW(i) = b->AVRW(i) ^
             (AES_Te0[a->AVRB(AES_shifts[4*i + 0])] ^
              AES_Te1[a->AVRB(AES_shifts[4*i + 1])] ^
              AES_Te2[a->AVRB(AES_shifts[4*i + 2])] ^
              AES_Te3[a->AVRB(AES_shifts[4*i + 3])]);
     }
+    *r = result;
 }
 
 void helper_vcipherlast(ppc_avr_t *r, ppc_avr_t *a, ppc_avr_t *b)
 {
+    ppc_avr_t result;
     int i;
 
     VECTOR_FOR_INORDER_I(i, u8) {
-        r->AVRB(i) = b->AVRB(i) ^ (AES_Te4[a->AVRB(AES_shifts[i])] & 0xFF);
+        result.AVRB(i) = b->AVRB(i) ^ (AES_sbox[a->AVRB(AES_shifts[i])]);
     }
+    *r = result;
 }
 
 void helper_vncipher(ppc_avr_t *r, ppc_avr_t *a, ppc_avr_t *b)
@@ -2395,11 +2373,13 @@ void helper_vncipher(ppc_avr_t *r, ppc_avr_t *a, ppc_avr_t *b)
 
 void helper_vncipherlast(ppc_avr_t *r, ppc_avr_t *a, ppc_avr_t *b)
 {
+    ppc_avr_t result;
     int i;
 
     VECTOR_FOR_INORDER_I(i, u8) {
-        r->AVRB(i) = b->AVRB(i) ^ (AES_Td4[a->AVRB(AES_ishifts[i])] & 0xFF);
+        result.AVRB(i) = b->AVRB(i) ^ (AES_isbox[a->AVRB(AES_ishifts[i])]);
     }
+    *r = result;
 }
 
 #define ROTRu32(v, n) (((v) >> (n)) | ((v) << (32-n)))
@@ -2486,16 +2466,19 @@ void helper_vshasigmad(ppc_avr_t *r,  ppc_avr_t *a, uint32_t st_six)
 
 void helper_vpermxor(ppc_avr_t *r,  ppc_avr_t *a, ppc_avr_t *b, ppc_avr_t *c)
 {
+    ppc_avr_t result;
     int i;
+
     VECTOR_FOR_INORDER_I(i, u8) {
         int indexA = c->u8[i] >> 4;
         int indexB = c->u8[i] & 0xF;
 #if defined(HOST_WORDS_BIGENDIAN)
-        r->u8[i] = a->u8[indexA] ^ b->u8[indexB];
+        result.u8[i] = a->u8[indexA] ^ b->u8[indexB];
 #else
-        r->u8[i] = a->u8[15-indexA] ^ b->u8[15-indexB];
+        result.u8[i] = a->u8[15-indexA] ^ b->u8[15-indexB];
 #endif
     }
+    *r = result;
 }
 
 #undef VECTOR_FOR_INORDER_I
@@ -2573,6 +2556,7 @@ target_ulong helper_dlmzb(CPUPPCState *env, target_ulong high,
         }
         i++;
     }
+    i = 8;
     if (update_Rc) {
         env->crf[0] = 0x2;
     }

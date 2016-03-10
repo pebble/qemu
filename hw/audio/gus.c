@@ -41,11 +41,6 @@
 #define GUS_ENDIANNESS 0
 #endif
 
-#define IO_READ_PROTO(name) \
-    static uint32_t name (void *opaque, uint32_t nport)
-#define IO_WRITE_PROTO(name) \
-    static void name (void *opaque, uint32_t nport, uint32_t val)
-
 #define TYPE_GUS "gus"
 #define GUS(obj) OBJECT_CHECK (GUSState, (obj), TYPE_GUS)
 
@@ -64,32 +59,18 @@ typedef struct GUSState {
     qemu_irq pic;
 } GUSState;
 
-IO_READ_PROTO (gus_readb)
+static uint32_t gus_readb(void *opaque, uint32_t nport)
 {
     GUSState *s = opaque;
 
     return gus_read (&s->emu, nport, 1);
 }
 
-IO_READ_PROTO (gus_readw)
-{
-    GUSState *s = opaque;
-
-    return gus_read (&s->emu, nport, 2);
-}
-
-IO_WRITE_PROTO (gus_writeb)
+static void gus_writeb(void *opaque, uint32_t nport, uint32_t val)
 {
     GUSState *s = opaque;
 
     gus_write (&s->emu, nport, 1, val);
-}
-
-IO_WRITE_PROTO (gus_writew)
-{
-    GUSState *s = opaque;
-
-    gus_write (&s->emu, nport, 2, val);
 }
 
 static int write_audio (GUSState *s, int samples)
@@ -212,7 +193,7 @@ static int GUS_read_DMA (void *opaque, int nchan, int dma_pos, int dma_len)
         pos += copied;
     }
 
-    if (0 == ((mode >> 4) & 1)) {
+    if (((mode >> 4) & 1) == 0) {
         DMA_release_DREQ (s->emu.gusdma);
     }
     return dma_len;
@@ -236,17 +217,13 @@ static const VMStateDescription vmstate_gus = {
 
 static const MemoryRegionPortio gus_portio_list1[] = {
     {0x000,  1, 1, .write = gus_writeb },
-    {0x000,  1, 2, .write = gus_writew },
     {0x006, 10, 1, .read = gus_readb, .write = gus_writeb },
-    {0x006, 10, 2, .read = gus_readw, .write = gus_writew },
     {0x100,  8, 1, .read = gus_readb, .write = gus_writeb },
-    {0x100,  8, 2, .read = gus_readw, .write = gus_writew },
     PORTIO_END_OF_LIST (),
 };
 
 static const MemoryRegionPortio gus_portio_list2[] = {
-    {0, 1, 1, .read = gus_readb },
-    {0, 1, 2, .read = gus_readw },
+    {0, 2, 1, .read = gus_readb },
     PORTIO_END_OF_LIST (),
 };
 

@@ -228,8 +228,7 @@ static ssize_t stellaris_enet_receive(NetClientState *nc, const uint8_t *buf, si
     if ((s->rctl & SE_RCTL_RXEN) == 0)
         return -1;
     if (s->np >= 31) {
-        DPRINTF("Packet dropped\n");
-        return -1;
+        return 0;
     }
 
     DPRINTF("Received packet len=%zu\n", size);
@@ -260,13 +259,8 @@ static ssize_t stellaris_enet_receive(NetClientState *nc, const uint8_t *buf, si
     return size;
 }
 
-static int stellaris_enet_can_receive(NetClientState *nc)
+static int stellaris_enet_can_receive(stellaris_enet_state *s)
 {
-    stellaris_enet_state *s = qemu_get_nic_opaque(nc);
-
-    if ((s->rctl & SE_RCTL_RXEN) == 0)
-        return 1;
-
     return (s->np < 31);
 }
 
@@ -307,6 +301,9 @@ static uint64_t stellaris_enet_read(void *opaque, hwaddr offset,
                 s->next_packet = 0;
             s->np--;
             DPRINTF("RX done np=%d\n", s->np);
+            if (!s->np && stellaris_enet_can_receive(s)) {
+                qemu_flush_queued_packets(qemu_get_queue(s->nic));
+            }
         }
         return val;
     }
@@ -451,19 +448,10 @@ static void stellaris_enet_reset(stellaris_enet_state *s)
     s->tx_fifo_len = 0;
 }
 
-static void stellaris_enet_cleanup(NetClientState *nc)
-{
-    stellaris_enet_state *s = qemu_get_nic_opaque(nc);
-
-    s->nic = NULL;
-}
-
 static NetClientInfo net_stellaris_enet_info = {
     .type = NET_CLIENT_OPTIONS_KIND_NIC,
     .size = sizeof(NICState),
-    .can_receive = stellaris_enet_can_receive,
     .receive = stellaris_enet_receive,
-    .cleanup = stellaris_enet_cleanup,
 };
 
 static int stellaris_enet_init(SysBusDevice *sbd)
@@ -485,13 +473,6 @@ static int stellaris_enet_init(SysBusDevice *sbd)
     return 0;
 }
 
-static void stellaris_enet_unrealize(DeviceState *dev, Error **errp)
-{
-    stellaris_enet_state *s = STELLARIS_ENET(dev);
-
-    memory_region_destroy(&s->mmio);
-}
-
 static Property stellaris_enet_properties[] = {
     DEFINE_NIC_PROPERTIES(stellaris_enet_state, conf),
     DEFINE_PROP_END_OF_LIST(),
@@ -503,7 +484,6 @@ static void stellaris_enet_class_init(ObjectClass *klass, void *data)
     SysBusDeviceClass *k = SYS_BUS_DEVICE_CLASS(klass);
 
     k->init = stellaris_enet_init;
-    dc->unrealize = stellaris_enet_unrealize;
     dc->props = stellaris_enet_properties;
     dc->vmsd = &vmstate_stellaris_enet;
 }

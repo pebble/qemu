@@ -21,6 +21,7 @@
 
 #include "config.h"
 #include "qemu-common.h"
+#include "standard-headers/asm-x86/hyperv.h"
 
 #ifdef TARGET_X86_64
 #define TARGET_LONG_BITS 64
@@ -28,19 +29,18 @@
 #define TARGET_LONG_BITS 32
 #endif
 
-/* target supports implicit self modifying code */
-#define TARGET_HAS_SMC
+/* Maximum instruction code size */
+#define TARGET_MAX_INSN_SIZE 16
+
 /* support for self modifying code even if the modified instruction is
    close to the modifying instruction */
 #define TARGET_HAS_PRECISE_SMC
 
-#define TARGET_HAS_ICE 1
-
 #ifdef TARGET_X86_64
-#define ELF_MACHINE     EM_X86_64
+#define I386_ELF_MACHINE  EM_X86_64
 #define ELF_MACHINE_UNAME "x86_64"
 #else
-#define ELF_MACHINE     EM_386
+#define I386_ELF_MACHINE  EM_386
 #define ELF_MACHINE_UNAME "i686"
 #endif
 
@@ -155,6 +155,7 @@
 #define HF_SVMI_SHIFT       21 /* SVM intercepts are active */
 #define HF_OSFXSR_SHIFT     22 /* CR4.OSFXSR */
 #define HF_SMAP_SHIFT       23 /* CR4.SMAP */
+#define HF_IOBPT_SHIFT      24 /* an io breakpoint enabled */
 
 #define HF_CPL_MASK          (3 << HF_CPL_SHIFT)
 #define HF_SOFTMMU_MASK      (1 << HF_SOFTMMU_SHIFT)
@@ -178,18 +179,21 @@
 #define HF_SVMI_MASK         (1 << HF_SVMI_SHIFT)
 #define HF_OSFXSR_MASK       (1 << HF_OSFXSR_SHIFT)
 #define HF_SMAP_MASK         (1 << HF_SMAP_SHIFT)
+#define HF_IOBPT_MASK        (1 << HF_IOBPT_SHIFT)
 
 /* hflags2 */
 
-#define HF2_GIF_SHIFT        0 /* if set CPU takes interrupts */
-#define HF2_HIF_SHIFT        1 /* value of IF_MASK when entering SVM */
-#define HF2_NMI_SHIFT        2 /* CPU serving NMI */
-#define HF2_VINTR_SHIFT      3 /* value of V_INTR_MASKING bit */
+#define HF2_GIF_SHIFT            0 /* if set CPU takes interrupts */
+#define HF2_HIF_SHIFT            1 /* value of IF_MASK when entering SVM */
+#define HF2_NMI_SHIFT            2 /* CPU serving NMI */
+#define HF2_VINTR_SHIFT          3 /* value of V_INTR_MASKING bit */
+#define HF2_SMM_INSIDE_NMI_SHIFT 4 /* CPU serving SMI nested inside NMI */
 
-#define HF2_GIF_MASK          (1 << HF2_GIF_SHIFT)
-#define HF2_HIF_MASK          (1 << HF2_HIF_SHIFT)
-#define HF2_NMI_MASK          (1 << HF2_NMI_SHIFT)
-#define HF2_VINTR_MASK        (1 << HF2_VINTR_SHIFT)
+#define HF2_GIF_MASK            (1 << HF2_GIF_SHIFT)
+#define HF2_HIF_MASK            (1 << HF2_HIF_SHIFT)
+#define HF2_NMI_MASK            (1 << HF2_NMI_SHIFT)
+#define HF2_VINTR_MASK          (1 << HF2_VINTR_SHIFT)
+#define HF2_SMM_INSIDE_NMI_MASK (1 << HF2_SMM_INSIDE_NMI_SHIFT)
 
 #define CR0_PE_SHIFT 0
 #define CR0_MP_SHIFT 1
@@ -233,6 +237,7 @@
 #define DR7_TYPE_SHIFT  16
 #define DR7_LEN_SHIFT   18
 #define DR7_FIXED_1     0x00000400
+#define DR7_GLOBAL_BP_MASK   0xaa
 #define DR7_LOCAL_BP_MASK    0x55
 #define DR7_MAX_BP           4
 #define DR7_TYPE_BP_INST     0x0
@@ -281,6 +286,8 @@
 #define MCE_CAP_DEF     (MCG_CTL_P|MCG_SER_P)
 #define MCE_BANKS_DEF   10
 
+#define MCG_CAP_BANKS_MASK 0xff
+
 #define MCG_STATUS_RIPV (1ULL<<0)   /* restart ip valid */
 #define MCG_STATUS_EIPV (1ULL<<1)   /* ip points to correct instruction */
 #define MCG_STATUS_MCIP (1ULL<<2)   /* machine check in progress */
@@ -306,13 +313,14 @@
 #define MSR_IA32_APICBASE               0x1b
 #define MSR_IA32_APICBASE_BSP           (1<<8)
 #define MSR_IA32_APICBASE_ENABLE        (1<<11)
-#define MSR_IA32_APICBASE_BASE          (0xfffff<<12)
+#define MSR_IA32_APICBASE_BASE          (0xfffffU<<12)
 #define MSR_IA32_FEATURE_CONTROL        0x0000003a
 #define MSR_TSC_ADJUST                  0x0000003b
 #define MSR_IA32_TSCDEADLINE            0x6e0
 
 #define MSR_P6_PERFCTR0                 0xc1
 
+#define MSR_IA32_SMBASE                 0x9e
 #define MSR_MTRRcap                     0xfe
 #define MSR_MTRRcap_VCNT                8
 #define MSR_MTRRcap_FIXRANGE_SUPPORT    (1 << 8)
@@ -389,12 +397,16 @@
 #define MSR_VM_HSAVE_PA                 0xc0010117
 
 #define MSR_IA32_BNDCFGS                0x00000d90
+#define MSR_IA32_XSS                    0x00000da0
 
 #define XSTATE_FP                       (1ULL << 0)
 #define XSTATE_SSE                      (1ULL << 1)
 #define XSTATE_YMM                      (1ULL << 2)
 #define XSTATE_BNDREGS                  (1ULL << 3)
 #define XSTATE_BNDCSR                   (1ULL << 4)
+#define XSTATE_OPMASK                   (1ULL << 5)
+#define XSTATE_ZMM_Hi256                (1ULL << 6)
+#define XSTATE_Hi16_ZMM                 (1ULL << 7)
 
 
 /* CPUID feature words */
@@ -408,6 +420,8 @@ typedef enum FeatureWord {
     FEAT_C000_0001_EDX, /* CPUID[C000_0001].EDX */
     FEAT_KVM,           /* CPUID[4000_0001].EAX (KVM_CPUID_FEATURES) */
     FEAT_SVM,           /* CPUID[8000_000A].EDX */
+    FEAT_XSAVE,         /* CPUID[EAX=0xd,ECX=1].EAX */
+    FEAT_6_EAX,         /* CPUID[6].EAX */
     FEATURE_WORDS,
 } FeatureWord;
 
@@ -560,9 +574,23 @@ typedef uint32_t FeatureWordArray[FEATURE_WORDS];
 #define CPUID_7_0_EBX_INVPCID  (1U << 10)
 #define CPUID_7_0_EBX_RTM      (1U << 11)
 #define CPUID_7_0_EBX_MPX      (1U << 14)
+#define CPUID_7_0_EBX_AVX512F  (1U << 16) /* AVX-512 Foundation */
 #define CPUID_7_0_EBX_RDSEED   (1U << 18)
 #define CPUID_7_0_EBX_ADX      (1U << 19)
 #define CPUID_7_0_EBX_SMAP     (1U << 20)
+#define CPUID_7_0_EBX_PCOMMIT  (1U << 22) /* Persistent Commit */
+#define CPUID_7_0_EBX_CLFLUSHOPT (1U << 23) /* Flush a Cache Line Optimized */
+#define CPUID_7_0_EBX_CLWB     (1U << 24) /* Cache Line Write Back */
+#define CPUID_7_0_EBX_AVX512PF (1U << 26) /* AVX-512 Prefetch */
+#define CPUID_7_0_EBX_AVX512ER (1U << 27) /* AVX-512 Exponential and Reciprocal */
+#define CPUID_7_0_EBX_AVX512CD (1U << 28) /* AVX-512 Conflict Detection */
+
+#define CPUID_XSAVE_XSAVEOPT   (1U << 0)
+#define CPUID_XSAVE_XSAVEC     (1U << 1)
+#define CPUID_XSAVE_XGETBV1    (1U << 2)
+#define CPUID_XSAVE_XSAVES     (1U << 3)
+
+#define CPUID_6_EAX_ARAT       (1U << 2)
 
 /* CPUID[0x80000007].EDX flags: */
 #define CPUID_APM_INVTSC       (1U << 8)
@@ -698,13 +726,13 @@ typedef struct SegmentCache {
 } SegmentCache;
 
 typedef union {
-    uint8_t _b[16];
-    uint16_t _w[8];
-    uint32_t _l[4];
-    uint64_t _q[2];
-    float32 _s[4];
-    float64 _d[2];
-} XMMReg;
+    uint8_t _b[64];
+    uint16_t _w[32];
+    uint32_t _l[16];
+    uint64_t _q[8];
+    float32 _s[16];
+    float64 _d[8];
+} XMMReg; /* really zmm */
 
 typedef union {
     uint8_t _b[8];
@@ -725,12 +753,12 @@ typedef struct BNDCSReg {
 } BNDCSReg;
 
 #ifdef HOST_WORDS_BIGENDIAN
-#define XMM_B(n) _b[15 - (n)]
-#define XMM_W(n) _w[7 - (n)]
-#define XMM_L(n) _l[3 - (n)]
-#define XMM_S(n) _s[3 - (n)]
-#define XMM_Q(n) _q[1 - (n)]
-#define XMM_D(n) _d[1 - (n)]
+#define XMM_B(n) _b[63 - (n)]
+#define XMM_W(n) _w[31 - (n)]
+#define XMM_L(n) _l[15 - (n)]
+#define XMM_S(n) _s[15 - (n)]
+#define XMM_Q(n) _q[7 - (n)]
+#define XMM_D(n) _d[7 - (n)]
 
 #define MMX_B(n) _b[7 - (n)]
 #define MMX_W(n) _w[3 - (n)]
@@ -774,6 +802,9 @@ typedef struct {
 #define MAX_GP_COUNTERS    (MSR_IA32_PERF_STATUS - MSR_P6_EVNTSEL0)
 
 #define NB_MMU_MODES 3
+#define TARGET_INSN_START_EXTRA_WORDS 1
+
+#define NB_OPMASK_REGS 8
 
 typedef enum TPRAccess {
     TPR_ACCESS_READ,
@@ -811,6 +842,7 @@ typedef struct CPUX86State {
     BNDReg bnd_regs[4];
     BNDCSReg bndcs_regs;
     uint64_t msr_bndcfgs;
+    uint64_t efer;
 
     /* Beginning of state preserved by INIT (dummy marker).  */
     struct {} start_init_save;
@@ -833,17 +865,16 @@ typedef struct CPUX86State {
     float_status mmx_status; /* for 3DNow! float ops */
     float_status sse_status;
     uint32_t mxcsr;
-    XMMReg xmm_regs[CPU_NB_REGS];
+    XMMReg xmm_regs[CPU_NB_REGS == 8 ? 8 : 32];
     XMMReg xmm_t0;
     MMXReg mmx_t0;
 
-    XMMReg ymmh_regs[CPU_NB_REGS];
+    uint64_t opmask_regs[NB_OPMASK_REGS];
 
     /* sysenter registers */
     uint32_t sysenter_cs;
     target_ulong sysenter_esp;
     target_ulong sysenter_eip;
-    uint64_t efer;
     uint64_t star;
 
     uint64_t vm_hsave;
@@ -887,12 +918,14 @@ typedef struct CPUX86State {
     uint64_t msr_hv_guest_os_id;
     uint64_t msr_hv_vapic;
     uint64_t msr_hv_tsc;
+    uint64_t msr_hv_crash_params[HV_X64_MSR_CRASH_PARAMS];
+    uint64_t msr_hv_runtime;
 
     /* exception/interrupt handling */
     int error_code;
     int exception_is_int;
     target_ulong exception_next_eip;
-    target_ulong dr[8]; /* debug registers */
+    target_ulong dr[8]; /* debug registers; note dr4 and dr5 are unused */
     union {
         struct CPUBreakpoint *cpu_breakpoint[4];
         struct CPUWatchpoint *cpu_watchpoint[4];
@@ -927,7 +960,6 @@ typedef struct CPUX86State {
     uint32_t cpuid_version;
     FeatureWordArray features;
     uint32_t cpuid_model[12];
-    uint32_t cpuid_apic_id;
 
     /* MTRRs */
     uint64_t mtrr_fixed[11];
@@ -942,7 +974,7 @@ typedef struct CPUX86State {
     uint8_t has_error_code;
     uint32_t sipi_vector;
     bool tsc_valid;
-    int tsc_khz;
+    int64_t tsc_khz;
     void *kvm_xsave_buf;
 
     uint64_t mcg_cap;
@@ -958,6 +990,7 @@ typedef struct CPUX86State {
     uint64_t xstate_bv;
 
     uint64_t xcr0;
+    uint64_t xss;
 
     TPRAccess tpr_access_type;
 } CPUX86State;
@@ -965,9 +998,8 @@ typedef struct CPUX86State {
 #include "cpu-qom.h"
 
 X86CPU *cpu_x86_init(const char *cpu_model);
-X86CPU *cpu_x86_create(const char *cpu_model, DeviceState *icc_bridge,
-                       Error **errp);
-int cpu_x86_exec(CPUX86State *s);
+X86CPU *cpu_x86_create(const char *cpu_model, Error **errp);
+int cpu_x86_exec(CPUState *cpu);
 void x86_cpu_list(FILE *f, fprintf_function cpu_fprintf);
 void x86_cpudef_setup(void);
 int cpu_x86_support_mca_broadcast(CPUX86State *env);
@@ -1043,7 +1075,7 @@ static inline void cpu_x86_load_seg_cache(CPUX86State *env,
 }
 
 static inline void cpu_x86_load_seg_cache_sipi(X86CPU *cpu,
-                                               int sipi_vector)
+                                               uint8_t sipi_vector)
 {
     CPUState *cs = CPU(cpu);
     CPUX86State *env = &cpu->env;
@@ -1091,45 +1123,27 @@ int x86_cpu_handle_mmu_fault(CPUState *cpu, vaddr addr,
                              int is_write, int mmu_idx);
 void x86_cpu_set_a20(X86CPU *cpu, int a20_state);
 
-static inline bool hw_local_breakpoint_enabled(unsigned long dr7, int index)
-{
-    return (dr7 >> (index * 2)) & 1;
-}
+#ifndef CONFIG_USER_ONLY
+uint8_t x86_ldub_phys(CPUState *cs, hwaddr addr);
+uint32_t x86_lduw_phys(CPUState *cs, hwaddr addr);
+uint32_t x86_ldl_phys(CPUState *cs, hwaddr addr);
+uint64_t x86_ldq_phys(CPUState *cs, hwaddr addr);
+void x86_stb_phys(CPUState *cs, hwaddr addr, uint8_t val);
+void x86_stl_phys_notdirty(CPUState *cs, hwaddr addr, uint32_t val);
+void x86_stw_phys(CPUState *cs, hwaddr addr, uint32_t val);
+void x86_stl_phys(CPUState *cs, hwaddr addr, uint32_t val);
+void x86_stq_phys(CPUState *cs, hwaddr addr, uint64_t val);
+#endif
 
-static inline bool hw_global_breakpoint_enabled(unsigned long dr7, int index)
-{
-    return (dr7 >> (index * 2)) & 2;
-
-}
-static inline bool hw_breakpoint_enabled(unsigned long dr7, int index)
-{
-    return hw_global_breakpoint_enabled(dr7, index) ||
-           hw_local_breakpoint_enabled(dr7, index);
-}
-
-static inline int hw_breakpoint_type(unsigned long dr7, int index)
-{
-    return (dr7 >> (DR7_TYPE_SHIFT + (index * 4))) & 3;
-}
-
-static inline int hw_breakpoint_len(unsigned long dr7, int index)
-{
-    int len = ((dr7 >> (DR7_LEN_SHIFT + (index * 4))) & 3);
-    return (len == 2) ? 8 : len + 1;
-}
-
-void hw_breakpoint_insert(CPUX86State *env, int index);
-void hw_breakpoint_remove(CPUX86State *env, int index);
-bool check_hw_breakpoints(CPUX86State *env, bool force_dr6_update);
-void breakpoint_handler(CPUX86State *env);
+void breakpoint_handler(CPUState *cs);
 
 /* will be suppressed */
 void cpu_x86_update_cr0(CPUX86State *env, uint32_t new_cr0);
 void cpu_x86_update_cr3(CPUX86State *env, target_ulong new_cr3);
 void cpu_x86_update_cr4(CPUX86State *env, uint32_t new_cr4);
+void cpu_x86_update_dr7(CPUX86State *env, uint32_t new_dr7);
 
 /* hw/pc.c */
-void cpu_smm_update(CPUX86State *env);
 uint64_t cpu_get_tsc(CPUX86State *env);
 
 #define TARGET_PAGE_BITS 12
@@ -1153,17 +1167,9 @@ uint64_t cpu_get_tsc(CPUX86State *env);
 # define PHYS_ADDR_MASK 0xfffffffffLL
 # endif
 
-static inline CPUX86State *cpu_init(const char *cpu_model)
-{
-    X86CPU *cpu = cpu_x86_init(cpu_model);
-    if (cpu == NULL) {
-        return NULL;
-    }
-    return &cpu->env;
-}
+#define cpu_init(cpu_model) CPU(cpu_x86_init(cpu_model))
 
 #define cpu_exec cpu_x86_exec
-#define cpu_gen_code cpu_x86_gen_code
 #define cpu_signal_handler cpu_x86_signal_handler
 #define cpu_list x86_cpu_list
 #define cpudef_setup x86_cpudef_setup
@@ -1175,7 +1181,7 @@ static inline CPUX86State *cpu_init(const char *cpu_model)
 #define MMU_KSMAP_IDX   0
 #define MMU_USER_IDX    1
 #define MMU_KNOSMAP_IDX 2
-static inline int cpu_mmu_index(CPUX86State *env)
+static inline int cpu_mmu_index(CPUX86State *env, bool ifetch)
 {
     return (env->hflags & HF_CPL_MASK) == 3 ? MMU_USER_IDX :
         (!(env->hflags & HF_SMAP_MASK) || (env->eflags & AC_MASK))
@@ -1243,14 +1249,19 @@ void cpu_x86_inject_mce(Monitor *mon, X86CPU *cpu, int bank,
 
 /* excp_helper.c */
 void QEMU_NORETURN raise_exception(CPUX86State *env, int exception_index);
+void QEMU_NORETURN raise_exception_ra(CPUX86State *env, int exception_index,
+                                      uintptr_t retaddr);
 void QEMU_NORETURN raise_exception_err(CPUX86State *env, int exception_index,
                                        int error_code);
+void QEMU_NORETURN raise_exception_err_ra(CPUX86State *env, int exception_index,
+                                          int error_code, uintptr_t retaddr);
 void QEMU_NORETURN raise_interrupt(CPUX86State *nenv, int intno, int is_int,
                                    int error_code, int next_eip_addend);
 
 /* cc_helper.c */
 extern const uint8_t parity_table[256];
 uint32_t cpu_cc_compute_all(CPUX86State *env1, int op);
+void update_fp_status(CPUX86State *env);
 
 static inline uint32_t cpu_compute_eflags(CPUX86State *env)
 {
@@ -1284,8 +1295,17 @@ static inline void cpu_load_efer(CPUX86State *env, uint64_t val)
     }
 }
 
+static inline MemTxAttrs cpu_get_mem_attrs(CPUX86State *env)
+{
+    return ((MemTxAttrs) { .secure = (env->hflags & HF_SMM_MASK) != 0 });
+}
+
 /* fpu_helper.c */
 void cpu_set_mxcsr(CPUX86State *env, uint32_t val);
+void cpu_set_fpuc(CPUX86State *env, uint16_t val);
+
+/* mem_helper.c */
+void helper_lock_init(void);
 
 /* svm_helper.c */
 void cpu_svm_check_intercept_param(CPUX86State *env1, uint32_t type,
@@ -1295,23 +1315,32 @@ void cpu_vmexit(CPUX86State *nenv, uint32_t exit_code, uint64_t exit_info_1);
 /* seg_helper.c */
 void do_interrupt_x86_hardirq(CPUX86State *env, int intno, int is_hw);
 
+/* smm_helper.c */
 void do_smm_enter(X86CPU *cpu);
+void cpu_smm_update(X86CPU *cpu);
 
 void cpu_report_tpr_access(CPUX86State *env, TPRAccess access);
 
-void x86_cpu_compat_set_features(const char *cpu_model, FeatureWord w,
-                                 uint32_t feat_add, uint32_t feat_remove);
-
-void x86_cpu_compat_disable_kvm_features(FeatureWord w, uint32_t features);
+/* Change the value of a KVM-specific default
+ *
+ * If value is NULL, no default will be set and the original
+ * value from the CPU model table will be kept.
+ *
+ * It is valid to call this funciton only for properties that
+ * are already present in the kvm_default_props table.
+ */
+void x86_cpu_change_kvm_default(const char *prop, const char *value);
 
 
 /* Return name of 32-bit register, from a R_* constant */
 const char *get_register_name_32(unsigned int reg);
 
-uint32_t x86_cpu_apic_id_from_index(unsigned int cpu_index);
 void enable_compat_apic_id_mode(void);
 
 #define APIC_DEFAULT_ADDRESS 0xfee00000
 #define APIC_SPACE_SIZE      0x100000
+
+void x86_cpu_dump_local_apic_state(CPUState *cs, FILE *f,
+                                   fprintf_function cpu_fprintf, int flags);
 
 #endif /* CPU_I386_H */

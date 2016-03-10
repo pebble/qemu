@@ -33,6 +33,14 @@
 
 namespace vixl {
 
+// Macros for compile-time format checking.
+#if defined(__GNUC__)
+#define PRINTF_CHECK(format_index, varargs_index) \
+  __attribute__((format(printf, format_index, varargs_index)))
+#else
+#define PRINTF_CHECK(format_index, varargs_index)
+#endif
+
 // Check number width.
 inline bool is_intn(unsigned n, int64_t x) {
   VIXL_ASSERT((0 < n) && (n < 64));
@@ -155,35 +163,48 @@ int CountLeadingZeros(uint64_t value, int width);
 int CountLeadingSignBits(int64_t value, int width);
 int CountTrailingZeros(uint64_t value, int width);
 int CountSetBits(uint64_t value, int width);
+uint64_t LowestSetBit(uint64_t value);
+bool IsPowerOf2(int64_t value);
+
+unsigned CountClearHalfWords(uint64_t imm, unsigned reg_size);
 
 // Pointer alignment
 // TODO: rename/refactor to make it specific to instructions.
 template<typename T>
 bool IsWordAligned(T pointer) {
   VIXL_ASSERT(sizeof(pointer) == sizeof(intptr_t));   // NOLINT(runtime/sizeof)
-  return (reinterpret_cast<intptr_t>(pointer) & 3) == 0;
+  return ((intptr_t)(pointer) & 3) == 0;
 }
 
-// Increment a pointer until it has the specified alignment.
+// Increment a pointer (up to 64 bits) until it has the specified alignment.
 template<class T>
 T AlignUp(T pointer, size_t alignment) {
-  VIXL_STATIC_ASSERT(sizeof(pointer) == sizeof(uintptr_t));
-  uintptr_t pointer_raw = reinterpret_cast<uintptr_t>(pointer);
+  // Use C-style casts to get static_cast behaviour for integral types (T), and
+  // reinterpret_cast behaviour for other types.
+
+  uint64_t pointer_raw = (uint64_t)pointer;
+  VIXL_STATIC_ASSERT(sizeof(pointer) <= sizeof(pointer_raw));
+
   size_t align_step = (alignment - pointer_raw) % alignment;
   VIXL_ASSERT((pointer_raw + align_step) % alignment == 0);
-  return reinterpret_cast<T>(pointer_raw + align_step);
+
+  return (T)(pointer_raw + align_step);
 }
 
-// Decrement a pointer until it has the specified alignment.
+// Decrement a pointer (up to 64 bits) until it has the specified alignment.
 template<class T>
 T AlignDown(T pointer, size_t alignment) {
-  VIXL_STATIC_ASSERT(sizeof(pointer) == sizeof(uintptr_t));
-  uintptr_t pointer_raw = reinterpret_cast<uintptr_t>(pointer);
+  // Use C-style casts to get static_cast behaviour for integral types (T), and
+  // reinterpret_cast behaviour for other types.
+
+  uint64_t pointer_raw = (uint64_t)pointer;
+  VIXL_STATIC_ASSERT(sizeof(pointer) <= sizeof(pointer_raw));
+
   size_t align_step = pointer_raw % alignment;
   VIXL_ASSERT((pointer_raw - align_step) % alignment == 0);
-  return reinterpret_cast<T>(pointer_raw - align_step);
-}
 
+  return (T)(pointer_raw - align_step);
+}
 
 }  // namespace vixl
 

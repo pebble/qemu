@@ -50,12 +50,11 @@ static void an5206_init(MachineState *machine)
     env->rambar0 = AN5206_RAMBAR_ADDR | 1;
 
     /* DRAM at address zero */
-    memory_region_init_ram(ram, NULL, "an5206.ram", ram_size);
-    vmstate_register_ram_global(ram);
+    memory_region_allocate_system_memory(ram, NULL, "an5206.ram", ram_size);
     memory_region_add_subregion(address_space_mem, 0, ram);
 
     /* Internal SRAM.  */
-    memory_region_init_ram(sram, NULL, "an5206.sram", 512);
+    memory_region_init_ram(sram, NULL, "an5206.sram", 512, &error_fatal);
     vmstate_register_ram_global(sram);
     memory_region_add_subregion(address_space_mem, AN5206_RAMBAR_ADDR, sram);
 
@@ -71,10 +70,11 @@ static void an5206_init(MachineState *machine)
     }
 
     kernel_size = load_elf(kernel_filename, NULL, NULL, &elf_entry,
-                           NULL, NULL, 1, ELF_MACHINE, 0);
+                           NULL, NULL, 1, EM_68K, 0);
     entry = elf_entry;
     if (kernel_size < 0) {
-        kernel_size = load_uimage(kernel_filename, &entry, NULL, NULL);
+        kernel_size = load_uimage(kernel_filename, &entry, NULL, NULL,
+                                  NULL, NULL);
     }
     if (kernel_size < 0) {
         kernel_size = load_image_targphys(kernel_filename, KERNEL_LOAD_ADDR,
@@ -89,15 +89,10 @@ static void an5206_init(MachineState *machine)
     env->pc = entry;
 }
 
-static QEMUMachine an5206_machine = {
-    .name = "an5206",
-    .desc = "Arnewsh 5206",
-    .init = an5206_init,
-};
-
-static void an5206_machine_init(void)
+static void an5206_machine_init(MachineClass *mc)
 {
-    qemu_register_machine(&an5206_machine);
+    mc->desc = "Arnewsh 5206";
+    mc->init = an5206_init;
 }
 
-machine_init(an5206_machine_init);
+DEFINE_MACHINE("an5206", an5206_machine_init)

@@ -17,8 +17,8 @@
 #include "block/aio.h"
 #include "sysemu/iothread.h"
 #include "qmp-commands.h"
-
-#define IOTHREADS_PATH "/objects"
+#include "qemu/error-report.h"
+#include "qemu/rcu.h"
 
 typedef ObjectClass IOThreadClass;
 
@@ -31,6 +31,8 @@ static void *iothread_run(void *opaque)
 {
     IOThread *iothread = opaque;
     bool blocking;
+
+    rcu_register_thread();
 
     qemu_mutex_lock(&iothread->init_done_lock);
     iothread->thread_id = qemu_get_thread_id();
@@ -46,6 +48,8 @@ static void *iothread_run(void *opaque)
         }
         aio_context_release(iothread->ctx);
     }
+
+    rcu_unregister_thread();
     return NULL;
 }
 
@@ -53,6 +57,9 @@ static void iothread_instance_finalize(Object *obj)
 {
     IOThread *iothread = IOTHREAD(obj);
 
+    if (!iothread->ctx) {
+        return;
+    }
     iothread->stopping = true;
     aio_notify(iothread->ctx);
     qemu_thread_join(&iothread->thread);
@@ -63,11 +70,17 @@ static void iothread_instance_finalize(Object *obj)
 
 static void iothread_complete(UserCreatable *obj, Error **errp)
 {
+    Error *local_error = NULL;
     IOThread *iothread = IOTHREAD(obj);
+    char *name, *thread_name;
 
     iothread->stopping = false;
-    iothread->ctx = aio_context_new();
     iothread->thread_id = -1;
+    iothread->ctx = aio_context_new(&local_error);
+    if (!iothread->ctx) {
+        error_propagate(errp, local_error);
+        return;
+    }
 
     qemu_mutex_init(&iothread->init_done_lock);
     qemu_cond_init(&iothread->init_done_cond);
@@ -75,8 +88,12 @@ static void iothread_complete(UserCreatable *obj, Error **errp)
     /* This assumes we are called from a thread with useful CPU affinity for us
      * to inherit.
      */
-    qemu_thread_create(&iothread->thread, "iothread", iothread_run,
+    name = object_get_canonical_path_component(OBJECT(obj));
+    thread_name = g_strdup_printf("IO %s", name);
+    qemu_thread_create(&iothread->thread, thread_name, iothread_run,
                        iothread, QEMU_THREAD_JOINABLE);
+    g_free(thread_name);
+    g_free(name);
 
     /* Wait for initialization to complete */
     qemu_mutex_lock(&iothread->init_done_lock);
@@ -111,18 +128,6 @@ static void iothread_register_types(void)
 }
 
 type_init(iothread_register_types)
-
-IOThread *iothread_find(const char *id)
-{
-    Object *container = container_get(object_get_root(), IOTHREADS_PATH);
-    Object *child;
-
-    child = object_property_get_link(container, id, NULL);
-    if (!child) {
-        return NULL;
-    }
-    return (IOThread *)object_dynamic_cast(child, TYPE_IOTHREAD);
-}
 
 char *iothread_get_id(IOThread *iothread)
 {
@@ -163,7 +168,7 @@ IOThreadInfoList *qmp_query_iothreads(Error **errp)
 {
     IOThreadInfoList *head = NULL;
     IOThreadInfoList **prev = &head;
-    Object *container = container_get(object_get_root(), IOTHREADS_PATH);
+    Object *container = object_get_objects_root();
 
     object_child_foreach(container, query_one_iothread, &prev);
     return head;

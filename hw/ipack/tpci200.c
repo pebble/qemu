@@ -573,7 +573,7 @@ static const MemoryRegionOps tpci200_las3_ops = {
     }
 };
 
-static int tpci200_initfn(PCIDevice *pci_dev)
+static void tpci200_realize(PCIDevice *pci_dev, Error **errp)
 {
     TPCI200State *s = TPCI200(pci_dev);
     uint8_t *c = s->dev.config;
@@ -609,20 +609,6 @@ static int tpci200_initfn(PCIDevice *pci_dev)
 
     ipack_bus_new_inplace(&s->bus, sizeof(s->bus), DEVICE(pci_dev), NULL,
                           N_MODULES, tpci200_set_irq);
-
-    return 0;
-}
-
-static void tpci200_exitfn(PCIDevice *pci_dev)
-{
-    TPCI200State *s = TPCI200(pci_dev);
-
-    memory_region_destroy(&s->mmio);
-    memory_region_destroy(&s->io);
-    memory_region_destroy(&s->las0);
-    memory_region_destroy(&s->las1);
-    memory_region_destroy(&s->las2);
-    memory_region_destroy(&s->las3);
 }
 
 static const VMStateDescription vmstate_tpci200 = {
@@ -644,8 +630,7 @@ static void tpci200_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
-    k->init = tpci200_initfn;
-    k->exit = tpci200_exitfn;
+    k->realize = tpci200_realize;
     k->vendor_id = PCI_VENDOR_ID_TEWS;
     k->device_id = PCI_DEVICE_ID_TEWS_TPCI200;
     k->class_id = PCI_CLASS_BRIDGE_OTHER;

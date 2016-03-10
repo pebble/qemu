@@ -73,8 +73,13 @@ static inline CRISCPU *cris_env_get_cpu(CPUCRISState *env)
 
 #define ENV_OFFSET offsetof(CRISCPU, env)
 
+#ifndef CONFIG_USER_ONLY
+extern const struct VMStateDescription vmstate_cris_cpu;
+#endif
+
 void cris_cpu_do_interrupt(CPUState *cpu);
 void crisv10_cpu_do_interrupt(CPUState *cpu);
+bool cris_cpu_exec_interrupt(CPUState *cpu, int int_req);
 
 void cris_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
                          int flags);

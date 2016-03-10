@@ -24,6 +24,7 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <cstdlib>
 #include "a64/disasm-a64.h"
 
 namespace vixl {
@@ -33,6 +34,7 @@ Disassembler::Disassembler() {
   buffer_ = reinterpret_cast<char*>(malloc(buffer_size_));
   buffer_pos_ = 0;
   own_buffer_ = true;
+  code_address_offset_ = 0;
 }
 
 
@@ -41,6 +43,7 @@ Disassembler::Disassembler(char* text_buffer, int buffer_size) {
   buffer_ = text_buffer;
   buffer_pos_ = 0;
   own_buffer_ = false;
+  code_address_offset_ = 0;
 }
 
 
@@ -56,7 +59,7 @@ char* Disassembler::GetOutput() {
 }
 
 
-void Disassembler::VisitAddSubImmediate(Instruction* instr) {
+void Disassembler::VisitAddSubImmediate(const Instruction* instr) {
   bool rd_is_zr = RdIsZROrSP(instr);
   bool stack_op = (rd_is_zr || RnIsZROrSP(instr)) &&
                   (instr->ImmAddSub() == 0) ? true : false;
@@ -101,7 +104,7 @@ void Disassembler::VisitAddSubImmediate(Instruction* instr) {
 }
 
 
-void Disassembler::VisitAddSubShifted(Instruction* instr) {
+void Disassembler::VisitAddSubShifted(const Instruction* instr) {
   bool rd_is_zr = RdIsZROrSP(instr);
   bool rn_is_zr = RnIsZROrSP(instr);
   const char *mnemonic = "";
@@ -148,7 +151,7 @@ void Disassembler::VisitAddSubShifted(Instruction* instr) {
 }
 
 
-void Disassembler::VisitAddSubExtended(Instruction* instr) {
+void Disassembler::VisitAddSubExtended(const Instruction* instr) {
   bool rd_is_zr = RdIsZROrSP(instr);
   const char *mnemonic = "";
   Extend mode = static_cast<Extend>(instr->ExtendMode());
@@ -186,7 +189,7 @@ void Disassembler::VisitAddSubExtended(Instruction* instr) {
 }
 
 
-void Disassembler::VisitAddSubWithCarry(Instruction* instr) {
+void Disassembler::VisitAddSubWithCarry(const Instruction* instr) {
   bool rn_is_zr = RnIsZROrSP(instr);
   const char *mnemonic = "";
   const char *form = "'Rd, 'Rn, 'Rm";
@@ -221,7 +224,7 @@ void Disassembler::VisitAddSubWithCarry(Instruction* instr) {
 }
 
 
-void Disassembler::VisitLogicalImmediate(Instruction* instr) {
+void Disassembler::VisitLogicalImmediate(const Instruction* instr) {
   bool rd_is_zr = RdIsZROrSP(instr);
   bool rn_is_zr = RnIsZROrSP(instr);
   const char *mnemonic = "";
@@ -293,7 +296,7 @@ bool Disassembler::IsMovzMovnImm(unsigned reg_size, uint64_t value) {
 }
 
 
-void Disassembler::VisitLogicalShifted(Instruction* instr) {
+void Disassembler::VisitLogicalShifted(const Instruction* instr) {
   bool rd_is_zr = RdIsZROrSP(instr);
   bool rn_is_zr = RnIsZROrSP(instr);
   const char *mnemonic = "";
@@ -344,7 +347,7 @@ void Disassembler::VisitLogicalShifted(Instruction* instr) {
 }
 
 
-void Disassembler::VisitConditionalCompareRegister(Instruction* instr) {
+void Disassembler::VisitConditionalCompareRegister(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'Rn, 'Rm, 'INzcv, 'Cond";
 
@@ -359,7 +362,7 @@ void Disassembler::VisitConditionalCompareRegister(Instruction* instr) {
 }
 
 
-void Disassembler::VisitConditionalCompareImmediate(Instruction* instr) {
+void Disassembler::VisitConditionalCompareImmediate(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'Rn, 'IP, 'INzcv, 'Cond";
 
@@ -374,7 +377,7 @@ void Disassembler::VisitConditionalCompareImmediate(Instruction* instr) {
 }
 
 
-void Disassembler::VisitConditionalSelect(Instruction* instr) {
+void Disassembler::VisitConditionalSelect(const Instruction* instr) {
   bool rnm_is_zr = (RnIsZROrSP(instr) && RmIsZROrSP(instr));
   bool rn_is_rm = (instr->Rn() == instr->Rm());
   const char *mnemonic = "";
@@ -427,7 +430,7 @@ void Disassembler::VisitConditionalSelect(Instruction* instr) {
 }
 
 
-void Disassembler::VisitBitfield(Instruction* instr) {
+void Disassembler::VisitBitfield(const Instruction* instr) {
   unsigned s = instr->ImmS();
   unsigned r = instr->ImmR();
   unsigned rd_size_minus_1 =
@@ -505,7 +508,7 @@ void Disassembler::VisitBitfield(Instruction* instr) {
 }
 
 
-void Disassembler::VisitExtract(Instruction* instr) {
+void Disassembler::VisitExtract(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'Rd, 'Rn, 'Rm, 'IExtract";
 
@@ -526,16 +529,16 @@ void Disassembler::VisitExtract(Instruction* instr) {
 }
 
 
-void Disassembler::VisitPCRelAddressing(Instruction* instr) {
+void Disassembler::VisitPCRelAddressing(const Instruction* instr) {
   switch (instr->Mask(PCRelAddressingMask)) {
     case ADR: Format(instr, "adr", "'Xd, 'AddrPCRelByte"); break;
-    // ADRP is not implemented.
+    case ADRP: Format(instr, "adrp", "'Xd, 'AddrPCRelPage"); break;
     default: Format(instr, "unimplemented", "(PCRelAddressing)");
   }
 }
 
 
-void Disassembler::VisitConditionalBranch(Instruction* instr) {
+void Disassembler::VisitConditionalBranch(const Instruction* instr) {
   switch (instr->Mask(ConditionalBranchMask)) {
     case B_cond: Format(instr, "b.'CBrn", "'BImmCond"); break;
     default: VIXL_UNREACHABLE();
@@ -543,7 +546,8 @@ void Disassembler::VisitConditionalBranch(Instruction* instr) {
 }
 
 
-void Disassembler::VisitUnconditionalBranchToRegister(Instruction* instr) {
+void Disassembler::VisitUnconditionalBranchToRegister(
+    const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "'Xn";
 
@@ -563,7 +567,7 @@ void Disassembler::VisitUnconditionalBranchToRegister(Instruction* instr) {
 }
 
 
-void Disassembler::VisitUnconditionalBranch(Instruction* instr) {
+void Disassembler::VisitUnconditionalBranch(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'BImmUncn";
 
@@ -576,7 +580,7 @@ void Disassembler::VisitUnconditionalBranch(Instruction* instr) {
 }
 
 
-void Disassembler::VisitDataProcessing1Source(Instruction* instr) {
+void Disassembler::VisitDataProcessing1Source(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'Rd, 'Rn";
 
@@ -597,7 +601,7 @@ void Disassembler::VisitDataProcessing1Source(Instruction* instr) {
 }
 
 
-void Disassembler::VisitDataProcessing2Source(Instruction* instr) {
+void Disassembler::VisitDataProcessing2Source(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "'Rd, 'Rn, 'Rm";
 
@@ -618,7 +622,7 @@ void Disassembler::VisitDataProcessing2Source(Instruction* instr) {
 }
 
 
-void Disassembler::VisitDataProcessing3Source(Instruction* instr) {
+void Disassembler::VisitDataProcessing3Source(const Instruction* instr) {
   bool ra_is_zr = RaIsZROrSP(instr);
   const char *mnemonic = "";
   const char *form = "'Xd, 'Wn, 'Wm, 'Xa";
@@ -696,7 +700,7 @@ void Disassembler::VisitDataProcessing3Source(Instruction* instr) {
 }
 
 
-void Disassembler::VisitCompareBranch(Instruction* instr) {
+void Disassembler::VisitCompareBranch(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'Rt, 'BImmCmpa";
 
@@ -711,7 +715,7 @@ void Disassembler::VisitCompareBranch(Instruction* instr) {
 }
 
 
-void Disassembler::VisitTestBranch(Instruction* instr) {
+void Disassembler::VisitTestBranch(const Instruction* instr) {
   const char *mnemonic = "";
   // If the top bit of the immediate is clear, the tested register is
   // disassembled as Wt, otherwise Xt. As the top bit of the immediate is
@@ -728,7 +732,7 @@ void Disassembler::VisitTestBranch(Instruction* instr) {
 }
 
 
-void Disassembler::VisitMoveWideImmediate(Instruction* instr) {
+void Disassembler::VisitMoveWideImmediate(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'Rd, 'IMoveImm";
 
@@ -737,9 +741,25 @@ void Disassembler::VisitMoveWideImmediate(Instruction* instr) {
   // shift calculation.
   switch (instr->Mask(MoveWideImmediateMask)) {
     case MOVN_w:
-    case MOVN_x: mnemonic = "movn"; break;
+    case MOVN_x:
+      if ((instr->ImmMoveWide()) || (instr->ShiftMoveWide() == 0)) {
+        if ((instr->SixtyFourBits() == 0) && (instr->ImmMoveWide() == 0xffff)) {
+          mnemonic = "movn";
+        } else {
+          mnemonic = "mov";
+          form = "'Rd, 'IMoveNeg";
+        }
+      } else {
+        mnemonic = "movn";
+      }
+      break;
     case MOVZ_w:
-    case MOVZ_x: mnemonic = "movz"; break;
+    case MOVZ_x:
+      if ((instr->ImmMoveWide()) || (instr->ShiftMoveWide() == 0))
+        mnemonic = "mov";
+      else
+        mnemonic = "movz";
+      break;
     case MOVK_w:
     case MOVK_x: mnemonic = "movk"; form = "'Rd, 'IMoveLSL"; break;
     default: VIXL_UNREACHABLE();
@@ -767,7 +787,7 @@ void Disassembler::VisitMoveWideImmediate(Instruction* instr) {
   V(LDR_s, "ldr", "'St")      \
   V(LDR_d, "ldr", "'Dt")
 
-void Disassembler::VisitLoadStorePreIndex(Instruction* instr) {
+void Disassembler::VisitLoadStorePreIndex(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "(LoadStorePreIndex)";
 
@@ -781,7 +801,7 @@ void Disassembler::VisitLoadStorePreIndex(Instruction* instr) {
 }
 
 
-void Disassembler::VisitLoadStorePostIndex(Instruction* instr) {
+void Disassembler::VisitLoadStorePostIndex(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "(LoadStorePostIndex)";
 
@@ -795,7 +815,7 @@ void Disassembler::VisitLoadStorePostIndex(Instruction* instr) {
 }
 
 
-void Disassembler::VisitLoadStoreUnsignedOffset(Instruction* instr) {
+void Disassembler::VisitLoadStoreUnsignedOffset(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "(LoadStoreUnsignedOffset)";
 
@@ -804,13 +824,13 @@ void Disassembler::VisitLoadStoreUnsignedOffset(Instruction* instr) {
     case A##_unsigned: mnemonic = B; form = C ", ['Xns'ILU]"; break;
     LOAD_STORE_LIST(LS_UNSIGNEDOFFSET)
     #undef LS_UNSIGNEDOFFSET
-    case PRFM_unsigned: mnemonic = "prfm"; form = "'PrefOp, ['Xn'ILU]";
+    case PRFM_unsigned: mnemonic = "prfm"; form = "'PrefOp, ['Xns'ILU]";
   }
   Format(instr, mnemonic, form);
 }
 
 
-void Disassembler::VisitLoadStoreRegisterOffset(Instruction* instr) {
+void Disassembler::VisitLoadStoreRegisterOffset(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "(LoadStoreRegisterOffset)";
 
@@ -825,12 +845,13 @@ void Disassembler::VisitLoadStoreRegisterOffset(Instruction* instr) {
 }
 
 
-void Disassembler::VisitLoadStoreUnscaledOffset(Instruction* instr) {
+void Disassembler::VisitLoadStoreUnscaledOffset(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "'Wt, ['Xns'ILS]";
   const char *form_x = "'Xt, ['Xns'ILS]";
   const char *form_s = "'St, ['Xns'ILS]";
   const char *form_d = "'Dt, ['Xns'ILS]";
+  const char *form_prefetch = "'PrefOp, ['Xns'ILS]";
 
   switch (instr->Mask(LoadStoreUnscaledOffsetMask)) {
     case STURB_w:  mnemonic = "sturb"; break;
@@ -850,13 +871,14 @@ void Disassembler::VisitLoadStoreUnscaledOffset(Instruction* instr) {
     case LDURSH_x: form = form_x;  // Fall through.
     case LDURSH_w: mnemonic = "ldursh"; break;
     case LDURSW_x: mnemonic = "ldursw"; form = form_x; break;
+    case PRFUM:    mnemonic = "prfum"; form = form_prefetch; break;
     default: form = "(LoadStoreUnscaledOffset)";
   }
   Format(instr, mnemonic, form);
 }
 
 
-void Disassembler::VisitLoadLiteral(Instruction* instr) {
+void Disassembler::VisitLoadLiteral(const Instruction* instr) {
   const char *mnemonic = "ldr";
   const char *form = "(LoadLiteral)";
 
@@ -865,6 +887,16 @@ void Disassembler::VisitLoadLiteral(Instruction* instr) {
     case LDR_x_lit: form = "'Xt, 'ILLiteral 'LValue"; break;
     case LDR_s_lit: form = "'St, 'ILLiteral 'LValue"; break;
     case LDR_d_lit: form = "'Dt, 'ILLiteral 'LValue"; break;
+    case LDRSW_x_lit: {
+      mnemonic = "ldrsw";
+      form = "'Xt, 'ILLiteral 'LValue";
+      break;
+    }
+    case PRFM_lit: {
+      mnemonic = "prfm";
+      form = "'PrefOp, 'ILLiteral 'LValue";
+      break;
+    }
     default: mnemonic = "unimplemented";
   }
   Format(instr, mnemonic, form);
@@ -882,7 +914,7 @@ void Disassembler::VisitLoadLiteral(Instruction* instr) {
   V(STP_d, "stp", "'Dt, 'Dt2", "8")     \
   V(LDP_d, "ldp", "'Dt, 'Dt2", "8")
 
-void Disassembler::VisitLoadStorePairPostIndex(Instruction* instr) {
+void Disassembler::VisitLoadStorePairPostIndex(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "(LoadStorePairPostIndex)";
 
@@ -896,7 +928,7 @@ void Disassembler::VisitLoadStorePairPostIndex(Instruction* instr) {
 }
 
 
-void Disassembler::VisitLoadStorePairPreIndex(Instruction* instr) {
+void Disassembler::VisitLoadStorePairPreIndex(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "(LoadStorePairPreIndex)";
 
@@ -910,7 +942,7 @@ void Disassembler::VisitLoadStorePairPreIndex(Instruction* instr) {
 }
 
 
-void Disassembler::VisitLoadStorePairOffset(Instruction* instr) {
+void Disassembler::VisitLoadStorePairOffset(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "(LoadStorePairOffset)";
 
@@ -924,7 +956,7 @@ void Disassembler::VisitLoadStorePairOffset(Instruction* instr) {
 }
 
 
-void Disassembler::VisitLoadStorePairNonTemporal(Instruction* instr) {
+void Disassembler::VisitLoadStorePairNonTemporal(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form;
 
@@ -943,7 +975,50 @@ void Disassembler::VisitLoadStorePairNonTemporal(Instruction* instr) {
 }
 
 
-void Disassembler::VisitFPCompare(Instruction* instr) {
+void Disassembler::VisitLoadStoreExclusive(const Instruction* instr) {
+  const char *mnemonic = "unimplemented";
+  const char *form;
+
+  switch (instr->Mask(LoadStoreExclusiveMask)) {
+    case STXRB_w: mnemonic = "stxrb"; form = "'Ws, 'Wt, ['Xns]"; break;
+    case STXRH_w: mnemonic = "stxrh"; form = "'Ws, 'Wt, ['Xns]"; break;
+    case STXR_w: mnemonic = "stxr"; form = "'Ws, 'Wt, ['Xns]"; break;
+    case STXR_x: mnemonic = "stxr"; form = "'Ws, 'Xt, ['Xns]"; break;
+    case LDXRB_w: mnemonic = "ldxrb"; form = "'Wt, ['Xns]"; break;
+    case LDXRH_w: mnemonic = "ldxrh"; form = "'Wt, ['Xns]"; break;
+    case LDXR_w: mnemonic = "ldxr"; form = "'Wt, ['Xns]"; break;
+    case LDXR_x: mnemonic = "ldxr"; form = "'Xt, ['Xns]"; break;
+    case STXP_w: mnemonic = "stxp"; form = "'Ws, 'Wt, 'Wt2, ['Xns]"; break;
+    case STXP_x: mnemonic = "stxp"; form = "'Ws, 'Xt, 'Xt2, ['Xns]"; break;
+    case LDXP_w: mnemonic = "ldxp"; form = "'Wt, 'Wt2, ['Xns]"; break;
+    case LDXP_x: mnemonic = "ldxp"; form = "'Xt, 'Xt2, ['Xns]"; break;
+    case STLXRB_w: mnemonic = "stlxrb"; form = "'Ws, 'Wt, ['Xns]"; break;
+    case STLXRH_w: mnemonic = "stlxrh"; form = "'Ws, 'Wt, ['Xns]"; break;
+    case STLXR_w: mnemonic = "stlxr"; form = "'Ws, 'Wt, ['Xns]"; break;
+    case STLXR_x: mnemonic = "stlxr"; form = "'Ws, 'Xt, ['Xns]"; break;
+    case LDAXRB_w: mnemonic = "ldaxrb"; form = "'Wt, ['Xns]"; break;
+    case LDAXRH_w: mnemonic = "ldaxrh"; form = "'Wt, ['Xns]"; break;
+    case LDAXR_w: mnemonic = "ldaxr"; form = "'Wt, ['Xns]"; break;
+    case LDAXR_x: mnemonic = "ldaxr"; form = "'Xt, ['Xns]"; break;
+    case STLXP_w: mnemonic = "stlxp"; form = "'Ws, 'Wt, 'Wt2, ['Xns]"; break;
+    case STLXP_x: mnemonic = "stlxp"; form = "'Ws, 'Xt, 'Xt2, ['Xns]"; break;
+    case LDAXP_w: mnemonic = "ldaxp"; form = "'Wt, 'Wt2, ['Xns]"; break;
+    case LDAXP_x: mnemonic = "ldaxp"; form = "'Xt, 'Xt2, ['Xns]"; break;
+    case STLRB_w: mnemonic = "stlrb"; form = "'Wt, ['Xns]"; break;
+    case STLRH_w: mnemonic = "stlrh"; form = "'Wt, ['Xns]"; break;
+    case STLR_w: mnemonic = "stlr"; form = "'Wt, ['Xns]"; break;
+    case STLR_x: mnemonic = "stlr"; form = "'Xt, ['Xns]"; break;
+    case LDARB_w: mnemonic = "ldarb"; form = "'Wt, ['Xns]"; break;
+    case LDARH_w: mnemonic = "ldarh"; form = "'Wt, ['Xns]"; break;
+    case LDAR_w: mnemonic = "ldar"; form = "'Wt, ['Xns]"; break;
+    case LDAR_x: mnemonic = "ldar"; form = "'Xt, ['Xns]"; break;
+    default: form = "(LoadStoreExclusive)";
+  }
+  Format(instr, mnemonic, form);
+}
+
+
+void Disassembler::VisitFPCompare(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "'Fn, 'Fm";
   const char *form_zero = "'Fn, #0.0";
@@ -959,7 +1034,7 @@ void Disassembler::VisitFPCompare(Instruction* instr) {
 }
 
 
-void Disassembler::VisitFPConditionalCompare(Instruction* instr) {
+void Disassembler::VisitFPConditionalCompare(const Instruction* instr) {
   const char *mnemonic = "unmplemented";
   const char *form = "'Fn, 'Fm, 'INzcv, 'Cond";
 
@@ -974,7 +1049,7 @@ void Disassembler::VisitFPConditionalCompare(Instruction* instr) {
 }
 
 
-void Disassembler::VisitFPConditionalSelect(Instruction* instr) {
+void Disassembler::VisitFPConditionalSelect(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'Fd, 'Fn, 'Fm, 'Cond";
 
@@ -987,7 +1062,7 @@ void Disassembler::VisitFPConditionalSelect(Instruction* instr) {
 }
 
 
-void Disassembler::VisitFPDataProcessing1Source(Instruction* instr) {
+void Disassembler::VisitFPDataProcessing1Source(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "'Fd, 'Fn";
 
@@ -1015,7 +1090,7 @@ void Disassembler::VisitFPDataProcessing1Source(Instruction* instr) {
 }
 
 
-void Disassembler::VisitFPDataProcessing2Source(Instruction* instr) {
+void Disassembler::VisitFPDataProcessing2Source(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'Fd, 'Fn, 'Fm";
 
@@ -1039,7 +1114,7 @@ void Disassembler::VisitFPDataProcessing2Source(Instruction* instr) {
 }
 
 
-void Disassembler::VisitFPDataProcessing3Source(Instruction* instr) {
+void Disassembler::VisitFPDataProcessing3Source(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'Fd, 'Fn, 'Fm, 'Fa";
 
@@ -1058,7 +1133,7 @@ void Disassembler::VisitFPDataProcessing3Source(Instruction* instr) {
 }
 
 
-void Disassembler::VisitFPImmediate(Instruction* instr) {
+void Disassembler::VisitFPImmediate(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "(FPImmediate)";
 
@@ -1071,7 +1146,7 @@ void Disassembler::VisitFPImmediate(Instruction* instr) {
 }
 
 
-void Disassembler::VisitFPIntegerConvert(Instruction* instr) {
+void Disassembler::VisitFPIntegerConvert(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "(FPIntegerConvert)";
   const char *form_rf = "'Rd, 'Fn";
@@ -1127,7 +1202,7 @@ void Disassembler::VisitFPIntegerConvert(Instruction* instr) {
 }
 
 
-void Disassembler::VisitFPFixedPointConvert(Instruction* instr) {
+void Disassembler::VisitFPFixedPointConvert(const Instruction* instr) {
   const char *mnemonic = "";
   const char *form = "'Rd, 'Fn, 'IFPFBits";
   const char *form_fr = "'Fd, 'Rn, 'IFPFBits";
@@ -1155,14 +1230,22 @@ void Disassembler::VisitFPFixedPointConvert(Instruction* instr) {
 }
 
 
-void Disassembler::VisitSystem(Instruction* instr) {
+void Disassembler::VisitSystem(const Instruction* instr) {
   // Some system instructions hijack their Op and Cp fields to represent a
   // range of immediates instead of indicating a different instruction. This
   // makes the decoding tricky.
   const char *mnemonic = "unimplemented";
   const char *form = "(System)";
 
-  if (instr->Mask(SystemSysRegFMask) == SystemSysRegFixed) {
+  if (instr->Mask(SystemExclusiveMonitorFMask) == SystemExclusiveMonitorFixed) {
+    switch (instr->Mask(SystemExclusiveMonitorMask)) {
+      case CLREX: {
+        mnemonic = "clrex";
+        form = (instr->CRm() == 0xf) ? NULL : "'IX";
+        break;
+      }
+    }
+  } else if (instr->Mask(SystemSysRegFMask) == SystemSysRegFixed) {
     switch (instr->Mask(SystemSysRegMask)) {
       case MRS: {
         mnemonic = "mrs";
@@ -1184,7 +1267,6 @@ void Disassembler::VisitSystem(Instruction* instr) {
       }
     }
   } else if (instr->Mask(SystemHintFMask) == SystemHintFixed) {
-    VIXL_ASSERT(instr->Mask(SystemHintMask) == HINT);
     switch (instr->ImmHint()) {
       case NOP: {
         mnemonic = "nop";
@@ -1216,7 +1298,7 @@ void Disassembler::VisitSystem(Instruction* instr) {
 }
 
 
-void Disassembler::VisitException(Instruction* instr) {
+void Disassembler::VisitException(const Instruction* instr) {
   const char *mnemonic = "unimplemented";
   const char *form = "'IDebug";
 
@@ -1235,22 +1317,109 @@ void Disassembler::VisitException(Instruction* instr) {
 }
 
 
-void Disassembler::VisitUnimplemented(Instruction* instr) {
+void Disassembler::VisitUnimplemented(const Instruction* instr) {
   Format(instr, "unimplemented", "(Unimplemented)");
 }
 
 
-void Disassembler::VisitUnallocated(Instruction* instr) {
+void Disassembler::VisitUnallocated(const Instruction* instr) {
   Format(instr, "unallocated", "(Unallocated)");
 }
 
 
-void Disassembler::ProcessOutput(Instruction* /*instr*/) {
+void Disassembler::ProcessOutput(const Instruction* /*instr*/) {
   // The base disasm does nothing more than disassembling into a buffer.
 }
 
 
-void Disassembler::Format(Instruction* instr, const char* mnemonic,
+void Disassembler::AppendRegisterNameToOutput(const Instruction* instr,
+                                              const CPURegister& reg) {
+  USE(instr);
+  VIXL_ASSERT(reg.IsValid());
+  char reg_char;
+
+  if (reg.IsRegister()) {
+    reg_char = reg.Is64Bits() ? 'x' : 'w';
+  } else {
+    VIXL_ASSERT(reg.IsFPRegister());
+    reg_char = reg.Is64Bits() ? 'd' : 's';
+  }
+
+  if (reg.IsFPRegister() || !(reg.Aliases(sp) || reg.Aliases(xzr))) {
+    // A normal register: w0 - w30, x0 - x30, s0 - s31, d0 - d31.
+    AppendToOutput("%c%d", reg_char, reg.code());
+  } else if (reg.Aliases(sp)) {
+    // Disassemble w31/x31 as stack pointer wsp/sp.
+    AppendToOutput("%s", reg.Is64Bits() ? "sp" : "wsp");
+  } else {
+    // Disassemble w31/x31 as zero register wzr/xzr.
+    AppendToOutput("%czr", reg_char);
+  }
+}
+
+
+void Disassembler::AppendPCRelativeOffsetToOutput(const Instruction* instr,
+                                                  int64_t offset) {
+  USE(instr);
+  char sign = (offset < 0) ? '-' : '+';
+  AppendToOutput("#%c0x%" PRIx64, sign, std::abs(offset));
+}
+
+
+void Disassembler::AppendAddressToOutput(const Instruction* instr,
+                                         const void* addr) {
+  USE(instr);
+  AppendToOutput("(addr 0x%" PRIxPTR ")", reinterpret_cast<uintptr_t>(addr));
+}
+
+
+void Disassembler::AppendCodeAddressToOutput(const Instruction* instr,
+                                             const void* addr) {
+  AppendAddressToOutput(instr, addr);
+}
+
+
+void Disassembler::AppendDataAddressToOutput(const Instruction* instr,
+                                             const void* addr) {
+  AppendAddressToOutput(instr, addr);
+}
+
+
+void Disassembler::AppendCodeRelativeAddressToOutput(const Instruction* instr,
+                                                     const void* addr) {
+  USE(instr);
+  int64_t rel_addr = CodeRelativeAddress(addr);
+  if (rel_addr >= 0) {
+    AppendToOutput("(addr 0x%" PRIx64 ")", rel_addr);
+  } else {
+    AppendToOutput("(addr -0x%" PRIx64 ")", -rel_addr);
+  }
+}
+
+
+void Disassembler::AppendCodeRelativeCodeAddressToOutput(
+    const Instruction* instr, const void* addr) {
+  AppendCodeRelativeAddressToOutput(instr, addr);
+}
+
+
+void Disassembler::AppendCodeRelativeDataAddressToOutput(
+    const Instruction* instr, const void* addr) {
+  AppendCodeRelativeAddressToOutput(instr, addr);
+}
+
+
+void Disassembler::MapCodeAddress(int64_t base_address,
+                                  const Instruction* instr_address) {
+  set_code_address_offset(
+      base_address - reinterpret_cast<intptr_t>(instr_address));
+}
+int64_t Disassembler::CodeRelativeAddress(const void* addr) {
+  return reinterpret_cast<intptr_t>(addr) + code_address_offset();
+}
+
+
+void Disassembler::Format(const Instruction* instr, const char* mnemonic,
                           const char* format) {
   VIXL_ASSERT(mnemonic != NULL);
   ResetOutput();
@@ -1264,7 +1433,7 @@ void Disassembler::Format(Instruction* instr, const char* mnemonic,
 }
 
 
-void Disassembler::Substitute(Instruction* instr, const char* string) {
+void Disassembler::Substitute(const Instruction* instr, const char* string) {
   char chr = *string++;
   while (chr != '\0') {
     if (chr == '\'') {
@@ -1277,7 +1446,8 @@ void Disassembler::Substitute(Instruction* instr, const char* string) {
 }
 
 
-int Disassembler::SubstituteField(Instruction* instr, const char* format) {
+int Disassembler::SubstituteField(const Instruction* instr,
+                                  const char* format) {
   switch (format[0]) {
     case 'R':  // Register. X or W, selected by sf bit.
     case 'F':  // FP Register. S or D, selected by type field.
@@ -1303,7 +1473,7 @@ int Disassembler::SubstituteField(Instruction* instr, const char* format) {
 }
 
 
-int Disassembler::SubstituteRegisterField(Instruction* instr,
+int Disassembler::SubstituteRegisterField(const Instruction* instr,
                                           const char* format) {
   unsigned reg_num = 0;
   unsigned field_len = 2;
@@ -1312,6 +1482,7 @@ int Disassembler::SubstituteRegisterField(Instruction* instr,
     case 'n': reg_num = instr->Rn(); break;
     case 'm': reg_num = instr->Rm(); break;
     case 'a': reg_num = instr->Ra(); break;
+    case 's': reg_num = instr->Rs(); break;
     case 't': {
       if (format[2] == '2') {
         reg_num = instr->Rt2();
@@ -1329,48 +1500,65 @@ int Disassembler::SubstituteRegisterField(Instruction* instr,
     field_len = 3;
   }
 
-  char reg_type;
+  CPURegister::RegisterType reg_type;
+  unsigned reg_size;
+
   if (format[0] == 'R') {
     // Register type is R: use sf bit to choose X and W.
-    reg_type = instr->SixtyFourBits() ? 'x' : 'w';
+    reg_type = CPURegister::kRegister;
+    reg_size = instr->SixtyFourBits() ? kXRegSize : kWRegSize;
   } else if (format[0] == 'F') {
     // Floating-point register: use type field to choose S or D.
-    reg_type = ((instr->FPType() & 1) == 0) ? 's' : 'd';
+    reg_type = CPURegister::kFPRegister;
+    reg_size = ((instr->FPType() & 1) == 0) ? kSRegSize : kDRegSize;
   } else {
-    // Register type is specified. Make it lower case.
-    reg_type = format[0] + 0x20;
+    // The register type is specified.
+    switch (format[0]) {
+      case 'W':
+        reg_type = CPURegister::kRegister; reg_size = kWRegSize; break;
+      case 'X':
+        reg_type = CPURegister::kRegister; reg_size = kXRegSize; break;
+      case 'S':
+        reg_type = CPURegister::kFPRegister; reg_size = kSRegSize; break;
+      case 'D':
+        reg_type = CPURegister::kFPRegister; reg_size = kDRegSize; break;
+      default:
+        VIXL_UNREACHABLE();
+        reg_type = CPURegister::kRegister;
+        reg_size = kXRegSize;
+    }
   }
 
-  if ((reg_num != kZeroRegCode) || (reg_type == 's') || (reg_type == 'd')) {
-    // A normal register: w0 - w30, x0 - x30, s0 - s31, d0 - d31.
-    AppendToOutput("%c%d", reg_type, reg_num);
-  } else if (format[2] == 's') {
-    // Disassemble w31/x31 as stack pointer wsp/sp.
-    AppendToOutput("%s", (reg_type == 'w') ? "wsp" : "sp");
-  } else {
-    // Disassemble w31/x31 as zero register wzr/xzr.
-    AppendToOutput("%czr", reg_type);
+  if ((reg_type == CPURegister::kRegister) &&
+      (reg_num == kZeroRegCode) && (format[2] == 's')) {
+    reg_num = kSPRegInternalCode;
   }
+
+  AppendRegisterNameToOutput(instr, CPURegister(reg_num, reg_size, reg_type));
 
   return field_len;
 }
 
 
-int Disassembler::SubstituteImmediateField(Instruction* instr,
+int Disassembler::SubstituteImmediateField(const Instruction* instr,
                                            const char* format) {
   VIXL_ASSERT(format[0] == 'I');
 
   switch (format[1]) {
-    case 'M': {  // IMoveImm or IMoveLSL.
-      if (format[5] == 'I') {
-        uint64_t imm = instr->ImmMoveWide() << (16 * instr->ShiftMoveWide());
-        AppendToOutput("#0x%" PRIx64, imm);
-      } else {
-        VIXL_ASSERT(format[5] == 'L');
+    case 'M': {  // IMoveImm, IMoveNeg or IMoveLSL.
+      if (format[5] == 'L') {
         AppendToOutput("#0x%" PRIx64, instr->ImmMoveWide());
         if (instr->ShiftMoveWide() > 0) {
           AppendToOutput(", lsl #%" PRId64, 16 * instr->ShiftMoveWide());
         }
+      } else {
+        VIXL_ASSERT((format[5] == 'I') || (format[5] == 'N'));
+        uint64_t imm = instr->ImmMoveWide() << (16 * instr->ShiftMoveWide());
+        if (format[5] == 'N')
+          imm = ~imm;
+        if (!instr->SixtyFourBits())
+          imm &= UINT64_C(0xffffffff);
+        AppendToOutput("#0x%" PRIx64, imm);
       }
       return 8;
     }
@@ -1406,8 +1594,7 @@ int Disassembler::SubstituteImmediateField(Instruction* instr,
     }
     case 'C': {  // ICondB - Immediate Conditional Branch.
       int64_t offset = instr->ImmCondBranch() << 2;
-      char sign = (offset >= 0) ? '+' : '-';
-      AppendToOutput("#%c0x%" PRIx64, sign, offset);
+      AppendPCRelativeOffsetToOutput(instr, offset);
       return 6;
     }
     case 'A': {  // IAddSub.
@@ -1458,6 +1645,10 @@ int Disassembler::SubstituteImmediateField(Instruction* instr,
       AppendToOutput("#0x%" PRIx64, instr->ImmException());
       return 6;
     }
+    case 'X': {  // IX - CLREX instruction.
+      AppendToOutput("#0x%" PRIx64, instr->CRm());
+      return 2;
+    }
     default: {
       VIXL_UNIMPLEMENTED();
       return 0;
@@ -1466,7 +1657,7 @@ int Disassembler::SubstituteImmediateField(Instruction* instr,
 }
 
 
-int Disassembler::SubstituteBitfieldImmediateField(Instruction* instr,
+int Disassembler::SubstituteBitfieldImmediateField(const Instruction* instr,
                                                    const char* format) {
   VIXL_ASSERT((format[0] == 'I') && (format[1] == 'B'));
   unsigned r = instr->ImmR();
@@ -1501,24 +1692,46 @@ int Disassembler::SubstituteBitfieldImmediateField(Instruction* instr,
 }
 
 
-int Disassembler::SubstituteLiteralField(Instruction* instr,
+int Disassembler::SubstituteLiteralField(const Instruction* instr,
                                          const char* format) {
   VIXL_ASSERT(strncmp(format, "LValue", 6) == 0);
   USE(format);
 
+  const void * address = instr->LiteralAddress<const void *>();
   switch (instr->Mask(LoadLiteralMask)) {
     case LDR_w_lit:
     case LDR_x_lit:
+    case LDRSW_x_lit:
     case LDR_s_lit:
-    case LDR_d_lit: AppendToOutput("(addr %p)", instr->LiteralAddress()); break;
-    default: VIXL_UNREACHABLE();
+    case LDR_d_lit:
+      AppendCodeRelativeDataAddressToOutput(instr, address);
+      break;
+    case PRFM_lit: {
+      // Use the prefetch hint to decide how to print the address.
+      switch (instr->PrefetchHint()) {
+        case 0x0:     // PLD: prefetch for load.
+        case 0x2:     // PST: prepare for store.
+          AppendCodeRelativeDataAddressToOutput(instr, address);
+          break;
+        case 0x1:     // PLI: preload instructions.
+          AppendCodeRelativeCodeAddressToOutput(instr, address);
+          break;
+        case 0x3:     // Unallocated hint.
+          AppendCodeRelativeAddressToOutput(instr, address);
+          break;
+      }
+      break;
+    }
+    default:
+      VIXL_UNREACHABLE();
   }
 
   return 6;
 }
 
 
-int Disassembler::SubstituteShiftField(Instruction* instr, const char* format) {
+int Disassembler::SubstituteShiftField(const Instruction* instr,
+                                       const char* format) {
   VIXL_ASSERT(format[0] == 'H');
   VIXL_ASSERT(instr->ShiftDP() <= 0x3);
 
@@ -1541,7 +1754,7 @@ int Disassembler::SubstituteShiftField(Instruction* instr, const char* format) {
 }
 
 
-int Disassembler::SubstituteConditionField(Instruction* instr,
+int Disassembler::SubstituteConditionField(const Instruction* instr,
                                            const char* format) {
   VIXL_ASSERT(format[0] == 'C');
   const char* condition_code[] = { "eq", "ne", "hs", "lo",
@@ -1562,28 +1775,33 @@ int Disassembler::SubstituteConditionField(Instruction* instr,
 }
 
 
-int Disassembler::SubstitutePCRelAddressField(Instruction* instr,
+int Disassembler::SubstitutePCRelAddressField(const Instruction* instr,
                                               const char* format) {
-  USE(format);
-  VIXL_ASSERT(strncmp(format, "AddrPCRel", 9) == 0);
+  VIXL_ASSERT((strcmp(format, "AddrPCRelByte") == 0) ||   // Used by `adr`.
+              (strcmp(format, "AddrPCRelPage") == 0));    // Used by `adrp`.
 
-  int offset = instr->ImmPCRel();
+  int64_t offset = instr->ImmPCRel();
 
-  // Only ADR (AddrPCRelByte) is supported.
-  VIXL_ASSERT(strcmp(format, "AddrPCRelByte") == 0);
-
-  char sign = '+';
-  if (offset < 0) {
-    offset = -offset;
-    sign = '-';
+  // Compute the target address based on the effective address (after applying
+  // code_address_offset). This is required for correct behaviour of adrp.
+  const Instruction* base = instr + code_address_offset();
+  if (format[9] == 'P') {
+    offset *= kPageSize;
+    base = AlignDown(base, kPageSize);
   }
-  VIXL_STATIC_ASSERT(sizeof(*instr) == 1);
-  AppendToOutput("#%c0x%x (addr %p)", sign, offset, instr + offset);
+  // Strip code_address_offset before printing, so we can use the
+  // semantically-correct AppendCodeRelativeAddressToOutput.
+  const void* target =
+      reinterpret_cast<const void*>(base + offset - code_address_offset());
+
+  AppendPCRelativeOffsetToOutput(instr, offset);
+  AppendToOutput(" ");
+  AppendCodeRelativeAddressToOutput(instr, target);
   return 13;
 }
 
 
-int Disassembler::SubstituteBranchTargetField(Instruction* instr,
+int Disassembler::SubstituteBranchTargetField(const Instruction* instr,
                                               const char* format) {
   VIXL_ASSERT(strncmp(format, "BImm", 4) == 0);
 
@@ -1600,18 +1818,18 @@ int Disassembler::SubstituteBranchTargetField(Instruction* instr,
     default: VIXL_UNIMPLEMENTED();
   }
   offset <<= kInstructionSizeLog2;
-  char sign = '+';
-  if (offset < 0) {
-    offset = -offset;
-    sign = '-';
-  }
+  const void* target_address = reinterpret_cast<const void*>(instr + offset);
   VIXL_STATIC_ASSERT(sizeof(*instr) == 1);
-  AppendToOutput("#%c0x%" PRIx64 " (addr %p)", sign, offset, instr + offset);
+
+  AppendPCRelativeOffsetToOutput(instr, offset);
+  AppendToOutput(" ");
+  AppendCodeRelativeCodeAddressToOutput(instr, target_address);
+
   return 8;
 }
 
 
-int Disassembler::SubstituteExtendField(Instruction* instr,
+int Disassembler::SubstituteExtendField(const Instruction* instr,
                                         const char* format) {
   VIXL_ASSERT(strncmp(format, "Ext", 3) == 0);
   VIXL_ASSERT(instr->ExtendMode() <= 7);
@@ -1638,7 +1856,7 @@ int Disassembler::SubstituteExtendField(Instruction* instr,
 }
 
 
-int Disassembler::SubstituteLSRegOffsetField(Instruction* instr,
+int Disassembler::SubstituteLSRegOffsetField(const Instruction* instr,
                                              const char* format) {
   VIXL_ASSERT(strncmp(format, "Offsetreg", 9) == 0);
   const char* extend_mode[] = { "undefined", "undefined", "uxtw", "lsl",
@@ -1667,22 +1885,35 @@ int Disassembler::SubstituteLSRegOffsetField(Instruction* instr,
 }
 
 
-int Disassembler::SubstitutePrefetchField(Instruction* instr,
+int Disassembler::SubstitutePrefetchField(const Instruction* instr,
                                           const char* format) {
   VIXL_ASSERT(format[0] == 'P');
   USE(format);
 
-  int prefetch_mode = instr->PrefetchMode();
+  static const char* hints[] = {"ld", "li", "st"};
+  static const char* stream_options[] = {"keep", "strm"};
 
-  const char* ls = (prefetch_mode & 0x10) ? "st" : "ld";
-  int level = (prefetch_mode >> 1) + 1;
-  const char* ks = (prefetch_mode & 1) ? "strm" : "keep";
+  unsigned hint = instr->PrefetchHint();
+  unsigned target = instr->PrefetchTarget() + 1;
+  unsigned stream = instr->PrefetchStream();
 
-  AppendToOutput("p%sl%d%s", ls, level, ks);
+  if ((hint >= (sizeof(hints) / sizeof(hints[0]))) || (target > 3)) {
+    // Unallocated prefetch operations.
+    int prefetch_mode = instr->ImmPrefetchOperation();
+    AppendToOutput("#0b%c%c%c%c%c",
+                   (prefetch_mode & (1 << 4)) ? '1' : '0',
+                   (prefetch_mode & (1 << 3)) ? '1' : '0',
+                   (prefetch_mode & (1 << 2)) ? '1' : '0',
+                   (prefetch_mode & (1 << 1)) ? '1' : '0',
+                   (prefetch_mode & (1 << 0)) ? '1' : '0');
+  } else {
+    VIXL_ASSERT(stream < (sizeof(stream_options) / sizeof(stream_options[0])));
+    AppendToOutput("p%sl%d%s", hints[hint], target, stream_options[stream]);
+  }
   return 6;
 }
 
-int Disassembler::SubstituteBarrierField(Instruction* instr,
+int Disassembler::SubstituteBarrierField(const Instruction* instr,
                                          const char* format) {
   VIXL_ASSERT(format[0] == 'M');
   USE(format);
@@ -1714,7 +1945,7 @@ void Disassembler::AppendToOutput(const char* format, ...) {
 }
 
 
-void PrintDisassembler::ProcessOutput(Instruction* instr) {
+void PrintDisassembler::ProcessOutput(const Instruction* instr) {
   fprintf(stream_, "0x%016" PRIx64 "  %08" PRIx32 "\t\t%s\n",
           reinterpret_cast<uint64_t>(instr),
           instr->InstructionBits(),

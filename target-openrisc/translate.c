@@ -31,6 +31,9 @@
 #include "exec/helper-proto.h"
 #include "exec/helper-gen.h"
 
+#include "trace-tcg.h"
+
+
 #define OPENRISC_DISAS
 
 #ifdef OPENRISC_DISAS
@@ -115,9 +118,7 @@ void openrisc_translate_init(void)
 /* Writeback SR_F translation space to execution space.  */
 static inline void wb_SR_F(void)
 {
-    int label;
-
-    label = gen_new_label();
+    TCGLabel *label = gen_new_label();
     tcg_gen_andi_tl(cpu_sr, cpu_sr, ~SR_F);
     tcg_gen_brcondi_tl(TCG_COND_EQ, env_btaken, 0, label);
     tcg_gen_ori_tl(cpu_sr, cpu_sr, SR_F);
@@ -223,7 +224,7 @@ static void gen_jump(DisasContext *dc, uint32_t imm, uint32_t reg, uint32_t op0)
     case 0x03:     /* l.bnf */
     case 0x04:     /* l.bf  */
         {
-            int lab = gen_new_label();
+            TCGLabel *lab = gen_new_label();
             TCGv sr_f = tcg_temp_new();
             tcg_gen_movi_tl(jmp_pc, dc->pc+8);
             tcg_gen_andi_tl(sr_f, cpu_sr, SR_F);
@@ -269,7 +270,7 @@ static void dec_calc(DisasContext *dc, uint32_t insn)
         case 0x00:    /* l.add */
             LOG_DIS("l.add r%d, r%d, r%d\n", rd, ra, rb);
             {
-                int lab = gen_new_label();
+                TCGLabel *lab = gen_new_label();
                 TCGv_i64 ta = tcg_temp_new_i64();
                 TCGv_i64 tb = tcg_temp_new_i64();
                 TCGv_i64 td = tcg_temp_local_new_i64();
@@ -278,7 +279,7 @@ static void dec_calc(DisasContext *dc, uint32_t insn)
                 tcg_gen_extu_i32_i64(ta, cpu_R[ra]);
                 tcg_gen_extu_i32_i64(tb, cpu_R[rb]);
                 tcg_gen_add_i64(td, ta, tb);
-                tcg_gen_trunc_i64_i32(res, td);
+                tcg_gen_extrl_i64_i32(res, td);
                 tcg_gen_shri_i64(td, td, 31);
                 tcg_gen_andi_i64(td, td, 0x3);
                 /* Jump to lab when no overflow.  */
@@ -308,7 +309,7 @@ static void dec_calc(DisasContext *dc, uint32_t insn)
         case 0x00:
             LOG_DIS("l.addc r%d, r%d, r%d\n", rd, ra, rb);
             {
-                int lab = gen_new_label();
+                TCGLabel *lab = gen_new_label();
                 TCGv_i64 ta = tcg_temp_new_i64();
                 TCGv_i64 tb = tcg_temp_new_i64();
                 TCGv_i64 tcy = tcg_temp_local_new_i64();
@@ -323,7 +324,7 @@ static void dec_calc(DisasContext *dc, uint32_t insn)
                 tcg_gen_shri_i64(tcy, tcy, 10);
                 tcg_gen_add_i64(td, ta, tb);
                 tcg_gen_add_i64(td, td, tcy);
-                tcg_gen_trunc_i64_i32(res, td);
+                tcg_gen_extrl_i64_i32(res, td);
                 tcg_gen_shri_i64(td, td, 32);
                 tcg_gen_andi_i64(td, td, 0x3);
                 /* Jump to lab when no overflow.  */
@@ -355,7 +356,7 @@ static void dec_calc(DisasContext *dc, uint32_t insn)
         case 0x00:
             LOG_DIS("l.sub r%d, r%d, r%d\n", rd, ra, rb);
             {
-                int lab = gen_new_label();
+                TCGLabel *lab = gen_new_label();
                 TCGv_i64 ta = tcg_temp_new_i64();
                 TCGv_i64 tb = tcg_temp_new_i64();
                 TCGv_i64 td = tcg_temp_local_new_i64();
@@ -365,7 +366,7 @@ static void dec_calc(DisasContext *dc, uint32_t insn)
                 tcg_gen_extu_i32_i64(ta, cpu_R[ra]);
                 tcg_gen_extu_i32_i64(tb, cpu_R[rb]);
                 tcg_gen_sub_i64(td, ta, tb);
-                tcg_gen_trunc_i64_i32(res, td);
+                tcg_gen_extrl_i64_i32(res, td);
                 tcg_gen_shri_i64(td, td, 31);
                 tcg_gen_andi_i64(td, td, 0x3);
                 /* Jump to lab when no overflow.  */
@@ -447,10 +448,10 @@ static void dec_calc(DisasContext *dc, uint32_t insn)
         case 0x03:    /* l.div */
             LOG_DIS("l.div r%d, r%d, r%d\n", rd, ra, rb);
             {
-                int lab0 = gen_new_label();
-                int lab1 = gen_new_label();
-                int lab2 = gen_new_label();
-                int lab3 = gen_new_label();
+                TCGLabel *lab0 = gen_new_label();
+                TCGLabel *lab1 = gen_new_label();
+                TCGLabel *lab2 = gen_new_label();
+                TCGLabel *lab3 = gen_new_label();
                 TCGv_i32 sr_ove = tcg_temp_local_new_i32();
                 if (rb == 0) {
                     tcg_gen_ori_tl(cpu_sr, cpu_sr, (SR_OV | SR_CY));
@@ -489,9 +490,9 @@ static void dec_calc(DisasContext *dc, uint32_t insn)
         case 0x03:    /* l.divu */
             LOG_DIS("l.divu r%d, r%d, r%d\n", rd, ra, rb);
             {
-                int lab0 = gen_new_label();
-                int lab1 = gen_new_label();
-                int lab2 = gen_new_label();
+                TCGLabel *lab0 = gen_new_label();
+                TCGLabel *lab1 = gen_new_label();
+                TCGLabel *lab2 = gen_new_label();
                 TCGv_i32 sr_ove = tcg_temp_local_new_i32();
                 if (rb == 0) {
                     tcg_gen_ori_tl(cpu_sr, cpu_sr, (SR_OV | SR_CY));
@@ -530,7 +531,7 @@ static void dec_calc(DisasContext *dc, uint32_t insn)
                 TCGv_i64 trb = tcg_temp_local_new_i64();
                 TCGv_i64 high = tcg_temp_new_i64();
                 TCGv_i32 sr_ove = tcg_temp_local_new_i32();
-                int lab = gen_new_label();
+                TCGLabel *lab = gen_new_label();
                 /* Calculate each result. */
                 tcg_gen_extu_i32_i64(tra, cpu_R[ra]);
                 tcg_gen_extu_i32_i64(trb, cpu_R[rb]);
@@ -565,7 +566,7 @@ static void dec_calc(DisasContext *dc, uint32_t insn)
         case 0x00:    /* l.cmov */
             LOG_DIS("l.cmov r%d, r%d, r%d\n", rd, ra, rb);
             {
-                int lab = gen_new_label();
+                TCGLabel *lab = gen_new_label();
                 TCGv res = tcg_temp_local_new();
                 TCGv sr_f = tcg_temp_new();
                 tcg_gen_andi_tl(sr_f, cpu_sr, SR_F);
@@ -778,9 +779,9 @@ static void dec_misc(DisasContext *dc, uint32_t insn)
             tcg_gen_ext_i32_i64(t1, dst);
             tcg_gen_concat_i32_i64(t2, maclo, machi);
             tcg_gen_add_i64(t2, t2, t1);
-            tcg_gen_trunc_i64_i32(maclo, t2);
+            tcg_gen_extrl_i64_i32(maclo, t2);
             tcg_gen_shri_i64(t2, t2, 32);
-            tcg_gen_trunc_i64_i32(machi, t2);
+            tcg_gen_extrl_i64_i32(machi, t2);
             tcg_temp_free_i32(dst);
             tcg_temp_free(ttmp);
             tcg_temp_free_i64(t1);
@@ -890,14 +891,14 @@ static void dec_misc(DisasContext *dc, uint32_t insn)
             if (I16 == 0) {
                 tcg_gen_mov_tl(cpu_R[rd], cpu_R[ra]);
             } else {
-                int lab = gen_new_label();
+                TCGLabel *lab = gen_new_label();
                 TCGv_i64 ta = tcg_temp_new_i64();
                 TCGv_i64 td = tcg_temp_local_new_i64();
                 TCGv_i32 res = tcg_temp_local_new_i32();
                 TCGv_i32 sr_ove = tcg_temp_local_new_i32();
                 tcg_gen_extu_i32_i64(ta, cpu_R[ra]);
                 tcg_gen_addi_i64(td, ta, sign_extend(I16, 16));
-                tcg_gen_trunc_i64_i32(res, td);
+                tcg_gen_extrl_i64_i32(res, td);
                 tcg_gen_shri_i64(td, td, 32);
                 tcg_gen_andi_i64(td, td, 0x3);
                 /* Jump to lab when no overflow.  */
@@ -920,7 +921,7 @@ static void dec_misc(DisasContext *dc, uint32_t insn)
     case 0x28:    /* l.addic */
         LOG_DIS("l.addic r%d, r%d, %d\n", rd, ra, I16);
         {
-            int lab = gen_new_label();
+            TCGLabel *lab = gen_new_label();
             TCGv_i64 ta = tcg_temp_new_i64();
             TCGv_i64 td = tcg_temp_local_new_i64();
             TCGv_i64 tcy = tcg_temp_local_new_i64();
@@ -933,7 +934,7 @@ static void dec_misc(DisasContext *dc, uint32_t insn)
             tcg_gen_extu_i32_i64(tcy, sr_cy);
             tcg_gen_addi_i64(td, ta, sign_extend(I16, 16));
             tcg_gen_add_i64(td, td, tcy);
-            tcg_gen_trunc_i64_i32(res, td);
+            tcg_gen_extrl_i64_i32(res, td);
             tcg_gen_shri_i64(td, td, 32);
             tcg_gen_andi_i64(td, td, 0x3);
             /* Jump to lab when no overflow.  */
@@ -1072,9 +1073,9 @@ static void dec_mac(DisasContext *dc, uint32_t insn)
             tcg_gen_ext_i32_i64(t1, t0);
             tcg_gen_concat_i32_i64(t2, maclo, machi);
             tcg_gen_add_i64(t2, t2, t1);
-            tcg_gen_trunc_i64_i32(maclo, t2);
+            tcg_gen_extrl_i64_i32(maclo, t2);
             tcg_gen_shri_i64(t2, t2, 32);
-            tcg_gen_trunc_i64_i32(machi, t2);
+            tcg_gen_extrl_i64_i32(machi, t2);
             tcg_temp_free_i32(t0);
             tcg_temp_free_i64(t1);
             tcg_temp_free_i64(t2);
@@ -1091,9 +1092,9 @@ static void dec_mac(DisasContext *dc, uint32_t insn)
             tcg_gen_ext_i32_i64(t1, t0);
             tcg_gen_concat_i32_i64(t2, maclo, machi);
             tcg_gen_sub_i64(t2, t2, t1);
-            tcg_gen_trunc_i64_i32(maclo, t2);
+            tcg_gen_extrl_i64_i32(maclo, t2);
             tcg_gen_shri_i64(t2, t2, 32);
-            tcg_gen_trunc_i64_i32(machi, t2);
+            tcg_gen_extrl_i64_i32(machi, t2);
             tcg_temp_free_i32(t0);
             tcg_temp_free_i64(t1);
             tcg_temp_free_i64(t2);
@@ -1317,7 +1318,7 @@ static void dec_sys(DisasContext *dc, uint32_t insn)
 #ifdef OPENRISC_DISAS
     uint32_t K16;
 #endif
-    op0 = extract32(insn, 16, 8);
+    op0 = extract32(insn, 16, 10);
 #ifdef OPENRISC_DISAS
     K16 = extract32(insn, 0, 16);
 #endif
@@ -1617,31 +1618,12 @@ static void disas_openrisc_insn(DisasContext *dc, OpenRISCCPU *cpu)
     }
 }
 
-static void check_breakpoint(OpenRISCCPU *cpu, DisasContext *dc)
+void gen_intermediate_code(CPUOpenRISCState *env, struct TranslationBlock *tb)
 {
-    CPUState *cs = CPU(cpu);
-    CPUBreakpoint *bp;
-
-    if (unlikely(!QTAILQ_EMPTY(&cs->breakpoints))) {
-        QTAILQ_FOREACH(bp, &cs->breakpoints, entry) {
-            if (bp->pc == dc->pc) {
-                tcg_gen_movi_tl(cpu_pc, dc->pc);
-                gen_exception(dc, EXCP_DEBUG);
-                dc->is_jmp = DISAS_UPDATE;
-            }
-        }
-    }
-}
-
-static inline void gen_intermediate_code_internal(OpenRISCCPU *cpu,
-                                                  TranslationBlock *tb,
-                                                  int search_pc)
-{
+    OpenRISCCPU *cpu = openrisc_env_get_cpu(env);
     CPUState *cs = CPU(cpu);
     struct DisasContext ctx, *dc = &ctx;
-    uint16_t *gen_opc_end;
     uint32_t pc_start;
-    int j, k;
     uint32_t next_page_start;
     int num_insns;
     int max_insns;
@@ -1649,12 +1631,11 @@ static inline void gen_intermediate_code_internal(OpenRISCCPU *cpu,
     pc_start = tb->pc;
     dc->tb = tb;
 
-    gen_opc_end = tcg_ctx.gen_opc_buf + OPC_MAX_SIZE;
     dc->is_jmp = DISAS_NEXT;
     dc->ppc = pc_start;
     dc->pc = pc_start;
     dc->flags = cpu->env.cpucfgr;
-    dc->mem_idx = cpu_mmu_index(&cpu->env);
+    dc->mem_idx = cpu_mmu_index(&cpu->env, false);
     dc->synced_flags = dc->tb_flags = tb->flags;
     dc->delayed_branch = !!(dc->tb_flags & D_FLAG);
     dc->singlestep_enabled = cs->singlestep_enabled;
@@ -1664,36 +1645,35 @@ static inline void gen_intermediate_code_internal(OpenRISCCPU *cpu,
     }
 
     next_page_start = (pc_start & TARGET_PAGE_MASK) + TARGET_PAGE_SIZE;
-    k = -1;
     num_insns = 0;
     max_insns = tb->cflags & CF_COUNT_MASK;
 
     if (max_insns == 0) {
         max_insns = CF_COUNT_MASK;
     }
+    if (max_insns > TCG_MAX_INSNS) {
+        max_insns = TCG_MAX_INSNS;
+    }
 
-    gen_tb_start();
+    gen_tb_start(tb);
 
     do {
-        check_breakpoint(cpu, dc);
-        if (search_pc) {
-            j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
-            if (k < j) {
-                k++;
-                while (k < j) {
-                    tcg_ctx.gen_opc_instr_start[k++] = 0;
-                }
-            }
-            tcg_ctx.gen_opc_pc[k] = dc->pc;
-            tcg_ctx.gen_opc_instr_start[k] = 1;
-            tcg_ctx.gen_opc_icount[k] = num_insns;
+        tcg_gen_insn_start(dc->pc);
+        num_insns++;
+
+        if (unlikely(cpu_breakpoint_test(cs, dc->pc, BP_ANY))) {
+            tcg_gen_movi_tl(cpu_pc, dc->pc);
+            gen_exception(dc, EXCP_DEBUG);
+            dc->is_jmp = DISAS_UPDATE;
+            /* The address covered by the breakpoint must be included in
+               [tb->pc, tb->pc + tb->size) in order to for it to be
+               properly cleared -- thus we increment the PC here so that
+               the logic setting tb->size below does the right thing.  */
+            dc->pc += 4;
+            break;
         }
 
-        if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP | CPU_LOG_TB_OP_OPT))) {
-            tcg_gen_debug_insn_start(dc->pc);
-        }
-
-        if (num_insns + 1 == max_insns && (tb->cflags & CF_LAST_IO)) {
+        if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
             gen_io_start();
         }
         dc->ppc = dc->pc - 4;
@@ -1702,7 +1682,6 @@ static inline void gen_intermediate_code_internal(OpenRISCCPU *cpu,
         tcg_gen_movi_tl(cpu_npc, dc->npc);
         disas_openrisc_insn(dc, cpu);
         dc->pc = dc->npc;
-        num_insns++;
         /* delay slot */
         if (dc->delayed_branch) {
             dc->delayed_branch--;
@@ -1718,7 +1697,7 @@ static inline void gen_intermediate_code_internal(OpenRISCCPU *cpu,
             }
         }
     } while (!dc->is_jmp
-             && tcg_ctx.gen_opc_ptr < gen_opc_end
+             && !tcg_op_buf_full()
              && !cs->singlestep_enabled
              && !singlestep
              && (dc->pc < next_page_start)
@@ -1756,38 +1735,18 @@ static inline void gen_intermediate_code_internal(OpenRISCCPU *cpu,
     }
 
     gen_tb_end(tb, num_insns);
-    *tcg_ctx.gen_opc_ptr = INDEX_op_end;
-    if (search_pc) {
-        j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
-        k++;
-        while (k <= j) {
-            tcg_ctx.gen_opc_instr_start[k++] = 0;
-        }
-    } else {
-        tb->size = dc->pc - pc_start;
-        tb->icount = num_insns;
-    }
+
+    tb->size = dc->pc - pc_start;
+    tb->icount = num_insns;
 
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM)) {
         qemu_log("\n");
-        log_target_disas(&cpu->env, pc_start, dc->pc - pc_start, 0);
-        qemu_log("\nisize=%d osize=%td\n",
-            dc->pc - pc_start, tcg_ctx.gen_opc_ptr -
-            tcg_ctx.gen_opc_buf);
+        log_target_disas(cs, pc_start, dc->pc - pc_start, 0);
+        qemu_log("\nisize=%d osize=%d\n",
+                 dc->pc - pc_start, tcg_op_buf_count());
     }
 #endif
-}
-
-void gen_intermediate_code(CPUOpenRISCState *env, struct TranslationBlock *tb)
-{
-    gen_intermediate_code_internal(openrisc_env_get_cpu(env), tb, 0);
-}
-
-void gen_intermediate_code_pc(CPUOpenRISCState *env,
-                              struct TranslationBlock *tb)
-{
-    gen_intermediate_code_internal(openrisc_env_get_cpu(env), tb, 1);
 }
 
 void openrisc_cpu_dump_state(CPUState *cs, FILE *f,
@@ -1806,7 +1765,7 @@ void openrisc_cpu_dump_state(CPUState *cs, FILE *f,
 }
 
 void restore_state_to_opc(CPUOpenRISCState *env, TranslationBlock *tb,
-                          int pc_pos)
+                          target_ulong *data)
 {
-    env->pc = tcg_ctx.gen_opc_pc[pc_pos];
+    env->pc = data[0];
 }

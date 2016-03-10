@@ -25,6 +25,7 @@
 struct omap_lcd_panel_s {
     MemoryRegion *sysmem;
     MemoryRegion iomem;
+    MemoryRegionSection fbsection;
     qemu_irq irq;
     QemuConsole *con;
 
@@ -215,12 +216,19 @@ static void omap_update_display(void *opaque)
 
     step = width * bpp >> 3;
     linesize = surface_stride(surface);
-    framebuffer_update_display(surface, omap_lcd->sysmem,
-                               frame_base, width, height,
+    if (omap_lcd->invalidate) {
+        framebuffer_update_memory_section(&omap_lcd->fbsection,
+                                          omap_lcd->sysmem, frame_base,
+                                          height, step);
+    }
+
+    framebuffer_update_display(surface, &omap_lcd->fbsection,
+                               width, height,
                                step, linesize, 0,
                                omap_lcd->invalidate,
                                draw_line, omap_lcd->palette,
                                &first, &last);
+
     if (first >= 0) {
         dpy_gfx_update(omap_lcd->con, 0, first, width, last - first + 1);
     }
@@ -395,8 +403,7 @@ struct omap_lcd_panel_s *omap_lcdc_init(MemoryRegion *sysmem,
                                         struct omap_dma_lcd_channel_s *dma,
                                         omap_clk clk)
 {
-    struct omap_lcd_panel_s *s = (struct omap_lcd_panel_s *)
-            g_malloc0(sizeof(struct omap_lcd_panel_s));
+    struct omap_lcd_panel_s *s = g_new0(struct omap_lcd_panel_s, 1);
 
     s->irq = irq;
     s->dma = dma;

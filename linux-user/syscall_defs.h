@@ -64,8 +64,9 @@
 #endif
 
 #if defined(TARGET_I386) || defined(TARGET_ARM) || defined(TARGET_SH4) \
-    || defined(TARGET_M68K) || defined(TARGET_CRIS) || defined(TARGET_UNICORE32) \
-    || defined(TARGET_S390X) || defined(TARGET_OPENRISC)
+    || defined(TARGET_M68K) || defined(TARGET_CRIS) \
+    || defined(TARGET_UNICORE32) || defined(TARGET_S390X) \
+    || defined(TARGET_OPENRISC) || defined(TARGET_TILEGX)
 
 #define TARGET_IOC_SIZEBITS	14
 #define TARGET_IOC_DIRBITS	2
@@ -234,7 +235,8 @@ struct target_cmsghdr {
 };
 
 #define TARGET_CMSG_DATA(cmsg) ((unsigned char *) ((struct target_cmsghdr *) (cmsg) + 1))
-#define TARGET_CMSG_NXTHDR(mhdr, cmsg) __target_cmsg_nxthdr (mhdr, cmsg)
+#define TARGET_CMSG_NXTHDR(mhdr, cmsg, cmsg_start) \
+                               __target_cmsg_nxthdr(mhdr, cmsg, cmsg_start)
 #define TARGET_CMSG_ALIGN(len) (((len) + sizeof (abi_long) - 1) \
                                & (size_t) ~(sizeof (abi_long) - 1))
 #define TARGET_CMSG_SPACE(len) (TARGET_CMSG_ALIGN (len) \
@@ -242,17 +244,20 @@ struct target_cmsghdr {
 #define TARGET_CMSG_LEN(len)   (TARGET_CMSG_ALIGN (sizeof (struct target_cmsghdr)) + (len))
 
 static __inline__ struct target_cmsghdr *
-__target_cmsg_nxthdr (struct target_msghdr *__mhdr, struct target_cmsghdr *__cmsg)
+__target_cmsg_nxthdr(struct target_msghdr *__mhdr,
+                     struct target_cmsghdr *__cmsg,
+                     struct target_cmsghdr *__cmsg_start)
 {
   struct target_cmsghdr *__ptr;
 
   __ptr = (struct target_cmsghdr *)((unsigned char *) __cmsg
                                     + TARGET_CMSG_ALIGN (tswapal(__cmsg->cmsg_len)));
-  if ((unsigned long)((char *)(__ptr+1) - (char *)(size_t)tswapal(__mhdr->msg_control))
-      > tswapal(__mhdr->msg_controllen))
+  if ((unsigned long)((char *)(__ptr+1) - (char *)__cmsg_start)
+      > tswapal(__mhdr->msg_controllen)) {
     /* No more entries.  */
     return (struct target_cmsghdr *)0;
-  return __cmsg;
+  }
+  return __ptr;
 }
 
 struct target_mmsghdr {
@@ -365,7 +370,8 @@ int do_sigaction(int sig, const struct target_sigaction *act,
     || defined(TARGET_PPC) || defined(TARGET_MIPS) || defined(TARGET_SH4) \
     || defined(TARGET_M68K) || defined(TARGET_ALPHA) || defined(TARGET_CRIS) \
     || defined(TARGET_MICROBLAZE) || defined(TARGET_UNICORE32) \
-    || defined(TARGET_S390X) || defined(TARGET_OPENRISC)
+    || defined(TARGET_S390X) || defined(TARGET_OPENRISC) \
+    || defined(TARGET_TILEGX)
 
 #if defined(TARGET_SPARC)
 #define TARGET_SA_NOCLDSTOP    8u
@@ -655,7 +661,14 @@ typedef struct {
 #endif
 
 #define TARGET_SI_MAX_SIZE	128
-#define TARGET_SI_PAD_SIZE	((TARGET_SI_MAX_SIZE/sizeof(int)) - 3)
+
+#if TARGET_ABI_BITS == 32
+#define TARGET_SI_PREAMBLE_SIZE (3 * sizeof(int))
+#else
+#define TARGET_SI_PREAMBLE_SIZE (4 * sizeof(int))
+#endif
+
+#define TARGET_SI_PAD_SIZE ((TARGET_SI_MAX_SIZE - TARGET_SI_PREAMBLE_SIZE) / sizeof(int))
 
 typedef struct target_siginfo {
 #ifdef TARGET_MIPS
@@ -735,6 +748,10 @@ typedef struct target_siginfo {
 #define TARGET_ILL_PRVREG	(6)	/* privileged register */
 #define TARGET_ILL_COPROC	(7)	/* coprocessor error */
 #define TARGET_ILL_BADSTK	(8)	/* internal stack error */
+#ifdef TARGET_TILEGX
+#define TARGET_ILL_DBLFLT       (9)     /* double fault */
+#define TARGET_ILL_HARDWALL     (10)    /* user networks hardwall violation */
+#endif
 
 /*
  * SIGFPE si_codes
@@ -754,6 +771,7 @@ typedef struct target_siginfo {
  */
 #define TARGET_SEGV_MAPERR     (1)  /* address not mapped to object */
 #define TARGET_SEGV_ACCERR     (2)  /* invalid permissions for mapped object */
+#define TARGET_SEGV_BNDERR     (3)  /* failed address bound checks */
 
 /*
  * SIGBUS si_codes
@@ -761,12 +779,18 @@ typedef struct target_siginfo {
 #define TARGET_BUS_ADRALN       (1)	/* invalid address alignment */
 #define TARGET_BUS_ADRERR       (2)	/* non-existent physical address */
 #define TARGET_BUS_OBJERR       (3)	/* object specific hardware error */
+/* hardware memory error consumed on a machine check: action required */
+#define TARGET_BUS_MCEERR_AR    (4)
+/* hardware memory error detected in process but not consumed: action optional*/
+#define TARGET_BUS_MCEERR_AO    (5)
 
 /*
  * SIGTRAP si_codes
  */
 #define TARGET_TRAP_BRKPT	(1)	/* process breakpoint */
 #define TARGET_TRAP_TRACE	(2)	/* process trace trap */
+#define TARGET_TRAP_BRANCH      (3)     /* process taken branch trap */
+#define TARGET_TRAP_HWBKPT      (4)     /* hardware breakpoint/watchpoint */
 
 #endif /* defined(TARGET_I386) || defined(TARGET_ARM) */
 
@@ -962,7 +986,7 @@ struct target_pollfd {
                                            (struct cdrom_multisession) */
 #define TARGET_CDROM_GET_MCN		0x5311 /* Obtain the "Universal Product Code"
                                            if available (struct cdrom_mcn) */
-#define TARGET_CDROM_GET_UPC		TARGET_CDROM_GET_MCN  /* This one is depricated,
+#define TARGET_CDROM_GET_UPC		TARGET_CDROM_GET_MCN  /* This one is deprecated,
                                           but here anyway for compatibility */
 #define TARGET_CDROMRESET		0x5312 /* hard-reset the drive */
 #define TARGET_CDROMVOLREAD		0x5313 /* Get the drive's volume setting
@@ -1600,73 +1624,25 @@ struct target_stat {
 #elif defined(TARGET_ABI_MIPSN32)
 
 struct target_stat {
-	unsigned	st_dev;
-	int		st_pad1[3];		/* Reserved for network id */
-	unsigned int	st_ino;
-	unsigned int	st_mode;
-	unsigned int	st_nlink;
-	int		st_uid;
-	int		st_gid;
-	unsigned 	st_rdev;
-	unsigned int	st_pad2[2];
-	unsigned int	st_size;
-	unsigned int	st_pad3;
-	/*
-	 * Actually this should be timestruc_t st_atime, st_mtime and st_ctime
-	 * but we don't have it under Linux.
-	 */
-	unsigned int		target_st_atime;
-	unsigned int		target_st_atime_nsec;
-	unsigned int		target_st_mtime;
-	unsigned int		target_st_mtime_nsec;
-	unsigned int		target_st_ctime;
-	unsigned int		target_st_ctime_nsec;
-	unsigned int		st_blksize;
-	unsigned int		st_blocks;
-	unsigned int		st_pad4[14];
-};
-
-/*
- * This matches struct stat64 in glibc2.1, hence the absolutely insane
- * amounts of padding around dev_t's.  The memory layout is the same as of
- * struct stat of the 64-bit kernel.
- */
-
-#define TARGET_HAS_STRUCT_STAT64
-struct target_stat64 {
-	unsigned int	st_dev;
-	unsigned int	st_pad0[3];	/* Reserved for st_dev expansion  */
-
-	target_ulong	st_ino;
-
-        unsigned int	st_mode;
-        unsigned int	st_nlink;
-
-	int		st_uid;
-	int		st_gid;
-
-	unsigned int	st_rdev;
-	unsigned int	st_pad1[3];	/* Reserved for st_rdev expansion  */
-
-	int		st_size;
-
-	/*
-	 * Actually this should be timestruc_t st_atime, st_mtime and st_ctime
-	 * but we don't have it under Linux.
-	 */
-	int		target_st_atime;
-	unsigned int	target_st_atime_nsec;	/* Reserved for st_atime expansion  */
-
-	int		target_st_mtime;
-	unsigned int	target_st_mtime_nsec;	/* Reserved for st_mtime expansion  */
-
-	int		target_st_ctime;
-	unsigned int	target_st_ctime_nsec;	/* Reserved for st_ctime expansion  */
-
-	unsigned int	st_blksize;
-	unsigned int	st_pad2;
-
-	int		st_blocks;
+        abi_ulong    st_dev;
+        abi_ulong    st_pad0[3]; /* Reserved for st_dev expansion */
+        uint64_t     st_ino;
+        unsigned int st_mode;
+        unsigned int st_nlink;
+        int          st_uid;
+        int          st_gid;
+        abi_ulong    st_rdev;
+        abi_ulong    st_pad1[3]; /* Reserved for st_rdev expansion */
+        int64_t      st_size;
+        abi_long     target_st_atime;
+        abi_ulong    target_st_atime_nsec; /* Reserved for st_atime expansion */
+        abi_long     target_st_mtime;
+        abi_ulong    target_st_mtime_nsec; /* Reserved for st_mtime expansion */
+        abi_long     target_st_ctime;
+        abi_ulong    target_st_ctime_nsec; /* Reserved for st_ctime expansion */
+        abi_ulong    st_blksize;
+        abi_ulong    st_pad2;
+        int64_t      st_blocks;
 };
 
 #elif defined(TARGET_ABI_MIPSO32)
@@ -1912,7 +1888,7 @@ struct target_stat {
     abi_ulong  target_st_ctime_nsec;
     unsigned int __unused[2];
 };
-#elif defined(TARGET_OPENRISC)
+#elif defined(TARGET_OPENRISC) || defined(TARGET_TILEGX)
 
 /* These are the asm-generic versions of the stat and stat64 structures */
 
@@ -2305,7 +2281,9 @@ struct target_flock {
 struct target_flock64 {
 	short  l_type;
 	short  l_whence;
-#if defined(TARGET_PPC) || defined(TARGET_X86_64) || defined(TARGET_MIPS) || defined(TARGET_SPARC) || defined(TARGET_HPPA) || defined (TARGET_MICROBLAZE)
+#if defined(TARGET_PPC) || defined(TARGET_X86_64) || defined(TARGET_MIPS) \
+    || defined(TARGET_SPARC) || defined(TARGET_HPPA) \
+    || defined(TARGET_MICROBLAZE) || defined(TARGET_TILEGX)
         int __pad;
 #endif
 	unsigned long long l_start;
@@ -2330,7 +2308,7 @@ struct target_f_owner_ex {
 };
 
 /* soundcard defines */
-/* XXX: convert them all to arch indepedent entries */
+/* XXX: convert them all to arch independent entries */
 #define TARGET_SNDCTL_COPR_HALT           TARGET_IOWR('C',  7, int);
 #define TARGET_SNDCTL_COPR_LOAD           0xcfb04301
 #define TARGET_SNDCTL_COPR_RCODE          0xc0144303
@@ -2564,10 +2542,7 @@ struct target_ucred {
 
 #endif
 
-
-struct target_timer_t {
-    abi_ulong ptr;
-};
+typedef int32_t target_timer_t;
 
 #define TARGET_SIGEV_MAX_SIZE 64
 

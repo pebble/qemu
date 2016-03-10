@@ -136,7 +136,7 @@ struct omap_dma_s {
 
 static inline void omap_dma_interrupts_update(struct omap_dma_s *s)
 {
-    return s->intr_update(s);
+    s->intr_update(s);
 }
 
 static void omap_dma_channel_load(struct omap_dma_channel_s *ch)
@@ -1502,7 +1502,8 @@ static void omap_dma_write(void *opaque, hwaddr addr,
     int reg, ch;
 
     if (size != 2) {
-        return omap_badwidth_write16(opaque, addr, value);
+        omap_badwidth_write16(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -1625,8 +1626,7 @@ struct soc_dma_s *omap_dma_init(hwaddr base, qemu_irq *irqs,
                 enum omap_dma_model model)
 {
     int num_irqs, memsize, i;
-    struct omap_dma_s *s = (struct omap_dma_s *)
-            g_malloc0(sizeof(struct omap_dma_s));
+    struct omap_dma_s *s = g_new0(struct omap_dma_s, 1);
 
     if (model <= omap_dma_3_1) {
         num_irqs = 6;
@@ -1857,7 +1857,8 @@ static void omap_dma4_write(void *opaque, hwaddr addr,
     struct omap_dma_channel_s *ch;
 
     if (size == 1) {
-        return omap_badwidth_write16(opaque, addr, value);
+        omap_badwidth_write16(opaque, addr, value);
+        return;
     }
 
     switch (addr) {
@@ -2059,8 +2060,7 @@ struct soc_dma_s *omap_dma4_init(hwaddr base, qemu_irq *irqs,
                 int chans, omap_clk iclk, omap_clk fclk)
 {
     int i;
-    struct omap_dma_s *s = (struct omap_dma_s *)
-            g_malloc0(sizeof(struct omap_dma_s));
+    struct omap_dma_s *s = g_new0(struct omap_dma_s, 1);
 
     s->model = omap_dma_4;
     s->chans = chans;

@@ -10,8 +10,8 @@
  */
 
 #include "sysemu/blockdev.h"
+#include "sysemu/block-backend.h"
 #include "hw/block/block.h"
-#include "monitor/monitor.h"
 #include "qapi/qmp/qerror.h"
 #include "sysemu/sysemu.h"
 #include "qmp-commands.h"
@@ -42,12 +42,13 @@ void qmp_nbd_server_start(SocketAddress *addr, Error **errp)
 
     server_fd = socket_listen(addr, errp);
     if (server_fd != -1) {
-        qemu_set_fd_handler2(server_fd, NULL, nbd_accept, NULL, NULL);
+        qemu_set_fd_handler(server_fd, nbd_accept, NULL, NULL);
     }
 }
 
-/* Hook into the BlockDriverState notifiers to close the export when
- * the file is closed.
+/*
+ * Hook into the BlockBackend notifiers to close the export when the
+ * backend is closed.
  */
 typedef struct NBDCloseNotifier {
     Notifier n;
@@ -73,7 +74,7 @@ static void nbd_close_notifier(Notifier *n, void *data)
 void qmp_nbd_server_add(const char *device, bool has_writable, bool writable,
                         Error **errp)
 {
-    BlockDriverState *bs;
+    BlockBackend *blk;
     NBDExport *exp;
     NBDCloseNotifier *n;
 
@@ -87,31 +88,36 @@ void qmp_nbd_server_add(const char *device, bool has_writable, bool writable,
         return;
     }
 
-    bs = bdrv_find(device);
-    if (!bs) {
-        error_set(errp, QERR_DEVICE_NOT_FOUND, device);
+    blk = blk_by_name(device);
+    if (!blk) {
+        error_set(errp, ERROR_CLASS_DEVICE_NOT_FOUND,
+                  "Device '%s' not found", device);
         return;
     }
-    if (!bdrv_is_inserted(bs)) {
-        error_set(errp, QERR_DEVICE_HAS_NO_MEDIUM, device);
+    if (!blk_is_inserted(blk)) {
+        error_setg(errp, QERR_DEVICE_HAS_NO_MEDIUM, device);
         return;
     }
 
     if (!has_writable) {
         writable = false;
     }
-    if (bdrv_is_read_only(bs)) {
+    if (blk_is_read_only(blk)) {
         writable = false;
     }
 
-    exp = nbd_export_new(bs, 0, -1, writable ? 0 : NBD_FLAG_READ_ONLY, NULL);
+    exp = nbd_export_new(blk, 0, -1, writable ? 0 : NBD_FLAG_READ_ONLY, NULL,
+                         errp);
+    if (!exp) {
+        return;
+    }
 
     nbd_export_set_name(exp, device);
 
-    n = g_malloc0(sizeof(NBDCloseNotifier));
+    n = g_new0(NBDCloseNotifier, 1);
     n->n.notify = nbd_close_notifier;
     n->exp = exp;
-    bdrv_add_close_notifier(bs, &n->n);
+    blk_add_close_notifier(blk, &n->n);
     QTAILQ_INSERT_TAIL(&close_notifiers, n, next);
 }
 
@@ -123,7 +129,7 @@ void qmp_nbd_server_stop(Error **errp)
     }
 
     if (server_fd != -1) {
-        qemu_set_fd_handler2(server_fd, NULL, NULL, NULL, NULL);
+        qemu_set_fd_handler(server_fd, NULL, NULL, NULL);
         close(server_fd);
         server_fd = -1;
     }

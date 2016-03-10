@@ -20,6 +20,9 @@
 
 #include <glib.h>
 
+#define ACPI_PCIHP_ADDR         0xae00
+#define PCI_EJ_BASE             0x0008
+
 typedef struct QPCIBusPC
 {
     QPCIBus bus;
@@ -144,7 +147,7 @@ static void qpci_pc_config_writel(QPCIBus *bus, int devfn, uint8_t offset, uint3
     outl(0xcfc, value);
 }
 
-static void *qpci_pc_iomap(QPCIBus *bus, QPCIDevice *dev, int barno)
+static void *qpci_pc_iomap(QPCIBus *bus, QPCIDevice *dev, int barno, uint64_t *sizeptr)
 {
     QPCIBusPC *s = container_of(bus, QPCIBusPC, bus);
     static const int bar_reg_map[] = {
@@ -172,6 +175,9 @@ static void *qpci_pc_iomap(QPCIBus *bus, QPCIDevice *dev, int barno)
     size = (1ULL << ctzl(addr));
     if (size == 0) {
         return NULL;
+    }
+    if (sizeptr) {
+        *sizeptr = size;
     }
 
     if (io_type == PCI_BASE_ADDRESS_SPACE_IO) {
@@ -236,4 +242,57 @@ QPCIBus *qpci_init_pc(void)
     ret->pci_iohole_alloc = 0;
 
     return &ret->bus;
+}
+
+void qpci_free_pc(QPCIBus *bus)
+{
+    QPCIBusPC *s = container_of(bus, QPCIBusPC, bus);
+
+    g_free(s);
+}
+
+void qpci_plug_device_test(const char *driver, const char *id,
+                           uint8_t slot, const char *opts)
+{
+    QDict *response;
+    char *cmd;
+
+    cmd = g_strdup_printf("{'execute': 'device_add',"
+                          " 'arguments': {"
+                          "   'driver': '%s',"
+                          "   'addr': '%d',"
+                          "   %s%s"
+                          "   'id': '%s'"
+                          "}}", driver, slot,
+                          opts ? opts : "", opts ? "," : "",
+                          id);
+    response = qmp(cmd);
+    g_free(cmd);
+    g_assert(response);
+    g_assert(!qdict_haskey(response, "error"));
+    QDECREF(response);
+}
+
+void qpci_unplug_acpi_device_test(const char *id, uint8_t slot)
+{
+    QDict *response;
+    char *cmd;
+
+    cmd = g_strdup_printf("{'execute': 'device_del',"
+                          " 'arguments': {"
+                          "   'id': '%s'"
+                          "}}", id);
+    response = qmp(cmd);
+    g_free(cmd);
+    g_assert(response);
+    g_assert(!qdict_haskey(response, "error"));
+    QDECREF(response);
+
+    outb(ACPI_PCIHP_ADDR + PCI_EJ_BASE, 1 << slot);
+
+    response = qmp("");
+    g_assert(response);
+    g_assert(qdict_haskey(response, "event"));
+    g_assert(!strcmp(qdict_get_str(response, "event"), "DEVICE_DELETED"));
+    QDECREF(response);
 }

@@ -11,7 +11,7 @@ typedef struct pflash_t pflash_t;
 pflash_t *pflash_cfi01_register(hwaddr base,
                                 DeviceState *qdev, const char *name,
                                 hwaddr size,
-                                BlockDriverState *bs,
+                                BlockBackend *blk,
                                 uint32_t sector_len, int nb_blocs, int width,
                                 uint16_t id0, uint16_t id1,
                                 uint16_t id2, uint16_t id3, int be);
@@ -20,7 +20,7 @@ pflash_t *pflash_cfi01_register(hwaddr base,
 pflash_t *pflash_cfi02_register(hwaddr base,
                                 DeviceState *qdev, const char *name,
                                 hwaddr size,
-                                BlockDriverState *bs, uint32_t sector_len,
+                                BlockBackend *blk, uint32_t sector_len,
                                 int nb_blocs, int nb_mappings, int width,
                                 uint16_t id0, uint16_t id1,
                                 uint16_t id2, uint16_t id3,
@@ -31,8 +31,8 @@ pflash_t *pflash_cfi02_register(hwaddr base,
 pflash_t *pflash_jedec_424_register(hwaddr base,
                                 DeviceState *qdev, const char *name,
                                 hwaddr size,
-                                BlockDriverState *bs,
-                                uint32_t sector_len, int nb_blocs,
+                                BlockBackend *blk,
+                                uint32_t sector_len, int nb_blocs, uint32_t bank_size,
                                 int bank_width, uint16_t id0, uint16_t id1,
                                 uint16_t id2, uint16_t id3, int be);
 
@@ -40,7 +40,7 @@ MemoryRegion *pflash_cfi01_get_memory(pflash_t *fl);
 MemoryRegion *pflash_jedec_424_get_memory(pflash_t *fl);
 
 /* nand.c */
-DeviceState *nand_init(BlockDriverState *bdrv, int manf_id, int chip_id);
+DeviceState *nand_init(BlockBackend *blk, int manf_id, int chip_id);
 void nand_setpins(DeviceState *dev, uint8_t cle, uint8_t ale,
                   uint8_t ce, uint8_t wp, uint8_t gnd);
 void nand_getpins(DeviceState *dev, int *rb);
@@ -72,6 +72,6 @@ void ecc_reset(ECCState *s);
 extern VMStateDescription vmstate_ecc_state;
 
 typedef struct f2xx_flash f2xx_flash_t;
-f2xx_flash_t *f2xx_flash_register(BlockDriverState *bdrv, hwaddr base,
+f2xx_flash_t *f2xx_flash_register(BlockBackend *blk, hwaddr base,
                                   hwaddr size);
 #endif

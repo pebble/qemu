@@ -33,6 +33,7 @@
 #include "clients.h"
 #include "hub.h"
 #include "monitor/monitor.h"
+#include "qemu/error-report.h"
 #include "qemu/sockets.h"
 #include "slirp/libslirp.h"
 #include "sysemu/char.h"
@@ -299,7 +300,7 @@ static SlirpState *slirp_lookup(Monitor *mon, const char *vlan,
     }
 }
 
-void net_slirp_hostfwd_remove(Monitor *mon, const QDict *qdict)
+void hmp_hostfwd_remove(Monitor *mon, const QDict *qdict)
 {
     struct in_addr host_addr = { .s_addr = INADDR_ANY };
     int host_port;
@@ -345,8 +346,7 @@ void net_slirp_hostfwd_remove(Monitor *mon, const QDict *qdict)
 
     host_port = atoi(p);
 
-    err = slirp_remove_hostfwd(QTAILQ_FIRST(&slirp_stacks)->slirp, is_udp,
-                               host_addr, host_port);
+    err = slirp_remove_hostfwd(s->slirp, is_udp, host_addr, host_port);
 
     monitor_printf(mon, "host forwarding rule for %s %s\n", src_str,
                    err ? "not found" : "removed");
@@ -421,7 +421,7 @@ static int slirp_hostfwd(SlirpState *s, const char *redir_str,
     return -1;
 }
 
-void net_slirp_hostfwd_add(Monitor *mon, const QDict *qdict)
+void hmp_hostfwd_add(Monitor *mon, const QDict *qdict)
 {
     const char *redir_str;
     SlirpState *s;
@@ -482,7 +482,6 @@ static void slirp_smb_cleanup(SlirpState *s)
 static int slirp_smb(SlirpState* s, const char *exported_dir,
                      struct in_addr vserver_addr)
 {
-    static int instance;
     char smb_conf[128];
     char smb_cmdline[128];
     struct passwd *passwd;
@@ -506,10 +505,10 @@ static int slirp_smb(SlirpState* s, const char *exported_dir,
         return -1;
     }
 
-    snprintf(s->smb_dir, sizeof(s->smb_dir), "/tmp/qemu-smb.%ld-%d",
-             (long)getpid(), instance++);
-    if (mkdir(s->smb_dir, 0700) < 0) {
+    snprintf(s->smb_dir, sizeof(s->smb_dir), "/tmp/qemu-smb.XXXXXX");
+    if (!mkdtemp(s->smb_dir)) {
         error_report("could not create samba server dir '%s'", s->smb_dir);
+        s->smb_dir[0] = 0;
         return -1;
     }
     snprintf(smb_conf, sizeof(smb_conf), "%s/%s", s->smb_dir, "smb.conf");
@@ -524,15 +523,21 @@ static int slirp_smb(SlirpState* s, const char *exported_dir,
     fprintf(f,
             "[global]\n"
             "private dir=%s\n"
-            "socket address=127.0.0.1\n"
+            "interfaces=127.0.0.1\n"
+            "bind interfaces only=yes\n"
             "pid directory=%s\n"
             "lock directory=%s\n"
             "state directory=%s\n"
+            "cache directory=%s\n"
             "ncalrpc dir=%s/ncalrpc\n"
             "log file=%s/log.smbd\n"
             "smb passwd file=%s/smbpasswd\n"
             "security = user\n"
             "map to guest = Bad User\n"
+            "load printers = no\n"
+            "printing = bsd\n"
+            "disable spoolss = yes\n"
+            "usershare max shares = 0\n"
             "[qemu]\n"
             "path=%s\n"
             "read only=no\n"
@@ -545,13 +550,14 @@ static int slirp_smb(SlirpState* s, const char *exported_dir,
             s->smb_dir,
             s->smb_dir,
             s->smb_dir,
+            s->smb_dir,
             exported_dir,
             passwd->pw_name
             );
     fclose(f);
 
-    snprintf(smb_cmdline, sizeof(smb_cmdline), "%s -s %s",
-             CONFIG_SMBD_COMMAND, smb_conf);
+    snprintf(smb_cmdline, sizeof(smb_cmdline), "%s -l %s -s %s",
+             CONFIG_SMBD_COMMAND, s->smb_dir, smb_conf);
 
     if (slirp_add_exec(s->slirp, 0, smb_cmdline, &vserver_addr, 139) < 0 ||
         slirp_add_exec(s->slirp, 0, smb_cmdline, &vserver_addr, 445) < 0) {
@@ -637,17 +643,16 @@ static int slirp_guestfwd(SlirpState *s, const char *config_str,
         goto fail_syntax;
     }
 
-    fwd = g_malloc(sizeof(struct GuestFwd));
     snprintf(buf, sizeof(buf), "guestfwd.tcp.%d", port);
 
     if ((strlen(p) > 4) && !strncmp(p, "cmd:", 4)) {
         if (slirp_add_exec(s->slirp, 0, &p[4], &server, port) < 0) {
             error_report("conflicting/invalid host:port in guest forwarding "
                          "rule '%s'", config_str);
-            g_free(fwd);
             return -1;
         }
     } else {
+        fwd = g_new(struct GuestFwd, 1);
         fwd->hd = qemu_chr_new(buf, p, NULL);
         if (!fwd->hd) {
             error_report("could not open guest forwarding device '%s'", buf);
@@ -676,7 +681,7 @@ static int slirp_guestfwd(SlirpState *s, const char *config_str,
     return -1;
 }
 
-void do_info_usernet(Monitor *mon, const QDict *qdict)
+void hmp_info_usernet(Monitor *mon, const QDict *qdict)
 {
     SlirpState *s;
 
@@ -732,16 +737,17 @@ static const char **slirp_dnssearch(const StringList *dnsname)
 }
 
 int net_init_slirp(const NetClientOptions *opts, const char *name,
-                   NetClientState *peer)
+                   NetClientState *peer, Error **errp)
 {
+    /* FIXME error_setg(errp, ...) on failure */
     struct slirp_config_str *config;
     char *vnet;
     int ret;
     const NetdevUserOptions *user;
     const char **dnssearch;
 
-    assert(opts->kind == NET_CLIENT_OPTIONS_KIND_USER);
-    user = opts->user;
+    assert(opts->type == NET_CLIENT_OPTIONS_KIND_USER);
+    user = opts->u.user;
 
     vnet = user->has_net ? g_strdup(user->net) :
            user->has_ip  ? g_strdup_printf("%s/24", user->ip) :

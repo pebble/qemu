@@ -92,7 +92,7 @@ static void openrisc_cpu_initfn(Object *obj)
     static int inited;
 
     cs->env_ptr = &cpu->env;
-    cpu_exec_init(&cpu->env);
+    cpu_exec_init(cs, &error_abort);
 
 #ifndef CONFIG_USER_ONLY
     cpu_openrisc_mmu_init(cpu);
@@ -165,6 +165,7 @@ static void openrisc_cpu_class_init(ObjectClass *oc, void *data)
     cc->class_by_name = openrisc_cpu_class_by_name;
     cc->has_work = openrisc_cpu_has_work;
     cc->do_interrupt = openrisc_cpu_do_interrupt;
+    cc->cpu_exec_interrupt = openrisc_cpu_exec_interrupt;
     cc->dump_state = openrisc_cpu_dump_state;
     cc->set_pc = openrisc_cpu_set_pc;
     cc->gdb_read_register = openrisc_cpu_gdb_read_register;
@@ -176,6 +177,13 @@ static void openrisc_cpu_class_init(ObjectClass *oc, void *data)
     dc->vmsd = &vmstate_openrisc_cpu;
 #endif
     cc->gdb_num_core_regs = 32 + 3;
+
+    /*
+     * Reason: openrisc_cpu_initfn() calls cpu_exec_init(), which saves
+     * the object in cpus -> dangling pointer after final
+     * object_unref().
+     */
+    dc->cannot_destroy_with_object_finalize_yet = true;
 }
 
 static void cpu_register(const OpenRISCCPUInfo *info)

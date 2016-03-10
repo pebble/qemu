@@ -391,6 +391,8 @@ The following commands are available:
 
 @include qemu-monitor.texi
 
+@include qemu-monitor-info.texi
+
 @subsection Integer expressions
 
 The monitor understands integers expressions for every integer
@@ -412,6 +414,7 @@ snapshots.
 * vm_snapshots::              VM snapshots
 * qemu_img_invocation::       qemu-img Invocation
 * qemu_nbd_invocation::       qemu-nbd Invocation
+* qemu_ga_invocation::        qemu-ga Invocation
 * disk_images_formats::       Disk image file formats
 * host_drives::               Using host drives
 * disk_images_fat_images::    Virtual FAT disk images
@@ -505,6 +508,11 @@ state is not saved or restored properly (in particular USB).
 
 @include qemu-nbd.texi
 
+@node qemu_ga_invocation
+@subsection @code{qemu-ga} Invocation
+
+@include qemu-ga.texi
+
 @node disk_images_formats
 @subsection Disk image file formats
 
@@ -527,11 +535,20 @@ Linux or NTFS on Windows), then only the written sectors will reserve
 space. Use @code{qemu-img info} to know the real size used by the
 image or @code{ls -ls} on Unix/Linux.
 
+Supported options:
+@table @code
+@item preallocation
+Preallocation mode (allowed values: @code{off}, @code{falloc}, @code{full}).
+@code{falloc} mode preallocates space for image by calling posix_fallocate().
+@code{full} mode preallocates space for image by writing zeros to underlying
+storage.
+@end table
+
 @item qcow2
 QEMU image format, the most versatile format. Use it to have smaller
 images (useful if your filesystem does not supports holes, for example
-on Windows), optional AES encryption, zlib based compression and
-support of multiple VM snapshots.
+on Windows), zlib based compression and support of multiple VM
+snapshots.
 
 Supported options:
 @table @code
@@ -565,9 +582,10 @@ original file must then be securely erased using a program like shred,
 though even this is ineffective with many modern storage technologies.
 @end itemize
 
-Use of qcow / qcow2 encryption is thus strongly discouraged. Users are
-recommended to use an alternative encryption technology such as the
-Linux dm-crypt / LUKS system.
+Use of qcow / qcow2 encryption with QEMU is deprecated, and support for
+it will go away in a future release.  Users are recommended to use an
+alternative encryption technology such as the Linux dm-crypt / LUKS
+system.
 
 @item cluster_size
 Changes the qcow2 cluster size (must be between 512 and 2M). Smaller cluster
@@ -575,9 +593,11 @@ sizes can improve the image file size whereas larger cluster sizes generally
 provide better performance.
 
 @item preallocation
-Preallocation mode (allowed values: off, metadata). An image with preallocated
-metadata is initially larger but can improve performance when the image needs
-to grow.
+Preallocation mode (allowed values: @code{off}, @code{metadata}, @code{falloc},
+@code{full}). An image with preallocated metadata is initially larger but can
+improve performance when the image needs to grow. @code{falloc} and @code{full}
+preallocations are like the same options of @code{raw} format, but sets up
+metadata also.
 
 @item lazy_refcounts
 If this option is set to @code{on}, reference count updates are postponed with
@@ -643,15 +663,6 @@ File name of a base image (see @option{create} subcommand)
 If this option is set to @code{on}, the image is encrypted.
 @end table
 
-@item cow
-User Mode Linux Copy On Write image format. It is supported only for
-compatibility with previous versions.
-Supported options:
-@table @code
-@item backing_file
-File name of a base image (see @option{create} subcommand)
-@end table
-
 @item vdi
 VirtualBox 1.1 compatible image format.
 Supported options:
@@ -696,7 +707,11 @@ Supported options:
 Specifies which VHDX subformat to use. Valid options are
 @code{dynamic} (default) and @code{fixed}.
 @item block_state_zero
-Force use of payload blocks of type 'ZERO'.
+Force use of payload blocks of type 'ZERO'.  Can be set to @code{on} (default)
+or @code{off}.  When set to @code{off}, new blocks will be created as
+@code{PAYLOAD_BLOCK_NOT_PRESENT}, which means parsers are free to return
+arbitrary data for those blocks.  Do not set to @code{off} when using
+@code{qemu-img convert} with @code{subformat=dynamic}.
 @item block_size
 Block size; min 1 MB, max 256 MB.  0 means auto-calculate based on image size.
 @item log_size
@@ -729,8 +744,7 @@ devices. We describe here the usage for QEMU version >= 0.8.3.
 
 On Linux, you can directly use the host device filename instead of a
 disk image filename provided you have enough privileges to access
-it. For example, use @file{/dev/cdrom} to access to the CDROM or
-@file{/dev/fd0} for the floppy.
+it. For example, use @file{/dev/cdrom} to access to the CDROM.
 
 @table @code
 @item CD
@@ -742,6 +756,8 @@ You can specify a floppy device even if no floppy is loaded. Floppy
 removal is currently not detected accurately (if you change floppy
 without doing floppy access while the floppy is not loaded, the guest
 OS will think that the same floppy is loaded).
+Use of the host's floppy device is deprecated, and support for it will
+be removed in a future release.
 @item Hard disks
 Hard disks can be used. Normally you must specify the whole disk
 (@file{/dev/hdb} instead of @file{/dev/hdb1}) so that the guest OS can
@@ -1053,7 +1069,7 @@ type is assumed.
 @var{server} specifies the server where the volume file specification for
 the given volume resides. This can be either hostname, ipv4 address
 or ipv6 address. ipv6 address needs to be within square brackets [ ].
-If transport type is unix, then @var{server} field should not be specifed.
+If transport type is unix, then @var{server} field should not be specified.
 Instead @var{socket} field needs to be populated with the path to unix domain
 socket.
 
@@ -1240,7 +1256,7 @@ zero-copy communication to the application level of the guests.  The basic
 syntax is:
 
 @example
-qemu-system-i386 -device ivshmem,size=<size in format accepted by -m>[,shm=<shm name>]
+qemu-system-i386 -device ivshmem,size=@var{size},shm=@var{shm-name}
 @end example
 
 If desired, interrupts can be sent between guest VMs accessing the same shared
@@ -1250,9 +1266,13 @@ is qemu.git/contrib/ivshmem-server.  An example syntax when using the shared
 memory server is:
 
 @example
-qemu-system-i386 -device ivshmem,size=<size in format accepted by -m>[,chardev=<id>]
-                 [,msi=on][,ioeventfd=on][,vectors=n][,role=peer|master]
-qemu-system-i386 -chardev socket,path=<path>,id=<id>
+# First start the ivshmem server once and for all
+ivshmem-server -p @var{pidfile} -S @var{path} -m @var{shm-name} -l @var{shm-size} -n @var{vectors}
+
+# Then start your qemu instances with matching arguments
+qemu-system-i386 -device ivshmem,size=@var{shm-size},vectors=@var{vectors},chardev=@var{id}
+                 [,msi=on][,ioeventfd=on][,role=peer|master]
+                 -chardev socket,path=@var{path},id=@var{id}
 @end example
 
 When using the server, the guest will be assigned a VM ID (>=0) that allows guests
@@ -1272,6 +1292,19 @@ copy the shared memory on migration to the destination host.  With
 @option{role=peer}, the guest will not be able to migrate with the device attached.
 With the @option{peer} case, the device should be detached and then reattached
 after migration using the PCI hotplug support.
+
+@subsubsection ivshmem and hugepages
+
+Instead of specifying the <shm size> using POSIX shm, you may specify
+a memory backend that has hugepage support:
+
+@example
+qemu-system-i386 -object memory-backend-file,size=1G,mem-path=/mnt/hugepages/my-shmem-file,id=mb1
+                 -device ivshmem,x-memdev=mb1
+@end example
+
+ivshmem-server also supports hugepages mount points with the
+@option{-m} memory path argument.
 
 @node direct_linux_boot
 @section Direct Linux Boot
@@ -1629,7 +1662,7 @@ EOF
 # certtool --generate-certificate \
            --load-ca-certificate ca-cert.pem \
            --load-ca-privkey ca-key.pem \
-           --load-privkey server server-key.pem \
+           --load-privkey server-key.pem \
            --template server.info \
            --outfile server-cert.pem
 @end example
@@ -1652,7 +1685,7 @@ the secure CA private key:
 country = GB
 state = London
 locality = London
-organiazation = Name of your organization
+organization = Name of your organization
 cn = client.foo.example.com
 tls_www_client
 encryption_key
@@ -1758,7 +1791,7 @@ Use @code{set architecture i8086} to dump 16 bit code. Then use
 
 Advanced debugging options:
 
-The default single stepping behavior is step with the IRQs and timer service routines off.  It is set this way because when gdb executes a single step it expects to advance beyond the current instruction.  With the IRQs and and timer service routines on, a single step might jump into the one of the interrupt or exception vectors instead of executing the current instruction. This means you may hit the same breakpoint a number of times before executing the instruction gdb wants to have executed.  Because there are rare circumstances where you want to single step into an interrupt vector the behavior can be controlled from GDB.  There are three commands you can query and set the single step behavior:
+The default single stepping behavior is step with the IRQs and timer service routines off.  It is set this way because when gdb executes a single step it expects to advance beyond the current instruction.  With the IRQs and timer service routines on, a single step might jump into the one of the interrupt or exception vectors instead of executing the current instruction. This means you may hit the same breakpoint a number of times before executing the instruction gdb wants to have executed.  Because there are rare circumstances where you want to single step into an interrupt vector the behavior can be controlled from GDB.  There are three commands you can query and set the single step behavior:
 @table @code
 @item maintenance packet qqemu.sstepbits
 
@@ -2046,7 +2079,7 @@ firmware implementation. The goal is to implement a 100% IEEE
 
 A sample Linux 2.6 series kernel and ram disk image are available on
 the QEMU web site. There are still issues with NetBSD and OpenBSD, but
-some kernel versions work. Please note that currently older Solaris kernels
+most kernel versions work. Please note that currently older Solaris kernels
 don't work probably due to interface issues between OpenBIOS and
 Solaris.
 
@@ -2085,8 +2118,9 @@ Set the emulated machine type. Default is SS-5.
 
 Use the executable @file{qemu-system-sparc64} to simulate a Sun4u
 (UltraSPARC PC-like machine), Sun4v (T1 PC-like machine), or generic
-Niagara (T1) machine. The emulator is not usable for anything yet, but
-it can launch some kernels.
+Niagara (T1) machine. The Sun4u emulator is mostly complete, being
+able to run Linux, NetBSD and OpenBSD in headless (-nographic) mode. The
+Sun4v and Niagara emulators are still a work in progress.
 
 QEMU emulates the following peripherals:
 
@@ -3012,9 +3046,63 @@ and all other qemu-system-@var{target}.exe compiled for Win32.
 @node Mac OS X
 @section Mac OS X
 
-The Mac OS X patches are not fully merged in QEMU, so you should look
-at the QEMU mailing list archive to have all the necessary
-information.
+System Requirements:
+@itemize
+@item Mac OS 10.5 or higher
+@item The clang compiler shipped with Xcode 4.2 or higher,
+or GCC 4.3 or higher
+@end itemize
+
+Additional Requirements (install in order):
+@enumerate
+@item libffi: @uref{https://sourceware.org/libffi/}
+@item gettext: @uref{http://www.gnu.org/software/gettext/}
+@item glib: @uref{http://ftp.gnome.org/pub/GNOME/sources/glib/}
+@item pkg-config: @uref{http://www.freedesktop.org/wiki/Software/pkg-config/}
+@item autoconf: @uref{http://www.gnu.org/software/autoconf/autoconf.html}
+@item automake: @uref{http://www.gnu.org/software/automake/}
+@item libtool: @uref{http://www.gnu.org/software/libtool/}
+@item pixman: @uref{http://www.pixman.org/}
+@end enumerate
+
+* You may find it easiest to get these from a third-party packager
+such as Homebrew, Macports, or Fink.
+
+After downloading the QEMU source code, double-click it to expand it.
+
+Then configure and make QEMU:
+@example
+./configure
+make
+@end example
+
+If you have a recent version of Mac OS X (OSX 10.7 or better
+with Xcode 4.2 or better) we recommend building QEMU with the
+default compiler provided by Apple, for your version of Mac OS X
+(which will be 'clang'). The configure script will
+automatically pick this.
+
+Note: If after the configure step you see a message like this:
+@example
+ERROR: Your compiler does not support the __thread specifier for
+       Thread-Local Storage (TLS). Please upgrade to a version that does.
+@end example
+you may have to build your own version of gcc from source. Expect that to take
+several hours. More information can be found here:
+@uref{https://gcc.gnu.org/install/} @*
+
+These are some of the third party binaries of gcc available for download:
+@itemize
+@item Homebrew: @uref{http://brew.sh/}
+@item @uref{https://www.litebeam.net/gcc/gcc_472.pkg}
+@item @uref{http://www.macports.org/ports.php?by=name&substr=gcc}
+@end itemize
+
+You can have several versions of GCC on your system. To specify a certain version,
+use the --cc and --cxx options.
+@example
+./configure --cxx=<path of your c++ compiler> --cc=<path of your c compiler> <other options>
+@end example
 
 @node Make targets
 @section Make targets

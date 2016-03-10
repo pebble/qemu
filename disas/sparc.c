@@ -80,19 +80,6 @@ typedef struct sparc_opcode_arch
   short supported;
 } sparc_opcode_arch;
 
-static const struct sparc_opcode_arch sparc_opcode_archs[];
-
-/* Return the bitmask of supported architectures for ARCH.  */
-#define SPARC_OPCODE_SUPPORTED(ARCH) (sparc_opcode_archs[ARCH].supported)
-
-/* Non-zero if ARCH1 conflicts with ARCH2.
-   IE: ARCH1 as a supported bit set that ARCH2 doesn't, and vice versa.  */
-#define SPARC_OPCODE_CONFLICT_P(ARCH1, ARCH2) \
- (((SPARC_OPCODE_SUPPORTED (ARCH1) & SPARC_OPCODE_SUPPORTED (ARCH2)) \
-   != SPARC_OPCODE_SUPPORTED (ARCH1)) \
-  && ((SPARC_OPCODE_SUPPORTED (ARCH1) & SPARC_OPCODE_SUPPORTED (ARCH2)) \
-     != SPARC_OPCODE_SUPPORTED (ARCH2)))
-
 /* Structure of an opcode table entry.  */
 
 typedef struct sparc_opcode
@@ -300,25 +287,6 @@ static const char *sparc_decode_sparclet_cpreg (int);
 /* v9a instructions which would appear to be aliases to v9's impdep's
    otherwise.  */
 #define v9notv9a        (MASK_V9)
-
-/* Table of opcode architectures.
-   The order is defined in opcode/sparc.h.  */
-
-static const struct sparc_opcode_arch sparc_opcode_archs[] =
-{
-  { "v6", MASK_V6 },
-  { "v7", MASK_V6 | MASK_V7 },
-  { "v8", MASK_V6 | MASK_V7 | MASK_V8 },
-  { "sparclet", MASK_V6 | MASK_V7 | MASK_V8 | MASK_SPARCLET },
-  { "sparclite", MASK_V6 | MASK_V7 | MASK_V8 | MASK_SPARCLITE },
-  /* ??? Don't some v8 privileged insns conflict with v9?  */
-  { "v9", MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 },
-  /* v9 with ultrasparc additions */
-  { "v9a", MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A },
-  /* v9 with cheetah additions */
-  { "v9b", MASK_V6 | MASK_V7 | MASK_V8 | MASK_V9 | MASK_V9A | MASK_V9B },
-  { NULL, 0 }
-};
 
 /* Branch condition field.  */
 #define COND(x)         (((x) & 0xf) << 25)
@@ -1175,15 +1143,11 @@ static const struct sparc_opcode sparc_opcodes[] = {
 { "subcc",      F3(2, 0x14, 0), F3(~2, ~0x14, ~0)|ASI(~0),      "1,2,d", 0, v6 },
 { "subcc",      F3(2, 0x14, 1), F3(~2, ~0x14, ~1),              "1,i,d", 0, v6 },
 
-{ "subx",       F3(2, 0x0c, 0), F3(~2, ~0x0c, ~0)|ASI(~0),      "1,2,d", 0, v6notv9 },
-{ "subx",       F3(2, 0x0c, 1), F3(~2, ~0x0c, ~1),              "1,i,d", 0, v6notv9 },
-{ "subc",       F3(2, 0x0c, 0), F3(~2, ~0x0c, ~0)|ASI(~0),      "1,2,d", 0, v9 },
-{ "subc",       F3(2, 0x0c, 1), F3(~2, ~0x0c, ~1),              "1,i,d", 0, v9 },
+{ "subc",       F3(2, 0x0c, 0), F3(~2, ~0x0c, ~0)|ASI(~0),      "1,2,d", 0, v6 },
+{ "subc",       F3(2, 0x0c, 1), F3(~2, ~0x0c, ~1),              "1,i,d", 0, v6 },
 
-{ "subxcc",     F3(2, 0x1c, 0), F3(~2, ~0x1c, ~0)|ASI(~0),      "1,2,d", 0, v6notv9 },
-{ "subxcc",     F3(2, 0x1c, 1), F3(~2, ~0x1c, ~1),              "1,i,d", 0, v6notv9 },
-{ "subccc",     F3(2, 0x1c, 0), F3(~2, ~0x1c, ~0)|ASI(~0),      "1,2,d", 0, v9 },
-{ "subccc",     F3(2, 0x1c, 1), F3(~2, ~0x1c, ~1),              "1,i,d", 0, v9 },
+{ "subccc",     F3(2, 0x1c, 0), F3(~2, ~0x1c, ~0)|ASI(~0),      "1,2,d", 0, v6 },
+{ "subccc",     F3(2, 0x1c, 1), F3(~2, ~0x1c, ~1),              "1,i,d", 0, v6 },
 
 { "and",        F3(2, 0x01, 0), F3(~2, ~0x01, ~0)|ASI(~0),      "1,2,d", 0, v6 },
 { "and",        F3(2, 0x01, 1), F3(~2, ~0x01, ~1),              "1,i,d", 0, v6 },
@@ -1215,19 +1179,13 @@ static const struct sparc_opcode sparc_opcodes[] = {
 { "addcc",      F3(2, 0x10, 1), F3(~2, ~0x10, ~1),              "1,i,d", 0, v6 },
 { "addcc",      F3(2, 0x10, 1), F3(~2, ~0x10, ~1),              "i,1,d", 0, v6 },
 
-{ "addx",       F3(2, 0x08, 0), F3(~2, ~0x08, ~0)|ASI(~0),      "1,2,d", 0, v6notv9 },
-{ "addx",       F3(2, 0x08, 1), F3(~2, ~0x08, ~1),              "1,i,d", 0, v6notv9 },
-{ "addx",       F3(2, 0x08, 1), F3(~2, ~0x08, ~1),              "i,1,d", 0, v6notv9 },
-{ "addc",       F3(2, 0x08, 0), F3(~2, ~0x08, ~0)|ASI(~0),      "1,2,d", 0, v9 },
-{ "addc",       F3(2, 0x08, 1), F3(~2, ~0x08, ~1),              "1,i,d", 0, v9 },
-{ "addc",       F3(2, 0x08, 1), F3(~2, ~0x08, ~1),              "i,1,d", 0, v9 },
+{ "addc",       F3(2, 0x08, 0), F3(~2, ~0x08, ~0)|ASI(~0),      "1,2,d", 0, v6 },
+{ "addc",       F3(2, 0x08, 1), F3(~2, ~0x08, ~1),              "1,i,d", 0, v6 },
+{ "addc",       F3(2, 0x08, 1), F3(~2, ~0x08, ~1),              "i,1,d", 0, v6 },
 
-{ "addxcc",     F3(2, 0x18, 0), F3(~2, ~0x18, ~0)|ASI(~0),      "1,2,d", 0, v6notv9 },
-{ "addxcc",     F3(2, 0x18, 1), F3(~2, ~0x18, ~1),              "1,i,d", 0, v6notv9 },
-{ "addxcc",     F3(2, 0x18, 1), F3(~2, ~0x18, ~1),              "i,1,d", 0, v6notv9 },
-{ "addccc",     F3(2, 0x18, 0), F3(~2, ~0x18, ~0)|ASI(~0),      "1,2,d", 0, v9 },
-{ "addccc",     F3(2, 0x18, 1), F3(~2, ~0x18, ~1),              "1,i,d", 0, v9 },
-{ "addccc",     F3(2, 0x18, 1), F3(~2, ~0x18, ~1),              "i,1,d", 0, v9 },
+{ "addccc",     F3(2, 0x18, 0), F3(~2, ~0x18, ~0)|ASI(~0),      "1,2,d", 0, v6 },
+{ "addccc",     F3(2, 0x18, 1), F3(~2, ~0x18, ~1),              "1,i,d", 0, v6 },
+{ "addccc",     F3(2, 0x18, 1), F3(~2, ~0x18, ~1),              "i,1,d", 0, v6 },
 
 { "smul",       F3(2, 0x0b, 0), F3(~2, ~0x0b, ~0)|ASI(~0),      "1,2,d", 0, v8 },
 { "smul",       F3(2, 0x0b, 1), F3(~2, ~0x0b, ~1),              "1,i,d", 0, v8 },
@@ -2042,6 +2000,10 @@ IMPDEP ("impdep2", 0x37),
 
 #undef IMPDEP
 
+{ "addxc", F3F(2, 0x36, 0x011), F3F(~2, ~0x36, ~0x011), "1,2,d", 0, v9b },
+{ "addxccc", F3F(2, 0x36, 0x013), F3F(~2, ~0x36, ~0x013), "1,2,d", 0, v9b },
+{ "umulxhi", F3F(2, 0x36, 0x016), F3F(~2, ~0x36, ~0x016), "1,2,d", 0, v9b },
+
 };
 
 static const int sparc_num_opcodes = ((sizeof sparc_opcodes)/(sizeof sparc_opcodes[0]));
@@ -2660,8 +2622,7 @@ build_hash_table (const sparc_opcode **opcode_table,
 
   memset (hash_table, 0, HASH_SIZE * sizeof (hash_table[0]));
   memset (hash_count, 0, HASH_SIZE * sizeof (hash_count[0]));
-  if (hash_buf != NULL)
-    free (hash_buf);
+  free(hash_buf);
   hash_buf = malloc (sizeof (* hash_buf) * num_opcodes);
   for (i = num_opcodes - 1; i >= 0; --i)
     {

@@ -170,19 +170,21 @@ static void armv7m_reset(void *opaque)
 }
 
 /* Init CPU and memory for a v7-M based board.
-   flash_size and sram_size are in kb.
+   flash_size and sram_size are in bytes.
    Returns the NVIC array.  */
 
-qemu_irq *armv7m_init(Object *parent, MemoryRegion *address_space_mem,
-                      int flash_size, int sram_size,
-                      const char *kernel_filename, const char *cpu_model) {
+
+DeviceState *armv7m_init(Object *parent, MemoryRegion *system_memory,
+                      int flash_size, int sram_size, int num_irq,
+                      const char *kernel_filename, const char *cpu_model)
+{
     ARMCPU *cpu;
-    return armv7m_translated_init(parent, address_space_mem, flash_size, sram_size,
+    return armv7m_translated_init(parent, system_memory, flash_size, sram_size, num_irq,
             kernel_filename, NULL, NULL, cpu_model, &cpu);
 }
 
-qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem,
-                                 int flash_size, int sram_size,
+DeviceState *armv7m_translated_init(Object *parent, MemoryRegion *system_memory,
+                                 int flash_size, int sram_size, int num_irq,
                                  const char *kernel_filename,
                                  uint64_t (*translate_fn)(void *, uint64_t),
                                  void *translate_opaque,
@@ -192,72 +194,70 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
     ARMCPU *cpu;
     CPUARMState *env;
     DeviceState *nvic;
-    /* FIXME: make this local state.  */
-    static qemu_irq pic[STM32_MAX_IRQ + 1];    /* Enough for STM32F4xx */
+    if (num_irq == 0) {
+        num_irq = STM32_MAX_IRQ + 1;
+    }
     int image_size;
     uint64_t entry;
     uint64_t lowaddr;
-    int i;
     int big_endian;
-    MemoryRegion *sram = g_new(MemoryRegion, 1);
-    MemoryRegion *flash;
     MemoryRegion *hack = g_new(MemoryRegion, 1);
+    MemoryRegion *flash = NULL;
+    MemoryRegion *sram = g_new(MemoryRegion, 1);
+    ObjectClass *cpu_oc;
+    Error *err = NULL;
 
     if (kernel_filename) {
         flash = g_new(MemoryRegion, 1);
     }
 
-    flash_size *= 1024;
-    sram_size *= 1024;
-
     if (cpu_model == NULL) {
         cpu_model = "cortex-m3";
     }
-    cpu = cpu_arm_init(cpu_model);
+    cpu_oc = cpu_class_by_name(TYPE_ARM_CPU, cpu_model);
+    cpu = ARM_CPU(object_new(object_class_get_name(cpu_oc)));
     if (cpu == NULL) {
         fprintf(stderr, "Unable to find CPU definition\n");
+        exit(1);
+    }
+    /* On Cortex-M3/M4, the MPU has 8 windows */
+    object_property_set_int(OBJECT(cpu), 8, "pmsav7-dregion", &err);
+    if (err) {
+        error_report_err(err);
+        exit(1);
+    }
+    object_property_set_bool(OBJECT(cpu), true, "realized", &err);
+    if (err) {
+        error_report_err(err);
         exit(1);
     }
     *cpu_device = cpu;
     env = &cpu->env;
 
-#if 0
-    /* > 32Mb SRAM gets complicated because it overlaps the bitband area.
-       We don't have proper commandline options, so allocate half of memory
-       as SRAM, up to a maximum of 32Mb, and the rest as code.  */
-    if (ram_size > (512 + 32) * 1024 * 1024)
-        ram_size = (512 + 32) * 1024 * 1024;
-    sram_size = (ram_size / 2) & TARGET_PAGE_MASK;
-    if (sram_size > 32 * 1024 * 1024)
-        sram_size = 32 * 1024 * 1024;
-    code_size = ram_size - sram_size;
-#endif
-
-    /* Flash programming is done via the SCU, so pretend it is ROM.  */
     if (kernel_filename) {
-        memory_region_init_ram(flash, NULL, "armv7m.flash", flash_size);
+        memory_region_init_ram(flash, NULL, "armv7m.flash", flash_size, &err);
         vmstate_register_ram_global(flash);
         memory_region_set_readonly(flash, true);
-        memory_region_add_subregion(address_space_mem, 0, flash);
+        memory_region_add_subregion(system_memory, 0, flash);
     }
 
-    memory_region_init_ram(sram, NULL, "armv7m.sram", sram_size);
-    vmstate_register_ram_global(sram);
-    memory_region_add_subregion(address_space_mem, 0x20000000, sram);
+    if (sram_size) {
+        memory_region_init_ram(sram, NULL, "armv7m.sram", sram_size, &err);
+        vmstate_register_ram_global(sram);
+        memory_region_add_subregion(system_memory, 0x20000000, sram);
+    }
     armv7m_bitband_init(parent);
 
     /* If this is an M4, create the core-coupled memory region */
     if (!strcmp(cpu_model, "cortex-m4")) {
         MemoryRegion *ccm = g_new(MemoryRegion, 1);
-        memory_region_init_ram(ccm, NULL, "armv7m.ccm", 64 * 1024 /* 64K */);
+        memory_region_init_ram(ccm, NULL, "armv7m.ccm", 64 * 1024 /* 64K */, &err);
         vmstate_register_ram_global(ccm);
-        memory_region_add_subregion(address_space_mem, 0x10000000, ccm);
+        memory_region_add_subregion(system_memory, 0x10000000, ccm);
     }
 
     nvic = qdev_create(NULL, "armv7m_nvic");
-    /* The NVIC must be configured with a multiple of 32 IRQs */
-    uint32_t num_irqs = ((STM32_MAX_IRQ + 31) / 32) * 32;
-    qdev_prop_set_uint32(nvic, "num-irq", num_irqs);
+    qdev_prop_set_uint32(nvic, "num-irq", num_irq);
     env->nvic = nvic;
     if(parent) {
         object_property_add_child(parent, "nvic", OBJECT(nvic), NULL);
@@ -273,9 +273,6 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
     qdev_connect_gpio_out_named(DEVICE(nvic), "wakeup_out", 0, cpu_wakeup_in);
 
 
-    for (i = 0; i < STM32_MAX_IRQ; i++) {
-        pic[i] = qdev_get_gpio_in(nvic, i);
-    }
 
 #ifdef TARGET_WORDS_BIGENDIAN
     big_endian = 1;
@@ -285,7 +282,7 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
 
     if (kernel_filename) {
         image_size = load_elf(kernel_filename, translate_fn, translate_opaque, &entry, &lowaddr,
-                              NULL, big_endian, ELF_MACHINE, 1);
+                              NULL, big_endian, EM_ARM, 1);
         if (image_size < 0) {
             image_size = load_image_targphys(kernel_filename, 0, flash_size);
             lowaddr = 0;
@@ -299,12 +296,12 @@ qemu_irq *armv7m_translated_init(Object *parent, MemoryRegion *address_space_mem
     /* Hack to map an additional page of ram at the top of the address
        space.  This stops qemu complaining about executing code outside RAM
        when returning from an exception.  */
-    memory_region_init_ram(hack, NULL, "armv7m.hack", 0x1000);
+    memory_region_init_ram(hack, NULL, "armv7m.hack", 0x1000, &error_fatal);
     vmstate_register_ram_global(hack);
-    memory_region_add_subregion(address_space_mem, 0xfffff000, hack);
+    memory_region_add_subregion(system_memory, 0xfffff000, hack);
 
     qemu_register_reset(armv7m_reset, cpu);
-    return pic;
+    return nvic;
 }
 
 static Property bitband_properties[] = {

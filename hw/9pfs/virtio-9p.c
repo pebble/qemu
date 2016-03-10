@@ -13,6 +13,8 @@
 
 #include "hw/virtio/virtio.h"
 #include "hw/i386/pc.h"
+#include "qemu/error-report.h"
+#include "qemu/iov.h"
 #include "qemu/sockets.h"
 #include "virtio-9p.h"
 #include "fsdev/qemu-fsdev.h"
@@ -1950,7 +1952,8 @@ static void v9fs_write(void *opaque)
 
     err = pdu_unmarshal(pdu, offset, "dqd", &fid, &off, &count);
     if (err < 0) {
-        return complete_pdu(s, pdu, err);
+        complete_pdu(s, pdu, err);
+        return;
     }
     offset += err;
     v9fs_init_qiov_from_pdu(&qiov_full, pdu, offset, count, true);
@@ -3259,16 +3262,26 @@ void handle_9p_output(VirtIODevice *vdev, VirtQueue *vq)
 
     while ((pdu = alloc_pdu(s)) &&
             (len = virtqueue_pop(vq, &pdu->elem)) != 0) {
-        uint8_t *ptr;
+        struct {
+            uint32_t size_le;
+            uint8_t id;
+            uint16_t tag_le;
+        } QEMU_PACKED out;
+        int len;
+
         pdu->s = s;
         BUG_ON(pdu->elem.out_num == 0 || pdu->elem.in_num == 0);
-        BUG_ON(pdu->elem.out_sg[0].iov_len < 7);
+        QEMU_BUILD_BUG_ON(sizeof out != 7);
 
-        ptr = pdu->elem.out_sg[0].iov_base;
+        len = iov_to_buf(pdu->elem.out_sg, pdu->elem.out_num, 0,
+                         &out, sizeof out);
+        BUG_ON(len != sizeof out);
 
-        pdu->size = le32_to_cpu(*(uint32_t *)ptr);
-        pdu->id = ptr[4];
-        pdu->tag = le16_to_cpu(*(uint16_t *)(ptr + 5));
+        pdu->size = le32_to_cpu(out.size_le);
+
+        pdu->id = out.id;
+        pdu->tag = le16_to_cpu(out.tag_le);
+
         qemu_co_queue_init(&pdu->complete);
         submit_pdu(s, pdu);
     }

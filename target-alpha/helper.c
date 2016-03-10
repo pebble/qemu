@@ -25,125 +25,39 @@
 #include "fpu/softfloat.h"
 #include "exec/helper-proto.h"
 
+
+#define CONVERT_BIT(X, SRC, DST) \
+    (SRC > DST ? (X) / (SRC / DST) & (DST) : ((X) & SRC) * (DST / SRC))
+
 uint64_t cpu_alpha_load_fpcr (CPUAlphaState *env)
 {
-    uint64_t r = 0;
-    uint8_t t;
-
-    t = env->fpcr_exc_status;
-    if (t) {
-        r = FPCR_SUM;
-        if (t & float_flag_invalid) {
-            r |= FPCR_INV;
-        }
-        if (t & float_flag_divbyzero) {
-            r |= FPCR_DZE;
-        }
-        if (t & float_flag_overflow) {
-            r |= FPCR_OVF;
-        }
-        if (t & float_flag_underflow) {
-            r |= FPCR_UNF;
-        }
-        if (t & float_flag_inexact) {
-            r |= FPCR_INE;
-        }
-    }
-
-    t = env->fpcr_exc_mask;
-    if (t & float_flag_invalid) {
-        r |= FPCR_INVD;
-    }
-    if (t & float_flag_divbyzero) {
-        r |= FPCR_DZED;
-    }
-    if (t & float_flag_overflow) {
-        r |= FPCR_OVFD;
-    }
-    if (t & float_flag_underflow) {
-        r |= FPCR_UNFD;
-    }
-    if (t & float_flag_inexact) {
-        r |= FPCR_INED;
-    }
-
-    switch (env->fpcr_dyn_round) {
-    case float_round_nearest_even:
-        r |= FPCR_DYN_NORMAL;
-        break;
-    case float_round_down:
-        r |= FPCR_DYN_MINUS;
-        break;
-    case float_round_up:
-        r |= FPCR_DYN_PLUS;
-        break;
-    case float_round_to_zero:
-        r |= FPCR_DYN_CHOPPED;
-        break;
-    }
-
-    if (env->fp_status.flush_inputs_to_zero) {
-        r |= FPCR_DNZ;
-    }
-    if (env->fpcr_dnod) {
-        r |= FPCR_DNOD;
-    }
-    if (env->fpcr_undz) {
-        r |= FPCR_UNDZ;
-    }
-
-    return r;
+    return (uint64_t)env->fpcr << 32;
 }
 
 void cpu_alpha_store_fpcr (CPUAlphaState *env, uint64_t val)
 {
-    uint8_t t;
+    uint32_t fpcr = val >> 32;
+    uint32_t t = 0;
 
-    t = 0;
-    if (val & FPCR_INV) {
-        t |= float_flag_invalid;
-    }
-    if (val & FPCR_DZE) {
-        t |= float_flag_divbyzero;
-    }
-    if (val & FPCR_OVF) {
-        t |= float_flag_overflow;
-    }
-    if (val & FPCR_UNF) {
-        t |= float_flag_underflow;
-    }
-    if (val & FPCR_INE) {
-        t |= float_flag_inexact;
-    }
-    env->fpcr_exc_status = t;
+    t |= CONVERT_BIT(fpcr, FPCR_INED, FPCR_INE);
+    t |= CONVERT_BIT(fpcr, FPCR_UNFD, FPCR_UNF);
+    t |= CONVERT_BIT(fpcr, FPCR_OVFD, FPCR_OVF);
+    t |= CONVERT_BIT(fpcr, FPCR_DZED, FPCR_DZE);
+    t |= CONVERT_BIT(fpcr, FPCR_INVD, FPCR_INV);
 
-    t = 0;
-    if (val & FPCR_INVD) {
-        t |= float_flag_invalid;
-    }
-    if (val & FPCR_DZED) {
-        t |= float_flag_divbyzero;
-    }
-    if (val & FPCR_OVFD) {
-        t |= float_flag_overflow;
-    }
-    if (val & FPCR_UNFD) {
-        t |= float_flag_underflow;
-    }
-    if (val & FPCR_INED) {
-        t |= float_flag_inexact;
-    }
-    env->fpcr_exc_mask = t;
+    env->fpcr = fpcr;
+    env->fpcr_exc_enable = ~t & FPCR_STATUS_MASK;
 
-    switch (val & FPCR_DYN_MASK) {
+    switch (fpcr & FPCR_DYN_MASK) {
+    case FPCR_DYN_NORMAL:
+    default:
+        t = float_round_nearest_even;
+        break;
     case FPCR_DYN_CHOPPED:
         t = float_round_to_zero;
         break;
     case FPCR_DYN_MINUS:
         t = float_round_down;
-        break;
-    case FPCR_DYN_NORMAL:
-        t = float_round_nearest_even;
         break;
     case FPCR_DYN_PLUS:
         t = float_round_up;
@@ -151,10 +65,8 @@ void cpu_alpha_store_fpcr (CPUAlphaState *env, uint64_t val)
     }
     env->fpcr_dyn_round = t;
 
-    env->fpcr_dnod = (val & FPCR_DNOD) != 0;
-    env->fpcr_undz = (val & FPCR_UNDZ) != 0;
-    env->fpcr_flush_to_zero = env->fpcr_dnod & env->fpcr_undz;
-    env->fp_status.flush_inputs_to_zero = (val & FPCR_DNZ) != 0;
+    env->fpcr_flush_to_zero = (fpcr & FPCR_UNFD) && (fpcr & FPCR_UNDZ);
+    env->fp_status.flush_inputs_to_zero = (fpcr & FPCR_DNZ) != 0;
 }
 
 uint64_t helper_load_fpcr(CPUAlphaState *env)
@@ -165,6 +77,30 @@ uint64_t helper_load_fpcr(CPUAlphaState *env)
 void helper_store_fpcr(CPUAlphaState *env, uint64_t val)
 {
     cpu_alpha_store_fpcr(env, val);
+}
+
+static uint64_t *cpu_alpha_addr_gr(CPUAlphaState *env, unsigned reg)
+{
+#ifndef CONFIG_USER_ONLY
+    if (env->pal_mode) {
+        if (reg >= 8 && reg <= 14) {
+            return &env->shadow[reg - 8];
+        } else if (reg == 25) {
+            return &env->shadow[7];
+        }
+    }
+#endif
+    return &env->ir[reg];
+}
+
+uint64_t cpu_alpha_load_gr(CPUAlphaState *env, unsigned reg)
+{
+    return *cpu_alpha_addr_gr(env, reg);
+}
+
+void cpu_alpha_store_gr(CPUAlphaState *env, unsigned reg, uint64_t val)
+{
+    *cpu_alpha_addr_gr(env, reg) = val;
 }
 
 #if defined(CONFIG_USER_ONLY)
@@ -178,38 +114,6 @@ int alpha_cpu_handle_mmu_fault(CPUState *cs, vaddr address,
     return 1;
 }
 #else
-void swap_shadow_regs(CPUAlphaState *env)
-{
-    uint64_t i0, i1, i2, i3, i4, i5, i6, i7;
-
-    i0 = env->ir[8];
-    i1 = env->ir[9];
-    i2 = env->ir[10];
-    i3 = env->ir[11];
-    i4 = env->ir[12];
-    i5 = env->ir[13];
-    i6 = env->ir[14];
-    i7 = env->ir[25];
-
-    env->ir[8]  = env->shadow[0];
-    env->ir[9]  = env->shadow[1];
-    env->ir[10] = env->shadow[2];
-    env->ir[11] = env->shadow[3];
-    env->ir[12] = env->shadow[4];
-    env->ir[13] = env->shadow[5];
-    env->ir[14] = env->shadow[6];
-    env->ir[25] = env->shadow[7];
-
-    env->shadow[0] = i0;
-    env->shadow[1] = i1;
-    env->shadow[2] = i2;
-    env->shadow[3] = i3;
-    env->shadow[4] = i4;
-    env->shadow[5] = i5;
-    env->shadow[6] = i6;
-    env->shadow[7] = i7;
-}
-
 /* Returns the OSF/1 entMM failure indication, or -1 on success.  */
 static int get_physical_address(CPUAlphaState *env, target_ulong addr,
                                 int prot_need, int mmu_idx,
@@ -463,11 +367,52 @@ void alpha_cpu_do_interrupt(CPUState *cs)
     env->pc = env->palbr + i;
 
     /* Switch to PALmode.  */
-    if (!env->pal_mode) {
-        env->pal_mode = 1;
-        swap_shadow_regs(env);
-    }
+    env->pal_mode = 1;
 #endif /* !USER_ONLY */
+}
+
+bool alpha_cpu_exec_interrupt(CPUState *cs, int interrupt_request)
+{
+    AlphaCPU *cpu = ALPHA_CPU(cs);
+    CPUAlphaState *env = &cpu->env;
+    int idx = -1;
+
+    /* We never take interrupts while in PALmode.  */
+    if (env->pal_mode) {
+        return false;
+    }
+
+    /* Fall through the switch, collecting the highest priority
+       interrupt that isn't masked by the processor status IPL.  */
+    /* ??? This hard-codes the OSF/1 interrupt levels.  */
+    switch (env->ps & PS_INT_MASK) {
+    case 0 ... 3:
+        if (interrupt_request & CPU_INTERRUPT_HARD) {
+            idx = EXCP_DEV_INTERRUPT;
+        }
+        /* FALLTHRU */
+    case 4:
+        if (interrupt_request & CPU_INTERRUPT_TIMER) {
+            idx = EXCP_CLK_INTERRUPT;
+        }
+        /* FALLTHRU */
+    case 5:
+        if (interrupt_request & CPU_INTERRUPT_SMP) {
+            idx = EXCP_SMP_INTERRUPT;
+        }
+        /* FALLTHRU */
+    case 6:
+        if (interrupt_request & CPU_INTERRUPT_MCHK) {
+            idx = EXCP_MCHK;
+        }
+    }
+    if (idx >= 0) {
+        cs->exception_index = idx;
+        env->error_code = 0;
+        alpha_cpu_do_interrupt(cs);
+        return true;
+    }
+    return false;
 }
 
 void alpha_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
@@ -487,7 +432,7 @@ void alpha_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
                 env->pc, env->ps);
     for (i = 0; i < 31; i++) {
         cpu_fprintf(f, "IR%02d %s " TARGET_FMT_lx " ", i,
-                    linux_reg_names[i], env->ir[i]);
+                    linux_reg_names[i], cpu_alpha_load_gr(env, i));
         if ((i % 3) == 2)
             cpu_fprintf(f, "\n");
     }
@@ -527,6 +472,8 @@ void QEMU_NORETURN dynamic_excp(CPUAlphaState *env, uintptr_t retaddr,
     env->error_code = error;
     if (retaddr) {
         cpu_restore_state(cs, retaddr);
+        /* Floating-point exceptions (our only users) point to the next PC.  */
+        env->pc += 4;
     }
     cpu_loop_exit(cs);
 }

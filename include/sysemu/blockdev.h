@@ -14,13 +14,13 @@
 #include "qapi/error.h"
 #include "qemu/queue.h"
 
-void blockdev_mark_auto_del(BlockDriverState *bs);
-void blockdev_auto_del(BlockDriverState *bs);
+void blockdev_mark_auto_del(BlockBackend *blk);
+void blockdev_auto_del(BlockBackend *blk);
 
 typedef enum {
     IF_DEFAULT = -1,            /* for use with drive_add() only */
     /*
-     * IF_IDE must be zero, because we want QEMUMachine member
+     * IF_IDE must be zero, because we want MachineClass member
      * block_default_type to default-initialize to IF_IDE
      */
     IF_IDE = 0,
@@ -30,14 +30,12 @@ typedef enum {
 } BlockInterfaceType;
 
 struct DriveInfo {
-    BlockDriverState *bdrv;
-    char *id;
     const char *devaddr;
     BlockInterfaceType type;
     int bus;
     int unit;
     int auto_del;               /* see blockdev_mark_auto_del() */
-    bool enable_auto_del;       /* Only for legacy drive_new() */
+    bool is_default;            /* Added by default_drive() ?  */
     int media_cd;
     int cyls, heads, secs, trans;
     QemuOpts *opts;
@@ -45,24 +43,26 @@ struct DriveInfo {
     QTAILQ_ENTRY(DriveInfo) next;
 };
 
+DriveInfo *blk_legacy_dinfo(BlockBackend *blk);
+DriveInfo *blk_set_legacy_dinfo(BlockBackend *blk, DriveInfo *dinfo);
+BlockBackend *blk_by_legacy_dinfo(DriveInfo *dinfo);
+
+void override_max_devs(BlockInterfaceType type, int max_devs);
+
 DriveInfo *drive_get(BlockInterfaceType type, int bus, int unit);
+bool drive_check_orphaned(void);
 DriveInfo *drive_get_by_index(BlockInterfaceType type, int index);
 int drive_get_max_bus(BlockInterfaceType type);
+int drive_get_max_devs(BlockInterfaceType type);
 DriveInfo *drive_get_next(BlockInterfaceType type);
-DriveInfo *drive_get_by_blockdev(BlockDriverState *bs);
 
 QemuOpts *drive_def(const char *optstr);
 QemuOpts *drive_add(BlockInterfaceType type, int index, const char *file,
                     const char *optstr);
 DriveInfo *drive_new(QemuOpts *arg, BlockInterfaceType block_default_type);
-void drive_del(DriveInfo *dinfo);
 
 /* device-hotplug */
 
-DriveInfo *add_init_drive(const char *opts);
-
-void qmp_change_blockdev(const char *device, const char *filename,
-                         const char *format, Error **errp);
-void do_commit(Monitor *mon, const QDict *qdict);
-int do_drive_del(Monitor *mon, const QDict *qdict, QObject **ret_data);
+void hmp_commit(Monitor *mon, const QDict *qdict);
+void hmp_drive_del(Monitor *mon, const QDict *qdict);
 #endif

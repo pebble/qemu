@@ -226,7 +226,8 @@ typedef struct QEMU_PACKED VHDXLogDataSector {
 #define PAYLOAD_BLOCK_NOT_PRESENT       0
 #define PAYLOAD_BLOCK_UNDEFINED         1
 #define PAYLOAD_BLOCK_ZERO              2
-#define PAYLOAD_BLOCK_UNMAPPED          5
+#define PAYLOAD_BLOCK_UNMAPPED          3
+#define PAYLOAD_BLOCK_UNMAPPED_v095     5
 #define PAYLOAD_BLOCK_FULLY_PRESENT     6
 #define PAYLOAD_BLOCK_PARTIALLY_PRESENT 7
 
@@ -435,6 +436,7 @@ void vhdx_header_le_import(VHDXHeader *h);
 void vhdx_header_le_export(VHDXHeader *orig_h, VHDXHeader *new_h);
 void vhdx_log_desc_le_import(VHDXLogDescriptor *d);
 void vhdx_log_desc_le_export(VHDXLogDescriptor *d);
+void vhdx_log_data_le_import(VHDXLogDataSector *d);
 void vhdx_log_data_le_export(VHDXLogDataSector *d);
 void vhdx_log_entry_hdr_le_import(VHDXLogEntryHeader *hdr);
 void vhdx_log_entry_hdr_le_export(VHDXLogEntryHeader *hdr);

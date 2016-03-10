@@ -83,6 +83,14 @@ static uint64_t kernel_load_translate_fn(void *opaque, uint64_t from_addr) {
     return from_addr;
 }
 
+static
+void do_sys_reset(void *opaque, int n, int level)
+{
+    if (level) {
+        qemu_system_reset_request();
+    }
+}
+
 void stm32f2xx_init(
             ram_addr_t flash_size,
             ram_addr_t ram_size,
@@ -98,25 +106,29 @@ void stm32f2xx_init(
 {
     MemoryRegion *address_space_mem = get_system_memory();
     DriveInfo *dinfo;
-    qemu_irq *pic;
+    DeviceState *nvic;
     int i;
 
     Object *stm32_container = container_get(qdev_get_machine(), "/stm32");
 
-    pic = armv7m_translated_init(
+    nvic = armv7m_translated_init(
                 stm32_container,
                 address_space_mem,
-                flash_size,
-                ram_size,
+                flash_size * 1024,
+                ram_size * 1024,
+                0, /* default number of irqs */
                 kernel_filename,
                 kernel_load_translate_fn,
                 NULL,
                 "cortex-m3",
                 cpu);
 
+    qdev_connect_gpio_out_named(nvic, "SYSRESETREQ", 0,
+                                qemu_allocate_irq(&do_sys_reset, NULL, 0));
+
     dinfo = drive_get(IF_PFLASH, 0, 0);
     if (dinfo) {
-        f2xx_flash_register(dinfo->bdrv, 1 * 0x08000000, flash_size * 1024);
+        f2xx_flash_register(blk_by_legacy_dinfo(dinfo), 1 * 0x08000000, flash_size * 1024);
     }
 
     // Create alias at 0x08000000 for internal flash, that is hard-coded at 0x00000000 in armv7m.c:
@@ -137,7 +149,8 @@ void stm32f2xx_init(
     qdev_prop_set_uint32(rcc_dev, "osc_freq", osc_freq);
     qdev_prop_set_uint32(rcc_dev, "osc32_freq", osc32_freq);
     object_property_add_child(stm32_container, "rcc", OBJECT(rcc_dev), NULL);
-    stm32_init_periph(rcc_dev, STM32_RCC_PERIPH, 0x40023800, pic[STM32_RCC_IRQ]);
+    stm32_init_periph(rcc_dev, STM32_RCC_PERIPH, 0x40023800,
+                      qdev_get_gpio_in(nvic, STM32_RCC_IRQ));
 
     DeviceState **gpio_dev = (DeviceState **)g_malloc0(sizeof(DeviceState *) * STM32F2XX_GPIO_COUNT);
     for(i = 0; i < STM32F2XX_GPIO_COUNT; i++) {
@@ -161,20 +174,20 @@ void stm32f2xx_init(
     stm32_init_periph(exti_dev, STM32_EXTI_PERIPH, 0x40013C00, NULL);
     SysBusDevice *exti_busdev = SYS_BUS_DEVICE(exti_dev);
     /* IRQs from EXTI to NVIC */
-    sysbus_connect_irq(exti_busdev, 0, pic[STM32_EXTI0_IRQ]);
-    sysbus_connect_irq(exti_busdev, 1, pic[STM32_EXTI1_IRQ]);
-    sysbus_connect_irq(exti_busdev, 2, pic[STM32_EXTI2_IRQ]);
-    sysbus_connect_irq(exti_busdev, 3, pic[STM32_EXTI3_IRQ]);
-    sysbus_connect_irq(exti_busdev, 4, pic[STM32_EXTI4_IRQ]);
-    sysbus_connect_irq(exti_busdev, 5, pic[STM32_EXTI9_5_IRQ]);
-    sysbus_connect_irq(exti_busdev, 6, pic[STM32_EXTI15_10_IRQ]);
-    sysbus_connect_irq(exti_busdev, 7, pic[STM32_PVD_IRQ]);
-    sysbus_connect_irq(exti_busdev, 8, pic[STM32_RTCAlarm_IRQ]);
-    sysbus_connect_irq(exti_busdev, 9, pic[STM32_OTG_FS_WKUP_IRQ]);
-    sysbus_connect_irq(exti_busdev, 10, pic[STM32_ETH_WKUP_IRQ]);
-    sysbus_connect_irq(exti_busdev, 11, pic[STM32_OTG_FS_WKUP_IRQ]);
-    sysbus_connect_irq(exti_busdev, 12, pic[STM32_TAMP_STAMP_IRQ]);
-    sysbus_connect_irq(exti_busdev, 13, pic[STM32_RTC_WKUP_IRQ]);
+    sysbus_connect_irq(exti_busdev, 0, qdev_get_gpio_in(nvic, STM32_EXTI0_IRQ));
+    sysbus_connect_irq(exti_busdev, 1, qdev_get_gpio_in(nvic, STM32_EXTI1_IRQ));
+    sysbus_connect_irq(exti_busdev, 2, qdev_get_gpio_in(nvic, STM32_EXTI2_IRQ));
+    sysbus_connect_irq(exti_busdev, 3, qdev_get_gpio_in(nvic, STM32_EXTI3_IRQ));
+    sysbus_connect_irq(exti_busdev, 4, qdev_get_gpio_in(nvic, STM32_EXTI4_IRQ));
+    sysbus_connect_irq(exti_busdev, 5, qdev_get_gpio_in(nvic, STM32_EXTI9_5_IRQ));
+    sysbus_connect_irq(exti_busdev, 6, qdev_get_gpio_in(nvic, STM32_EXTI15_10_IRQ));
+    sysbus_connect_irq(exti_busdev, 7, qdev_get_gpio_in(nvic, STM32_PVD_IRQ));
+    sysbus_connect_irq(exti_busdev, 8, qdev_get_gpio_in(nvic, STM32_RTCAlarm_IRQ));
+    sysbus_connect_irq(exti_busdev, 9, qdev_get_gpio_in(nvic, STM32_OTG_FS_WKUP_IRQ));
+    sysbus_connect_irq(exti_busdev, 10, qdev_get_gpio_in(nvic, STM32_ETH_WKUP_IRQ));
+    sysbus_connect_irq(exti_busdev, 11, qdev_get_gpio_in(nvic, STM32_OTG_FS_WKUP_IRQ));
+    sysbus_connect_irq(exti_busdev, 12, qdev_get_gpio_in(nvic, STM32_TAMP_STAMP_IRQ));
+    sysbus_connect_irq(exti_busdev, 13, qdev_get_gpio_in(nvic, STM32_RTC_WKUP_IRQ));
 
     DeviceState *syscfg_dev = qdev_create(NULL, "stm32f2xx_syscfg");
     qdev_prop_set_ptr(syscfg_dev, "stm32_rcc", rcc_dev);
@@ -205,7 +218,7 @@ void stm32f2xx_init(
 //        qdev_prop_set_ptr(uart_dev, "stm32_afio", afio_dev);
 //        qdev_prop_set_ptr(uart_dev, "stm32_check_tx_pin_callback", (void *)stm32_afio_uart_check_tx_pin_callback);
         stm32_init_periph(uart_dev, periph, uart_desc[i].addr,
-          pic[uart_desc[i].irq_idx]);
+          qdev_get_gpio_in(nvic, uart_desc[i].irq_idx));
         stm32_uart[i] = (Stm32Uart *)uart_dev;
     }
 
@@ -225,16 +238,16 @@ void stm32f2xx_init(
         stm->spi_dev[i]->id = stm32f2xx_periph_name_arr[periph];
         qdev_prop_set_int32(stm->spi_dev[i], "periph", periph);
         stm32_init_periph(stm->spi_dev[i], periph, spi_desc[i].addr,
-          pic[spi_desc[i].irq_idx]);
+          qdev_get_gpio_in(nvic, spi_desc[i].irq_idx));
 
     }
 
-//    stm32_uart[STM32_UART1_INDEX] = stm32_create_uart_dev(STM32_UART1, rcc_dev, gpio_dev, afio_dev, 0x40011000, pic[STM32_UART1_IRQ]);
-//    stm32_uart[STM32_UART2_INDEX] = stm32_create_uart_dev(STM32_UART2, rcc_dev, gpio_dev, afio_dev, 0x40004400, pic[STM32_UART2_IRQ]);
-//    stm32_uart[STM32_UART3_INDEX] = stm32_create_uart_dev(STM32_UART3, rcc_dev, gpio_dev, afio_dev, 0x40004800, pic[STM32_UART3_IRQ]);
-//    stm32_uart[STM32_UART4_INDEX] = stm32_create_uart_dev(STM32_UART4, rcc_dev, gpio_dev, afio_dev, 0x40004C00, pic[STM32_UART4_IRQ]);
-//    stm32_uart[STM32_UART5_INDEX] = stm32_create_uart_dev(STM32_UART5, rcc_dev, gpio_dev, afio_dev, 0x40005000, pic[STM32_UART5_IRQ]);
-//    stm32_uart[STM32_UART6_INDEX] = stm32_create_uart_dev(STM32_UART6, rcc_dev, gpio_dev, afio_dev, 0x40011400, pic[STM32_UART6_IRQ]);
+//    stm32_uart[STM32_UART1_INDEX] = stm32_create_uart_dev(STM32_UART1, rcc_dev, gpio_dev, afio_dev, 0x40011000, qdev_get_gpio_in(nvic, STM32_UART1_IRQ]);
+//    stm32_uart[STM32_UART2_INDEX] = stm32_create_uart_dev(STM32_UART2, rcc_dev, gpio_dev, afio_dev, 0x40004400, qdev_get_gpio_in(nvic, STM32_UART2_IRQ]);
+//    stm32_uart[STM32_UART3_INDEX] = stm32_create_uart_dev(STM32_UART3, rcc_dev, gpio_dev, afio_dev, 0x40004800, qdev_get_gpio_in(nvic, STM32_UART3_IRQ]);
+//    stm32_uart[STM32_UART4_INDEX] = stm32_create_uart_dev(STM32_UART4, rcc_dev, gpio_dev, afio_dev, 0x40004C00, qdev_get_gpio_in(nvic, STM32_UART4_IRQ]);
+//    stm32_uart[STM32_UART5_INDEX] = stm32_create_uart_dev(STM32_UART5, rcc_dev, gpio_dev, afio_dev, 0x40005000, qdev_get_gpio_in(nvic, STM32_UART5_IRQ]);
+//    stm32_uart[STM32_UART6_INDEX] = stm32_create_uart_dev(STM32_UART6, rcc_dev, gpio_dev, afio_dev, 0x40011400, qdev_get_gpio_in(nvic, STM32_UART6_IRQ]);
     DeviceState *adc_dev = qdev_create(NULL, "stm32f2xx_adc");
     stm32_init_periph(adc_dev, STM32_ADC1, 0x40012000, NULL);
 
@@ -288,7 +301,7 @@ void stm32f2xx_init(
 
         DeviceState *timer = qdev_create(NULL, "f2xx_tim");
         timer->id = stm32f2xx_periph_name_arr[periph];
-        stm32_init_periph(timer, periph, timer_desc[i].addr, pic[timer_desc[i].irq_idx]);
+        stm32_init_periph(timer, periph, timer_desc[i].addr, qdev_get_gpio_in(nvic, timer_desc[i].irq_idx));
         stm32_timer[timer_desc[i].timer_num - 1] = (Stm32Timer *)timer;
     }
 
@@ -308,20 +321,20 @@ void stm32f2xx_init(
     DeviceState *i2c1 = qdev_create(NULL, "f2xx_i2c");
     i2c1->id = stm32f2xx_periph_name_arr[STM32_I2C1];
     qdev_prop_set_int32(i2c1, "periph", STM32_I2C1);
-    stm32_init_periph(i2c1, STM32_I2C1, 0x40005400, pic[STM32_I2C1_EV_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(i2c1), 1, pic[STM32_I2C1_ER_IRQ]);
+    stm32_init_periph(i2c1, STM32_I2C1, 0x40005400, qdev_get_gpio_in(nvic, STM32_I2C1_EV_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(i2c1), 1, qdev_get_gpio_in(nvic, STM32_I2C1_ER_IRQ));
 
     DeviceState *i2c2 = qdev_create(NULL, "f2xx_i2c");
     i2c2->id = stm32f2xx_periph_name_arr[STM32_I2C2];
     qdev_prop_set_int32(i2c2, "periph", STM32_I2C2);
-    stm32_init_periph(i2c2, STM32_I2C2, 0x40005800, pic[STM32_I2C2_EV_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(i2c2), 1, pic[STM32_I2C2_ER_IRQ]);
+    stm32_init_periph(i2c2, STM32_I2C2, 0x40005800, qdev_get_gpio_in(nvic, STM32_I2C2_EV_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(i2c2), 1, qdev_get_gpio_in(nvic, STM32_I2C2_ER_IRQ));
 
     DeviceState *i2c3 = qdev_create(NULL, "f2xx_i2c");
     i2c3->id = stm32f2xx_periph_name_arr[STM32_I2C3];
     qdev_prop_set_int32(i2c3, "periph", STM32_I2C3);
-    stm32_init_periph(i2c3, STM32_I2C2, 0x40005C00, pic[STM32_I2C3_EV_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(i2c3), 1, pic[STM32_I2C3_ER_IRQ]);
+    stm32_init_periph(i2c3, STM32_I2C2, 0x40005C00, qdev_get_gpio_in(nvic, STM32_I2C3_EV_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(i2c3), 1, qdev_get_gpio_in(nvic, STM32_I2C3_ER_IRQ));
 
     dummy_dev("Reserved",  0x40006000, 0x400);
     dummy_dev("BxCAN1",    0x40006400, 0x400);
@@ -347,23 +360,23 @@ void stm32f2xx_init(
     
     DeviceState *dma1 = qdev_create(NULL, "f2xx_dma");
     stm32_init_periph(dma1, STM32_DMA1, 0x40026000, NULL);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 0, pic[STM32_DMA1_STREAM0_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 1, pic[STM32_DMA1_STREAM1_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 2, pic[STM32_DMA1_STREAM2_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 3, pic[STM32_DMA1_STREAM3_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 4, pic[STM32_DMA1_STREAM4_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 5, pic[STM32_DMA1_STREAM5_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 6, pic[STM32_DMA1_STREAM6_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 7, pic[STM32_DMA1_STREAM7_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 0, qdev_get_gpio_in(nvic, STM32_DMA1_STREAM0_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 1, qdev_get_gpio_in(nvic, STM32_DMA1_STREAM1_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 2, qdev_get_gpio_in(nvic, STM32_DMA1_STREAM2_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 3, qdev_get_gpio_in(nvic, STM32_DMA1_STREAM3_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 4, qdev_get_gpio_in(nvic, STM32_DMA1_STREAM4_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 5, qdev_get_gpio_in(nvic, STM32_DMA1_STREAM5_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 6, qdev_get_gpio_in(nvic, STM32_DMA1_STREAM6_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma1), 7, qdev_get_gpio_in(nvic, STM32_DMA1_STREAM7_IRQ));
 
     DeviceState *dma2 = qdev_create(NULL, "f2xx_dma");
     stm32_init_periph(dma2, STM32_DMA2, 0x40026400, NULL);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 0, pic[STM32_DMA2_STREAM0_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 1, pic[STM32_DMA2_STREAM1_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 2, pic[STM32_DMA2_STREAM2_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 3, pic[STM32_DMA2_STREAM3_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 4, pic[STM32_DMA2_STREAM4_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 5, pic[STM32_DMA2_STREAM5_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 6, pic[STM32_DMA2_STREAM6_IRQ]);
-    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 7, pic[STM32_DMA2_STREAM7_IRQ]);
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 0, qdev_get_gpio_in(nvic, STM32_DMA2_STREAM0_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 1, qdev_get_gpio_in(nvic, STM32_DMA2_STREAM1_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 2, qdev_get_gpio_in(nvic, STM32_DMA2_STREAM2_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 3, qdev_get_gpio_in(nvic, STM32_DMA2_STREAM3_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 4, qdev_get_gpio_in(nvic, STM32_DMA2_STREAM4_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 5, qdev_get_gpio_in(nvic, STM32_DMA2_STREAM5_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 6, qdev_get_gpio_in(nvic, STM32_DMA2_STREAM6_IRQ));
+    sysbus_connect_irq(SYS_BUS_DEVICE(dma2), 7, qdev_get_gpio_in(nvic, STM32_DMA2_STREAM7_IRQ));
 }

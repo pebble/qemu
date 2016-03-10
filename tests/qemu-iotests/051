@@ -41,6 +41,9 @@ trap "_cleanup; exit \$status" 0 1 2 3 15
 _supported_fmt qcow2
 _supported_proto file
 _supported_os Linux
+# A compat=0.10 image is created in this test which does not support anything
+# other than refcount_bits=16
+_unsupported_imgopts 'refcount_bits=\([^1]\|.\([^6]\|$\)\)'
 
 function do_run_qemu()
 {
@@ -93,12 +96,20 @@ echo
 run_qemu -drive file="$TEST_IMG",format=foo
 run_qemu -drive file="$TEST_IMG",driver=foo
 run_qemu -drive file="$TEST_IMG",driver=raw,format=qcow2
+run_qemu -drive file="$TEST_IMG",driver=qcow2,format=qcow2
+
+echo
+echo === Device without drive ===
+echo
+
+run_qemu -device virtio-scsi-pci -device scsi-hd
 
 echo
 echo === Overriding backing file ===
 echo
 
-echo "info block" | run_qemu -drive file="$TEST_IMG",driver=qcow2,backing.file.filename="$TEST_IMG.orig" -nodefaults
+echo "info block" | run_qemu -drive file="$TEST_IMG",driver=qcow2,backing.file.filename="$TEST_IMG.orig" -nodefaults\
+                  | _filter_generated_node_ids
 
 # Drivers that don't support backing files
 run_qemu -drive file="$TEST_IMG",driver=raw,backing.file.filename="$TEST_IMG.orig"
@@ -184,7 +195,6 @@ echo === Specifying the protocol layer ===
 echo
 
 run_qemu -drive file="$TEST_IMG",file.driver=file
-run_qemu -drive file="$TEST_IMG",file.driver=qcow2
 
 echo
 echo === Leaving out required options ===
@@ -197,6 +207,29 @@ run_qemu -drive file.driver=file
 run_qemu -drive file.driver=nbd
 run_qemu -drive file.driver=raw
 run_qemu -drive foo=bar
+
+echo
+echo === Specifying both an option and its legacy alias ===
+echo
+
+run_qemu -drive file="$TEST_IMG",iops=1234,throttling.iops-total=5678
+run_qemu -drive file="$TEST_IMG",iops_rd=1234,throttling.iops-read=5678
+run_qemu -drive file="$TEST_IMG",iops_wr=1234,throttling.iops-write=5678
+
+run_qemu -drive file="$TEST_IMG",bps=1234,throttling.bps-total=5678
+run_qemu -drive file="$TEST_IMG",bps_rd=1234,throttling.bps-read=5678
+run_qemu -drive file="$TEST_IMG",bps_wr=1234,throttling.bps-write=5678
+
+run_qemu -drive file="$TEST_IMG",iops_max=1234,throttling.iops-total-max=5678
+run_qemu -drive file="$TEST_IMG",iops_rd_max=1234,throttling.iops-read-max=5678
+run_qemu -drive file="$TEST_IMG",iops_wr_max=1234,throttling.iops-write-max=5678
+
+run_qemu -drive file="$TEST_IMG",bps_max=1234,throttling.bps-total-max=5678
+run_qemu -drive file="$TEST_IMG",bps_rd_max=1234,throttling.bps-read-max=5678
+run_qemu -drive file="$TEST_IMG",bps_wr_max=1234,throttling.bps-write-max=5678
+
+run_qemu -drive file="$TEST_IMG",iops_size=1234,throttling.iops-size=5678
+run_qemu -drive file="$TEST_IMG",readonly=on,read-only=off
 
 echo
 echo === Parsing protocol from file name ===

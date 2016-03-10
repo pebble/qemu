@@ -13,8 +13,8 @@
 
 #include <glib.h>
 
+#include "qemu-common.h"
 #include "cpu.h"
-#include "exec/cpu-all.h"
 #include "sysemu/memory_mapping.h"
 #include "exec/memory.h"
 #include "exec/address-spaces.h"
@@ -203,7 +203,8 @@ static void guest_phys_blocks_region_add(MemoryListener *listener,
     GuestPhysBlock *predecessor;
 
     /* we only care about RAM */
-    if (!memory_region_is_ram(section->mr)) {
+    if (!memory_region_is_ram(section->mr) ||
+        memory_region_is_skip_dump(section->mr)) {
         return;
     }
 

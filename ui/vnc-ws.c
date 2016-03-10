@@ -20,78 +20,83 @@
 
 #include "vnc.h"
 #include "qemu/main-loop.h"
-#include "vnc-jobs.h"
+#include "crypto/hash.h"
 
-#ifdef CONFIG_VNC_TLS
-#include "qemu/sockets.h"
-
-static void vncws_tls_handshake_io(void *opaque);
-
-static int vncws_start_tls_handshake(struct VncState *vs)
+static int vncws_start_tls_handshake(VncState *vs)
 {
-    int ret = gnutls_handshake(vs->ws_tls.session);
+    Error *err = NULL;
 
-    if (ret < 0) {
-        if (!gnutls_error_is_fatal(ret)) {
-            VNC_DEBUG("Handshake interrupted (blocking)\n");
-            if (!gnutls_record_get_direction(vs->ws_tls.session)) {
-                qemu_set_fd_handler(vs->csock, vncws_tls_handshake_io,
-                                    NULL, vs);
-            } else {
-                qemu_set_fd_handler(vs->csock, NULL, vncws_tls_handshake_io,
-                                    vs);
-            }
-            return 0;
-        }
-        VNC_DEBUG("Handshake failed %s\n", gnutls_strerror(ret));
-        vnc_client_error(vs);
-        return -1;
+    if (qcrypto_tls_session_handshake(vs->tls, &err) < 0) {
+        goto error;
     }
 
-    VNC_DEBUG("Handshake done, switching to TLS data mode\n");
-    vs->ws_tls.wiremode = VNC_WIREMODE_TLS;
-    qemu_set_fd_handler2(vs->csock, NULL, vncws_handshake_read, NULL, vs);
+    switch (qcrypto_tls_session_get_handshake_status(vs->tls)) {
+    case QCRYPTO_TLS_HANDSHAKE_COMPLETE:
+        VNC_DEBUG("Handshake done, checking credentials\n");
+        if (qcrypto_tls_session_check_credentials(vs->tls, &err) < 0) {
+            goto error;
+        }
+        VNC_DEBUG("Client verification passed, starting TLS I/O\n");
+        qemu_set_fd_handler(vs->csock, vncws_handshake_read, NULL, vs);
+        break;
+
+    case QCRYPTO_TLS_HANDSHAKE_RECVING:
+        VNC_DEBUG("Handshake interrupted (blocking read)\n");
+        qemu_set_fd_handler(vs->csock, vncws_tls_handshake_io, NULL, vs);
+        break;
+
+    case QCRYPTO_TLS_HANDSHAKE_SENDING:
+        VNC_DEBUG("Handshake interrupted (blocking write)\n");
+        qemu_set_fd_handler(vs->csock, NULL, vncws_tls_handshake_io, vs);
+        break;
+    }
 
     return 0;
+
+ error:
+    VNC_DEBUG("Handshake failed %s\n", error_get_pretty(err));
+    error_free(err);
+    vnc_client_error(vs);
+    return -1;
 }
 
-static void vncws_tls_handshake_io(void *opaque)
+void vncws_tls_handshake_io(void *opaque)
 {
-    struct VncState *vs = (struct VncState *)opaque;
+    VncState *vs = (VncState *)opaque;
+    Error *err = NULL;
 
-    VNC_DEBUG("Handshake IO continue\n");
+    vs->tls = qcrypto_tls_session_new(vs->vd->tlscreds,
+                                      NULL,
+                                      vs->vd->tlsaclname,
+                                      QCRYPTO_TLS_CREDS_ENDPOINT_SERVER,
+                                      &err);
+    if (!vs->tls) {
+        VNC_DEBUG("Failed to setup TLS %s\n",
+                  error_get_pretty(err));
+        error_free(err);
+        vnc_client_error(vs);
+        return;
+    }
+
+    qcrypto_tls_session_set_callbacks(vs->tls,
+                                      vnc_tls_push,
+                                      vnc_tls_pull,
+                                      vs);
+
+    VNC_DEBUG("Start TLS WS handshake process\n");
     vncws_start_tls_handshake(vs);
 }
-
-void vncws_tls_handshake_peek(void *opaque)
-{
-    VncState *vs = opaque;
-    long ret;
-
-    if (!vs->ws_tls.session) {
-        char peek[4];
-        ret = qemu_recv(vs->csock, peek, sizeof(peek), MSG_PEEK);
-        if (ret && (strncmp(peek, "\x16", 1) == 0
-                    || strncmp(peek, "\x80", 1) == 0)) {
-            VNC_DEBUG("TLS Websocket connection recognized");
-            vnc_tls_client_setup(vs, 1);
-            vncws_start_tls_handshake(vs);
-        } else {
-            vncws_handshake_read(vs);
-        }
-    } else {
-        qemu_set_fd_handler2(vs->csock, NULL, vncws_handshake_read, NULL, vs);
-    }
-}
-#endif /* CONFIG_VNC_TLS */
 
 void vncws_handshake_read(void *opaque)
 {
     VncState *vs = opaque;
     uint8_t *handshake_end;
     long ret;
-    buffer_reserve(&vs->ws_input, 4096);
-    ret = vnc_client_read_buf(vs, buffer_end(&vs->ws_input), 4096);
+    /* Typical HTTP headers from novnc are 512 bytes, so limiting
+     * total header size to 4096 is easily enough. */
+    size_t want = 4096 - vs->ws_input.offset;
+    buffer_reserve(&vs->ws_input, want);
+    ret = vnc_client_read_buf(vs, buffer_end(&vs->ws_input), want);
 
     if (!ret) {
         if (vs->csock == -1) {
@@ -104,10 +109,13 @@ void vncws_handshake_read(void *opaque)
     handshake_end = (uint8_t *)g_strstr_len((char *)vs->ws_input.buffer,
             vs->ws_input.offset, WS_HANDSHAKE_END);
     if (handshake_end) {
-        qemu_set_fd_handler2(vs->csock, NULL, vnc_client_read, NULL, vs);
+        qemu_set_fd_handler(vs->csock, vnc_client_read, NULL, vs);
         vncws_process_handshake(vs, vs->ws_input.buffer, vs->ws_input.offset);
         buffer_advance(&vs->ws_input, handshake_end - vs->ws_input.buffer +
                 strlen(WS_HANDSHAKE_END));
+    } else if (vs->ws_input.offset >= 4096) {
+        VNC_DEBUG("End of headers not found in first 4096 bytes\n");
+        vnc_client_error(vs);
     }
 }
 
@@ -116,7 +124,7 @@ long vnc_client_read_ws(VncState *vs)
 {
     int ret, err;
     uint8_t *payload;
-    size_t payload_size, frame_size;
+    size_t payload_size, header_size;
     VNC_DEBUG("Read websocket %p size %zd offset %zd\n", vs->ws_input.buffer,
             vs->ws_input.capacity, vs->ws_input.offset);
     buffer_reserve(&vs->ws_input, 4096);
@@ -126,18 +134,39 @@ long vnc_client_read_ws(VncState *vs)
     }
     vs->ws_input.offset += ret;
 
-    /* make sure that nothing is left in the ws_input buffer */
+    ret = 0;
+    /* consume as much of ws_input buffer as possible */
     do {
-        err = vncws_decode_frame(&vs->ws_input, &payload,
-                              &payload_size, &frame_size);
-        if (err <= 0) {
-            return err;
+        if (vs->ws_payload_remain == 0) {
+            err = vncws_decode_frame_header(&vs->ws_input,
+                                            &header_size,
+                                            &vs->ws_payload_remain,
+                                            &vs->ws_payload_mask);
+            if (err <= 0) {
+                return err;
+            }
+
+            buffer_advance(&vs->ws_input, header_size);
         }
+        if (vs->ws_payload_remain != 0) {
+            err = vncws_decode_frame_payload(&vs->ws_input,
+                                             &vs->ws_payload_remain,
+                                             &vs->ws_payload_mask,
+                                             &payload,
+                                             &payload_size);
+            if (err < 0) {
+                return err;
+            }
+            if (err == 0) {
+                return ret;
+            }
+            ret += err;
 
-        buffer_reserve(&vs->input, payload_size);
-        buffer_append(&vs->input, payload, payload_size);
+            buffer_reserve(&vs->input, payload_size);
+            buffer_append(&vs->input, payload, payload_size);
 
-        buffer_advance(&vs->ws_input, frame_size);
+            buffer_advance(&vs->ws_input, payload_size);
+        }
     } while (vs->ws_input.offset > 0);
 
     return ret;
@@ -158,7 +187,7 @@ long vnc_client_write_ws(VncState *vs)
     buffer_advance(&vs->ws_output, ret);
 
     if (vs->ws_output.offset == 0) {
-        qemu_set_fd_handler2(vs->csock, NULL, vnc_client_read, NULL, vs);
+        qemu_set_fd_handler(vs->csock, vnc_client_read, NULL, vs);
     }
 
     return ret;
@@ -185,34 +214,27 @@ static char *vncws_extract_handshake_entry(const char *handshake,
 static void vncws_send_handshake_response(VncState *vs, const char* key)
 {
     char combined_key[WS_CLIENT_KEY_LEN + WS_GUID_LEN + 1];
-    unsigned char hash[SHA1_DIGEST_LEN];
-    size_t hash_size = sizeof(hash);
     char *accept = NULL, *response = NULL;
-    gnutls_datum_t in;
-    int ret;
+    Error *err = NULL;
 
     g_strlcpy(combined_key, key, WS_CLIENT_KEY_LEN + 1);
     g_strlcat(combined_key, WS_GUID, WS_CLIENT_KEY_LEN + WS_GUID_LEN + 1);
 
     /* hash and encode it */
-    in.data = (void *)combined_key;
-    in.size = WS_CLIENT_KEY_LEN + WS_GUID_LEN;
-    ret = gnutls_fingerprint(GNUTLS_DIG_SHA1, &in, hash, &hash_size);
-    if (ret == GNUTLS_E_SUCCESS && hash_size <= SHA1_DIGEST_LEN) {
-        accept = g_base64_encode(hash, hash_size);
-    }
-    if (accept == NULL) {
-        VNC_DEBUG("Hashing Websocket combined key failed\n");
+    if (qcrypto_hash_base64(QCRYPTO_HASH_ALG_SHA1,
+                            combined_key,
+                            WS_CLIENT_KEY_LEN + WS_GUID_LEN,
+                            &accept,
+                            &err) < 0) {
+        VNC_DEBUG("Hashing Websocket combined key failed %s\n",
+                  error_get_pretty(err));
+        error_free(err);
         vnc_client_error(vs);
         return;
     }
 
     response = g_strdup_printf(WS_HANDSHAKE, accept);
-    // Use the raw write function to avoid wrapping it with WS framing that is not
-    // yet legal.
-    vnc_lock_output(vs);
     vnc_client_write_buf(vs, (const uint8_t *)response, strlen(response));
-    vnc_unlock_output(vs);
 
     g_free(accept);
     g_free(response);
@@ -278,15 +300,14 @@ void vncws_encode_frame(Buffer *output, const void *payload,
     buffer_append(output, payload, payload_size);
 }
 
-int vncws_decode_frame(Buffer *input, uint8_t **payload,
-                           size_t *payload_size, size_t *frame_size)
+int vncws_decode_frame_header(Buffer *input,
+                              size_t *header_size,
+                              size_t *payload_remain,
+                              WsMask *payload_mask)
 {
     unsigned char opcode = 0, fin = 0, has_mask = 0;
-    size_t header_size = 0;
-    uint32_t *payload32;
+    size_t payload_len;
     WsHeader *header = (WsHeader *)input->buffer;
-    WsMask mask;
-    int i;
 
     if (input->offset < WS_HEAD_MIN_LEN + 4) {
         /* header not complete */
@@ -296,7 +317,7 @@ int vncws_decode_frame(Buffer *input, uint8_t **payload,
     fin = (header->b0 & 0x80) >> 7;
     opcode = header->b0 & 0x0f;
     has_mask = (header->b1 & 0x80) >> 7;
-    *payload_size = header->b1 & 0x7f;
+    payload_len = header->b1 & 0x7f;
 
     if (opcode == WS_OPCODE_CLOSE) {
         /* disconnect */
@@ -313,40 +334,57 @@ int vncws_decode_frame(Buffer *input, uint8_t **payload,
         return -2;
     }
 
-    if (*payload_size < 126) {
-        header_size = 6;
-        mask = header->u.m;
-    } else if (*payload_size == 126 && input->offset >= 8) {
-        *payload_size = be16_to_cpu(header->u.s16.l16);
-        header_size = 8;
-        mask = header->u.s16.m16;
-    } else if (*payload_size == 127 && input->offset >= 14) {
-        *payload_size = be64_to_cpu(header->u.s64.l64);
-        header_size = 14;
-        mask = header->u.s64.m64;
+    if (payload_len < 126) {
+        *payload_remain = payload_len;
+        *header_size = 6;
+        *payload_mask = header->u.m;
+    } else if (payload_len == 126 && input->offset >= 8) {
+        *payload_remain = be16_to_cpu(header->u.s16.l16);
+        *header_size = 8;
+        *payload_mask = header->u.s16.m16;
+    } else if (payload_len == 127 && input->offset >= 14) {
+        *payload_remain = be64_to_cpu(header->u.s64.l64);
+        *header_size = 14;
+        *payload_mask = header->u.s64.m64;
     } else {
         /* header not complete */
         return 0;
     }
 
-    *frame_size = header_size + *payload_size;
+    return 1;
+}
 
-    if (input->offset < *frame_size) {
-        /* frame not complete */
+int vncws_decode_frame_payload(Buffer *input,
+                               size_t *payload_remain, WsMask *payload_mask,
+                               uint8_t **payload, size_t *payload_size)
+{
+    size_t i;
+    uint32_t *payload32;
+
+    *payload = input->buffer;
+    /* If we aren't at the end of the payload, then drop
+     * off the last bytes, so we're always multiple of 4
+     * for purpose of unmasking, except at end of payload
+     */
+    if (input->offset < *payload_remain) {
+        *payload_size = input->offset - (input->offset % 4);
+    } else {
+        *payload_size = *payload_remain;
+    }
+    if (*payload_size == 0) {
         return 0;
     }
-
-    *payload = input->buffer + header_size;
+    *payload_remain -= *payload_size;
 
     /* unmask frame */
     /* process 1 frame (32 bit op) */
     payload32 = (uint32_t *)(*payload);
     for (i = 0; i < *payload_size / 4; i++) {
-        payload32[i] ^= mask.u;
+        payload32[i] ^= payload_mask->u;
     }
     /* process the remaining bytes (if any) */
     for (i *= 4; i < *payload_size; i++) {
-        (*payload)[i] ^= mask.c[i % 4];
+        (*payload)[i] ^= payload_mask->c[i % 4];
     }
 
     return 1;

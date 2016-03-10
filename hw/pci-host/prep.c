@@ -140,7 +140,8 @@ static uint64_t raven_io_read(void *opaque, hwaddr addr,
     uint8_t buf[4];
 
     addr = raven_io_address(s, addr);
-    address_space_read(&s->pci_io_as, addr + 0x80000000, buf, size);
+    address_space_read(&s->pci_io_as, addr + 0x80000000,
+                       MEMTXATTRS_UNSPECIFIED, buf, size);
 
     if (size == 1) {
         return buf[0];
@@ -171,7 +172,8 @@ static void raven_io_write(void *opaque, hwaddr addr,
         g_assert_not_reached();
     }
 
-    address_space_write(&s->pci_io_as, addr + 0x80000000, buf, size);
+    address_space_write(&s->pci_io_as, addr + 0x80000000,
+                        MEMTXATTRS_UNSPECIFIED, buf, size);
 }
 
 static const MemoryRegionOps raven_io_ops = {
@@ -289,7 +291,7 @@ static void raven_pcihost_initfn(Object *obj)
     qdev_prop_set_bit(pci_dev, "multifunction", false);
 }
 
-static int raven_init(PCIDevice *d)
+static void raven_realize(PCIDevice *d, Error **errp)
 {
     RavenPCIState *s = RAVEN_PCI_DEVICE(d);
     char *filename;
@@ -299,7 +301,8 @@ static int raven_init(PCIDevice *d)
     d->config[0x0D] = 0x10; // latency_timer
     d->config[0x34] = 0x00; // capabilities_pointer
 
-    memory_region_init_ram(&s->bios, OBJECT(s), "bios", BIOS_SIZE);
+    memory_region_init_ram(&s->bios, OBJECT(s), "bios", BIOS_SIZE,
+                           &error_fatal);
     memory_region_set_readonly(&s->bios, true);
     memory_region_add_subregion(get_system_memory(), (uint32_t)(-BIOS_SIZE),
                                 &s->bios);
@@ -325,12 +328,8 @@ static int raven_init(PCIDevice *d)
         if (bios_size < 0 || bios_size > BIOS_SIZE) {
             hw_error("qemu: could not load bios image '%s'\n", s->bios_name);
         }
-        if (filename) {
-            g_free(filename);
-        }
+        g_free(filename);
     }
-
-    return 0;
 }
 
 static const VMStateDescription vmstate_raven = {
@@ -348,7 +347,7 @@ static void raven_class_init(ObjectClass *klass, void *data)
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
     DeviceClass *dc = DEVICE_CLASS(klass);
 
-    k->init = raven_init;
+    k->realize = raven_realize;
     k->vendor_id = PCI_VENDOR_ID_MOTOROLA;
     k->device_id = PCI_DEVICE_ID_MOTOROLA_RAVEN;
     k->revision = 0x00;

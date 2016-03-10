@@ -18,7 +18,7 @@
 #include "hw/devices.h"
 #include "hw/boards.h"
 #include "hw/block/flash.h"
-#include "sysemu/blockdev.h"
+#include "sysemu/block-backend.h"
 #include "hw/sysbus.h"
 #include "exec/address-spaces.h"
 #include "sysemu/qtest.h"
@@ -123,7 +123,8 @@ static void mainstone_common_init(MemoryRegion *address_space_mem,
 
     /* Setup CPU & memory */
     mpu = pxa270_init(address_space_mem, mainstone_binfo.ram_size, cpu_model);
-    memory_region_init_ram(rom, NULL, "mainstone.rom", MAINSTONE_ROM);
+    memory_region_init_ram(rom, NULL, "mainstone.rom", MAINSTONE_ROM,
+                           &error_fatal);
     vmstate_register_ram_global(rom);
     memory_region_set_readonly(rom, true);
     memory_region_add_subregion(address_space_mem, 0, rom);
@@ -148,9 +149,9 @@ static void mainstone_common_init(MemoryRegion *address_space_mem,
         if (!pflash_cfi01_register(mainstone_flash_base[i], NULL,
                                    i ? "mainstone.flash1" : "mainstone.flash0",
                                    MAINSTONE_FLASH,
-                                   dinfo->bdrv, sector_len,
-                                   MAINSTONE_FLASH / sector_len, 4, 0, 0, 0, 0,
-                                   be)) {
+                                   blk_by_legacy_dinfo(dinfo),
+                                   sector_len, MAINSTONE_FLASH / sector_len,
+                                   4, 0, 0, 0, 0, be)) {
             fprintf(stderr, "qemu: Error registering flash memory.\n");
             exit(1);
         }
@@ -187,15 +188,10 @@ static void mainstone_init(MachineState *machine)
     mainstone_common_init(get_system_memory(), machine, mainstone, 0x196);
 }
 
-static QEMUMachine mainstone2_machine = {
-    .name = "mainstone",
-    .desc = "Mainstone II (PXA27x)",
-    .init = mainstone_init,
-};
-
-static void mainstone_machine_init(void)
+static void mainstone2_machine_init(MachineClass *mc)
 {
-    qemu_register_machine(&mainstone2_machine);
+    mc->desc = "Mainstone II (PXA27x)";
+    mc->init = mainstone_init;
 }
 
-machine_init(mainstone_machine_init);
+DEFINE_MACHINE("mainstone", mainstone2_machine_init)

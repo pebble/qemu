@@ -27,6 +27,9 @@
 #include "exec/helper-proto.h"
 #include "exec/helper-gen.h"
 
+#include "trace-tcg.h"
+
+
 //#define DEBUG_DISPATCH 1
 
 /* Fake floating point.  */
@@ -126,7 +129,6 @@ typedef struct DisasContext {
     uint32_t fpcr;
     struct TranslationBlock *tb;
     int singlestep_enabled;
-    int is_mem;
     TCGv_i64 mactmp;
     int done_mac;
 } DisasContext;
@@ -176,7 +178,6 @@ static inline TCGv gen_load(DisasContext * s, int opsize, TCGv addr, int sign)
 {
     TCGv tmp;
     int index = IS_USER(s);
-    s->is_mem = 1;
     tmp = tcg_temp_new_i32();
     switch(opsize) {
     case OS_BYTE:
@@ -206,7 +207,6 @@ static inline TCGv_i64 gen_load64(DisasContext * s, TCGv addr)
 {
     TCGv_i64 tmp;
     int index = IS_USER(s);
-    s->is_mem = 1;
     tmp = tcg_temp_new_i64();
     tcg_gen_qemu_ldf64(tmp, addr, index);
     gen_throws_exception = gen_last_qop;
@@ -217,7 +217,6 @@ static inline TCGv_i64 gen_load64(DisasContext * s, TCGv addr)
 static inline void gen_store(DisasContext *s, int opsize, TCGv addr, TCGv val)
 {
     int index = IS_USER(s);
-    s->is_mem = 1;
     switch(opsize) {
     case OS_BYTE:
         tcg_gen_qemu_st8(val, addr, index);
@@ -238,7 +237,6 @@ static inline void gen_store(DisasContext *s, int opsize, TCGv addr, TCGv val)
 static inline void gen_store64(DisasContext *s, TCGv addr, TCGv_i64 val)
 {
     int index = IS_USER(s);
-    s->is_mem = 1;
     tcg_gen_qemu_stf64(val, addr, index);
     gen_throws_exception = gen_last_qop;
 }
@@ -294,8 +292,7 @@ static TCGv gen_addr_index(uint16_t ext, TCGv tmp)
 
 /* Handle a base + index + displacement effective addresss.
    A NULL_QREG base means pc-relative.  */
-static TCGv gen_lea_indexed(CPUM68KState *env, DisasContext *s, int opsize,
-                            TCGv base)
+static TCGv gen_lea_indexed(CPUM68KState *env, DisasContext *s, TCGv base)
 {
     uint32_t offset;
     uint16_t ext;
@@ -526,7 +523,7 @@ static TCGv gen_lea(CPUM68KState *env, DisasContext *s, uint16_t insn,
         return tmp;
     case 6: /* Indirect index + displacement.  */
         reg = AREG(insn, 0);
-        return gen_lea_indexed(env, s, opsize, reg);
+        return gen_lea_indexed(env, s, reg);
     case 7: /* Other */
         switch (insn & 7) {
         case 0: /* Absolute short.  */
@@ -542,7 +539,7 @@ static TCGv gen_lea(CPUM68KState *env, DisasContext *s, uint16_t insn,
             s->pc += 2;
             return tcg_const_i32(offset);
         case 3: /* pc index+displacement.  */
-            return gen_lea_indexed(env, s, opsize, NULL_QREG);
+            return gen_lea_indexed(env, s, NULL_QREG);
         case 4: /* Immediate.  */
         default:
             return NULL_QREG;
@@ -676,7 +673,7 @@ static TCGv gen_ea(CPUM68KState *env, DisasContext *s, uint16_t insn,
 }
 
 /* This generates a conditional branch, clobbering all temporaries.  */
-static void gen_jmpcc(DisasContext *s, int cond, int l1)
+static void gen_jmpcc(DisasContext *s, int cond, TCGLabel *l1)
 {
     TCGv tmp;
 
@@ -781,7 +778,7 @@ static void gen_jmpcc(DisasContext *s, int cond, int l1)
 
 DISAS_INSN(scc)
 {
-    int l1;
+    TCGLabel *l1;
     int cond;
     TCGv reg;
 
@@ -1655,7 +1652,7 @@ DISAS_INSN(branch)
     int32_t offset;
     uint32_t base;
     int op;
-    int l1;
+    TCGLabel *l1;
 
     base = s->pc;
     op = (insn >> 8) & 0xf;
@@ -1992,8 +1989,8 @@ DISAS_INSN(move_from_usp)
         gen_exception(s, s->pc - 2, EXCP_PRIVILEGE);
         return;
     }
-    /* TODO: Implement USP.  */
-    gen_exception(s, s->pc - 2, EXCP_ILLEGAL);
+    tcg_gen_ld_i32(AREG(insn, 0), cpu_env,
+                   offsetof(CPUM68KState, sp[M68K_USP]));
 }
 
 DISAS_INSN(move_to_usp)
@@ -2002,8 +1999,8 @@ DISAS_INSN(move_to_usp)
         gen_exception(s, s->pc - 2, EXCP_PRIVILEGE);
         return;
     }
-    /* TODO: Implement USP.  */
-    gen_exception(s, s->pc - 2, EXCP_ILLEGAL);
+    tcg_gen_st_i32(AREG(insn, 0), cpu_env,
+                   offsetof(CPUM68KState, sp[M68K_USP]));
 }
 
 DISAS_INSN(halt)
@@ -2224,7 +2221,6 @@ DISAS_INSN(fpu)
             mask = 0x80;
             for (i = 0; i < 8; i++) {
                 if (ext & mask) {
-                    s->is_mem = 1;
                     dest = FREG(i, 0);
                     if (ext & (1 << 13)) {
                         /* store */
@@ -2392,7 +2388,7 @@ DISAS_INSN(fbcc)
     uint32_t offset;
     uint32_t addr;
     TCGv flag;
-    int l1;
+    TCGLabel *l1;
 
     addr = s->pc;
     offset = cpu_ldsw_code(env, s->pc);
@@ -2684,7 +2680,7 @@ DISAS_INSN(from_mac)
     if (s->env->macsr & MACSR_FI) {
         gen_helper_get_macf(rx, cpu_env, acc);
     } else if ((s->env->macsr & MACSR_OMC) == 0) {
-        tcg_gen_trunc_i64_i32(rx, acc);
+        tcg_gen_extrl_i64_i32(rx, acc);
     } else if (s->env->macsr & MACSR_SU) {
         gen_helper_get_macs(rx, acc);
     } else {
@@ -2959,10 +2955,6 @@ static void disas_m68k_insn(CPUM68KState * env, DisasContext *s)
 {
     uint16_t insn;
 
-    if (unlikely(qemu_loglevel_mask(CPU_LOG_TB_OP | CPU_LOG_TB_OP_OPT))) {
-        tcg_gen_debug_insn_start(s->pc);
-    }
-
     insn = cpu_lduw_code(env, s->pc);
     s->pc += 2;
 
@@ -2970,16 +2962,11 @@ static void disas_m68k_insn(CPUM68KState * env, DisasContext *s)
 }
 
 /* generate intermediate code for basic block 'tb'.  */
-static inline void
-gen_intermediate_code_internal(M68kCPU *cpu, TranslationBlock *tb,
-                               bool search_pc)
+void gen_intermediate_code(CPUM68KState *env, TranslationBlock *tb)
 {
+    M68kCPU *cpu = m68k_env_get_cpu(env);
     CPUState *cs = CPU(cpu);
-    CPUM68KState *env = &cpu->env;
     DisasContext dc1, *dc = &dc1;
-    uint16_t *gen_opc_end;
-    CPUBreakpoint *bp;
-    int j, lj;
     target_ulong pc_start;
     int pc_offset;
     int num_insns;
@@ -2990,8 +2977,6 @@ gen_intermediate_code_internal(M68kCPU *cpu, TranslationBlock *tb,
 
     dc->tb = tb;
 
-    gen_opc_end = tcg_ctx.gen_opc_buf + OPC_MAX_SIZE;
-
     dc->env = env;
     dc->is_jmp = DISAS_NEXT;
     dc->pc = pc_start;
@@ -2999,46 +2984,41 @@ gen_intermediate_code_internal(M68kCPU *cpu, TranslationBlock *tb,
     dc->singlestep_enabled = cs->singlestep_enabled;
     dc->fpcr = env->fpcr;
     dc->user = (env->sr & SR_S) == 0;
-    dc->is_mem = 0;
     dc->done_mac = 0;
-    lj = -1;
     num_insns = 0;
     max_insns = tb->cflags & CF_COUNT_MASK;
-    if (max_insns == 0)
+    if (max_insns == 0) {
         max_insns = CF_COUNT_MASK;
+    }
+    if (max_insns > TCG_MAX_INSNS) {
+        max_insns = TCG_MAX_INSNS;
+    }
 
-    gen_tb_start();
+    gen_tb_start(tb);
     do {
         pc_offset = dc->pc - pc_start;
         gen_throws_exception = NULL;
-        if (unlikely(!QTAILQ_EMPTY(&cs->breakpoints))) {
-            QTAILQ_FOREACH(bp, &cs->breakpoints, entry) {
-                if (bp->pc == dc->pc) {
-                    gen_exception(dc, dc->pc, EXCP_DEBUG);
-                    dc->is_jmp = DISAS_JUMP;
-                    break;
-                }
-            }
-            if (dc->is_jmp)
-                break;
+        tcg_gen_insn_start(dc->pc);
+        num_insns++;
+
+        if (unlikely(cpu_breakpoint_test(cs, dc->pc, BP_ANY))) {
+            gen_exception(dc, dc->pc, EXCP_DEBUG);
+            dc->is_jmp = DISAS_JUMP;
+            /* The address covered by the breakpoint must be included in
+               [tb->pc, tb->pc + tb->size) in order to for it to be
+               properly cleared -- thus we increment the PC here so that
+               the logic setting tb->size below does the right thing.  */
+            dc->pc += 2;
+            break;
         }
-        if (search_pc) {
-            j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
-            if (lj < j) {
-                lj++;
-                while (lj < j)
-                    tcg_ctx.gen_opc_instr_start[lj++] = 0;
-            }
-            tcg_ctx.gen_opc_pc[lj] = dc->pc;
-            tcg_ctx.gen_opc_instr_start[lj] = 1;
-            tcg_ctx.gen_opc_icount[lj] = num_insns;
-        }
-        if (num_insns + 1 == max_insns && (tb->cflags & CF_LAST_IO))
+
+        if (num_insns == max_insns && (tb->cflags & CF_LAST_IO)) {
             gen_io_start();
+        }
+
         dc->insn_pc = dc->pc;
 	disas_m68k_insn(env, dc);
-        num_insns++;
-    } while (!dc->is_jmp && tcg_ctx.gen_opc_ptr < gen_opc_end &&
+    } while (!dc->is_jmp && !tcg_op_buf_full() &&
              !cs->singlestep_enabled &&
              !singlestep &&
              (pc_offset) < (TARGET_PAGE_SIZE - 32) &&
@@ -3072,38 +3052,17 @@ gen_intermediate_code_internal(M68kCPU *cpu, TranslationBlock *tb,
         }
     }
     gen_tb_end(tb, num_insns);
-    *tcg_ctx.gen_opc_ptr = INDEX_op_end;
 
 #ifdef DEBUG_DISAS
     if (qemu_loglevel_mask(CPU_LOG_TB_IN_ASM)) {
         qemu_log("----------------\n");
         qemu_log("IN: %s\n", lookup_symbol(pc_start));
-        log_target_disas(env, pc_start, dc->pc - pc_start, 0);
+        log_target_disas(cs, pc_start, dc->pc - pc_start, 0);
         qemu_log("\n");
     }
 #endif
-    if (search_pc) {
-        j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
-        lj++;
-        while (lj <= j)
-            tcg_ctx.gen_opc_instr_start[lj++] = 0;
-    } else {
-        tb->size = dc->pc - pc_start;
-        tb->icount = num_insns;
-    }
-
-    //optimize_flags();
-    //expand_target_qops();
-}
-
-void gen_intermediate_code(CPUM68KState *env, TranslationBlock *tb)
-{
-    gen_intermediate_code_internal(m68k_env_get_cpu(env), tb, false);
-}
-
-void gen_intermediate_code_pc(CPUM68KState *env, TranslationBlock *tb)
-{
-    gen_intermediate_code_internal(m68k_env_get_cpu(env), tb, true);
+    tb->size = dc->pc - pc_start;
+    tb->icount = num_insns;
 }
 
 void m68k_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
@@ -3129,7 +3088,8 @@ void m68k_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
     cpu_fprintf (f, "FPRESULT = %12g\n", *(double *)&env->fp_result);
 }
 
-void restore_state_to_opc(CPUM68KState *env, TranslationBlock *tb, int pc_pos)
+void restore_state_to_opc(CPUM68KState *env, TranslationBlock *tb,
+                          target_ulong *data)
 {
-    env->pc = tcg_ctx.gen_opc_pc[pc_pos];
+    env->pc = data[0];
 }

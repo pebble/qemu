@@ -636,8 +636,9 @@ typedef struct NvmeAsyncEvent {
 
 typedef struct NvmeRequest {
     struct NvmeSQueue       *sq;
-    BlockDriverAIOCB        *aiocb;
+    BlockAIOCB              *aiocb;
     uint16_t                status;
+    bool                    has_sg;
     NvmeCqe                 cqe;
     BlockAcctCookie         acct;
     QEMUSGList              qsg;
@@ -688,7 +689,7 @@ typedef struct NvmeCtrl {
     NvmeBar      bar;
     BlockConf    conf;
 
-    uint16_t    page_size;
+    uint32_t    page_size;
     uint16_t    page_bits;
     uint16_t    max_prp_ents;
     uint16_t    cqe_size;

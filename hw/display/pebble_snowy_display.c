@@ -90,6 +90,13 @@ typedef enum {
     PSDISPLAYSTATE_ACCEPTING_FRAME_DATA,  // used in PSDISPLAY_CMD_SET_1 command set
 } PSDisplayState;
 
+static const char *s_display_state[] = {
+        "PSDISPLAYSTATE_PROGRAMMING",
+        "PSDISPLAYSTATE_ACCEPTING_CMD",
+        "PSDISPLAYSTATE_ACCEPTING_PARAM",
+        "PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE",
+        "PSDISPLAYSTATE_ACCEPTING_FRAME_DATA"
+};
 
 // Which command set the FPGA is implementing
 typedef enum {
@@ -194,6 +201,15 @@ static uint8_t *get_dead_face_image(int *width, int *height);
 static uint8_t *get_small_pebble_logo_image(int *width, int *height);
 static uint8_t *get_url_image(int *width, int *height);
 static uint8_t *get_pixel_mask(void);
+
+static uint32_t display_bytes = 0;
+static uint32_t frameno = 0;
+
+static void ps_set_state(PSDisplayGlobals *s, PSDisplayState new_state) {
+    DPRINTF("state change from %u (%s) to %u (%s) frame: %u - bytes: %u\n",
+            s->state, s_display_state[s->state], new_state, s_display_state[new_state], frameno, display_bytes);
+    s->state = new_state;
+}
 
 // -----------------------------------------------------------------------------
 static void ps_set_redraw(PSDisplayGlobals *s) {
@@ -301,7 +317,7 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s)
             }
 
             // We didn't find the command set, bail
-            fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unknown FPGA programming with a date"
+            DPRINTF("PEBBLE_SNOWY_DISPLAY: Unknown FPGA programming with a date"
                     " stamp of '%s'. Defaulting to command set %d\n", str_p, s->cmd_set);
             return;
         } else {
@@ -312,7 +328,7 @@ static void ps_display_determine_command_set(PSDisplayGlobals *s)
     }
 
     // Couldn't find the "Date:" string
-    fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Error parsing FPGA programming data to"
+    DPRINTF("PEBBLE_SNOWY_DISPLAY: Error parsing FPGA programming data to"
             " determine command set. Defaulting to command set %d\n", s->cmd_set);
     return;
 }
@@ -328,10 +344,9 @@ static void ps_display_reset_state(PSDisplayGlobals *s, bool assert_done)
     }
 
     DPRINTF("Resetting state to accept command\n");
-    s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
+    ps_set_state(s, PSDISPLAYSTATE_ACCEPTING_CMD);
     s->parameter_byte_offset = 0;
 }
-
 
 // -----------------------------------------------------------------------------
 // Implements command PSDISPLAY_CMD_SET_0, used in the first boot ROM, built Dec 2014
@@ -340,6 +355,7 @@ static void ps_display_execute_current_cmd_set0(PSDisplayGlobals *s)
     int width, height, x_offset, y_offset;
     uint8_t *pixels;
 
+    DPRINTF("ps_display_execute_current_cmd_set0: cmd: %u -- cs: %s\n", s->cmd, s->cs_value ? "Not CS" : "CS");
     switch (s->cmd) {
     case PSDISPLAYCMD0_NULL:
         DPRINTF("Executing command: NULL\n");
@@ -348,7 +364,7 @@ static void ps_display_execute_current_cmd_set0(PSDisplayGlobals *s)
 
     case PSDISPLAYCMD0_SET_PARAMETER:
         DPRINTF("Executing command: SET_PARAMETER\n");
-        s->state = PSDISPLAYSTATE_ACCEPTING_PARAM;
+        ps_set_state(s, PSDISPLAYSTATE_ACCEPTING_PARAM);
         s->parameter_byte_offset = 0;
         break;
 
@@ -364,7 +380,7 @@ static void ps_display_execute_current_cmd_set0(PSDisplayGlobals *s)
 
     case PSDISPLAYCMD0_DRAW_SCENE:
         if (s->state == PSDISPLAYSTATE_ACCEPTING_CMD) {
-            s->state = PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE;
+            ps_set_state(s, PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE);
         } else if (s->state == PSDISPLAYSTATE_ACCEPTING_SCENE_BYTE) {
             DPRINTF("Executing command: DRAW_SCENE: %d\n", s->scene);
             switch (s->scene) {
@@ -399,20 +415,20 @@ static void ps_display_execute_current_cmd_set0(PSDisplayGlobals *s)
                 ps_display_draw_8bpp_bitmap(s, pixels, x_offset, y_offset, width, height);
                 break;
             default:
-                fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported scene: %d\n", s->scene);
+                DPRINTF("PEBBLE_SNOWY_DISPLAY: Unsupported scene: %d\n", s->scene);
                 break;
             }
             ps_display_reset_state(s, true /*assert_done*/);
             ps_set_redraw(s);
         } else {
-            fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Tried to execute draw scene in "
+            DPRINTF("PEBBLE_SNOWY_DISPLAY: Tried to execute draw scene in "
                       "wrong state: %d\n", s->state);
             ps_display_reset_state(s, true /*assert_done*/);
         }
         break;
 
     default:
-        fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported cmd: %d\n", s->cmd);
+        DPRINTF("PEBBLE_SNOWY_DISPLAY: Unsupported cmd: %d\n", s->cmd);
         ps_display_reset_state(s, true /*assert_done*/);
         break;
     }
@@ -423,6 +439,7 @@ static void ps_display_execute_current_cmd_set0(PSDisplayGlobals *s)
 static void ps_display_execute_current_cmd_set1(PSDisplayGlobals *s)
 {
 
+    DPRINTF("ps_display_execute_current_cmd_set1: cmd: %u -- cs: %s\n", s->cmd, s->cs_value ? "Not CS" : "CS");
     switch (s->cmd) {
     case PSDISPLAYCMD1_FRAME_BEGIN:
         DPRINTF("Executing command: FRAME_BEGIN\n");
@@ -435,13 +452,13 @@ static void ps_display_execute_current_cmd_set1(PSDisplayGlobals *s)
           s->row_index = s->num_rows - s->num_border_rows - 1;
           s->col_index = s->num_border_cols;
         }
-        s->state = PSDISPLAYSTATE_ACCEPTING_FRAME_DATA;
+        ps_set_state(s, PSDISPLAYSTATE_ACCEPTING_FRAME_DATA);
         // Just say we are done immediately. We can accept more data right away.
         qemu_set_irq(s->intn_output, false);
         break;
 
     default:
-        fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: Unsupported cmd: %d\n", s->cmd);
+        DPRINTF("PEBBLE_SNOWY_DISPLAY: Unsupported cmd: %d\n", s->cmd);
         ps_display_reset_state(s, true /*assert_done*/);
         break;
     }
@@ -555,10 +572,12 @@ static void ps_display_cmd_set_2_unscramble_row(PSDisplayGlobals *s, uint32_t ro
     }
 }
 
+static bool newdisp = true;
 
 // -----------------------------------------------------------------------------
 static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
 {
+    ++display_bytes;
     PSDisplayGlobals *s = FROM_SSI_SLAVE(PSDisplayGlobals, dev);
     uint32_t data_byte = data & 0x00FF;
 
@@ -567,7 +586,7 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
     /* Ignore incoming data if our chip select is not asserted */
     if (s->cs_value) {
         if (s->state != PSDISPLAYSTATE_PROGRAMMING) {
-            fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: received data without CS asserted");
+            DPRINTF("PEBBLE_SNOWY_DISPLAY: received data without CS asserted");
         }
         return 0;
     }
@@ -593,7 +612,7 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
         } else if (s->cmd_set == PSDISPLAY_CMD_SET_1) {
             ps_display_execute_current_cmd_set1(s);
         } else {
-            fprintf(stderr, "Unimplemeneted command set\n");
+            DPRINTF("Unimplemeneted command set\n");
             abort();
         }
         break;
@@ -611,7 +630,7 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
         } else if (s->parameter_byte_offset == 3) {
             s->parameter = (s->parameter & 0x00FFFFFF) | (data_byte << 24);
         } else {
-            fprintf(stderr, "PEBBLE_SNOWY_DISPLAY: received more than 4 bytes of parameter");
+            DPRINTF("PEBBLE_SNOWY_DISPLAY: received more than 4 bytes of parameter");
         }
 
         s->parameter_byte_offset++;
@@ -628,7 +647,10 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
         break;
 
     case PSDISPLAYSTATE_ACCEPTING_FRAME_DATA:
-        //DPRINTF("0x%02X,  row %d, col %d\n", data, s->row_index, s->col_index);
+        if (newdisp) {
+            DPRINTF("New frame?  -- 0x%02X,  row %d, col %d -- bytes: %u -- cs: %s\n", data, s->row_index, s->col_index, display_bytes, s->cs_value ? "Not CS" : "CS");
+            newdisp = false;
+        }
         s->framebuffer[s->row_index * s->bytes_per_row + s->col_index] = data;
         if (s->row_major) {
           // We get sent one row at a time
@@ -640,9 +662,11 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
               s->col_index = s->num_border_cols;
               s->row_index += 1;
               if (s->row_index >= s->num_rows - s->num_border_rows) {
-                  //DPRINTF("Got last byte in frame\n");
-                  s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
+                  DPRINTF("Got last byte in frame (row) row %d, col %d -- bytes: %u\n", s->row_index, s->col_index, display_bytes);
+                  ps_set_state(s, PSDISPLAYSTATE_ACCEPTING_CMD);
                   ps_set_redraw(s);
+                  newdisp = true;
+                  ++frameno;
               }
           }
         } else {
@@ -655,9 +679,11 @@ static uint32_t ps_display_transfer(SSISlave *dev, uint32_t data)
               s->row_index = s->num_rows - s->num_border_rows - 1;
               s->col_index += 1;
               if (s->col_index >= s->num_cols - s->num_border_cols) {
-                  //DPRINTF("Got last byte in frame\n");
-                  s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
+                  DPRINTF("Got last byte in frame (col) row %d, col %d\n", s->row_index, s->col_index);
+                  ps_set_state(s, PSDISPLAYSTATE_ACCEPTING_CMD);
                   ps_set_redraw(s);
+                  newdisp = true;
+                  ++frameno;
               }
           }
         }
@@ -849,7 +875,7 @@ static void ps_display_set_reset_pin_cb(void *opaque, int n, int level)
             s->cmd_set = PSDISPLAY_CMD_SET_0;
             ps_display_reset_state(s, true);
         } else {
-            s->state = PSDISPLAYSTATE_PROGRAMMING;
+            ps_set_state(s, PSDISPLAYSTATE_PROGRAMMING);
             s->prog_byte_offset = 0;
         }
     }
@@ -882,7 +908,7 @@ static const GraphicHwOps ps_display_ops =
 
 
 // ----------------------------------------------------------------------------- 
-static void ps_displa_backlight_enable_cb(void *opaque, int n, int level)
+static void ps_display_backlight_enable_cb(void *opaque, int n, int level)
 {
     PSDisplayGlobals *s = (PSDisplayGlobals *)opaque;
     assert(n == 0);
@@ -956,7 +982,7 @@ static int ps_display_init(SSISlave *dev)
     s->brightness = 0.0;
     s->backlight_enabled = false;
     s->cmd_set = PSDISPLAY_CMD_SET_0;
-    s->state = PSDISPLAYSTATE_ACCEPTING_CMD;
+    ps_set_state(s, PSDISPLAYSTATE_ACCEPTING_CMD);
 
     // Allocate the frame buffer
     s->bytes_per_row = s->num_cols;
@@ -976,7 +1002,7 @@ static int ps_display_init(SSISlave *dev)
                             "sclk", 1);
 
     /* This callback informs us that brightness control is enabled */
-    qdev_init_gpio_in_named(DEVICE(dev), ps_displa_backlight_enable_cb,
+    qdev_init_gpio_in_named(DEVICE(dev), ps_display_backlight_enable_cb,
                             "backlight_enable", 1);
 
     /* This callback informs us of the brightness level (from 0 to 255) */

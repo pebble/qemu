@@ -26,7 +26,6 @@
 #include "hw/pci/pci_bus.h"
 #include "hw/pci/pcie_regs.h"
 #include "qemu/range.h"
-#include "qapi/qmp/qerror.h"
 
 //#define DEBUG_PCIE
 #ifdef DEBUG_PCIE
@@ -79,12 +78,12 @@ int pcie_cap_init(PCIDevice *dev, uint8_t offset, uint8_t type, uint8_t port)
                  PCI_EXP_LNK_LS_25);
 
     pci_set_word(exp_cap + PCI_EXP_LNKSTA,
-                 PCI_EXP_LNK_MLW_1 | PCI_EXP_LNK_LS_25);
+                 PCI_EXP_LNK_MLW_1 | PCI_EXP_LNK_LS_25 |PCI_EXP_LNKSTA_DLLLA);
 
     pci_set_long(exp_cap + PCI_EXP_DEVCAP2,
                  PCI_EXP_DEVCAP2_EFF | PCI_EXP_DEVCAP2_EETLPP);
 
-    pci_set_word(dev->wmask + pos, PCI_EXP_DEVCTL2_EETLPPB);
+    pci_set_word(dev->wmask + pos + PCI_EXP_DEVCTL2, PCI_EXP_DEVCTL2_EETLPPB);
     return pos;
 }
 
@@ -145,7 +144,7 @@ void pcie_cap_deverr_init(PCIDevice *dev)
                                PCI_EXP_DEVCTL_FERE | PCI_EXP_DEVCTL_URRE);
     pci_long_test_and_set_mask(dev->w1cmask + pos + PCI_EXP_DEVSTA,
                                PCI_EXP_DEVSTA_CED | PCI_EXP_DEVSTA_NFED |
-                               PCI_EXP_DEVSTA_URD | PCI_EXP_DEVSTA_URD);
+                               PCI_EXP_DEVSTA_FED | PCI_EXP_DEVSTA_URD);
 }
 
 void pcie_cap_deverr_reset(PCIDevice *dev)
@@ -229,7 +228,7 @@ static void pcie_cap_slot_hotplug_common(PCIDevice *hotplug_dev,
         /* the slot is electromechanically locked.
          * This error is propagated up to qdev and then to HMP/QMP.
          */
-        error_setg_errno(errp, -EBUSY, "slot is electromechanically locked");
+        error_setg_errno(errp, EBUSY, "slot is electromechanically locked");
     }
 }
 
@@ -250,24 +249,42 @@ void pcie_cap_slot_hotplug_cb(HotplugHandler *hotplug_dev, DeviceState *dev,
         return;
     }
 
-    /* TODO: multifunction hot-plug.
-     * Right now, only a device of function = 0 is allowed to be
-     * hot plugged/unplugged.
+    /* To enable multifunction hot-plug, we just ensure the function
+     * 0 added last. When function 0 is added, we set the sltsta and
+     * inform OS via event notification.
      */
-    assert(PCI_FUNC(pci_dev->devfn) == 0);
-
-    pci_word_test_and_set_mask(exp_cap + PCI_EXP_SLTSTA,
-                               PCI_EXP_SLTSTA_PDS);
-    pcie_cap_slot_event(PCI_DEVICE(hotplug_dev),
-                        PCI_EXP_HP_EV_PDC | PCI_EXP_HP_EV_ABP);
+    if (pci_get_function_0(pci_dev)) {
+        pci_word_test_and_set_mask(exp_cap + PCI_EXP_SLTSTA,
+                                   PCI_EXP_SLTSTA_PDS);
+        pcie_cap_slot_event(PCI_DEVICE(hotplug_dev),
+                            PCI_EXP_HP_EV_PDC | PCI_EXP_HP_EV_ABP);
+    }
 }
 
-void pcie_cap_slot_hot_unplug_cb(HotplugHandler *hotplug_dev, DeviceState *dev,
-                                 Error **errp)
+static void pcie_unplug_device(PCIBus *bus, PCIDevice *dev, void *opaque)
+{
+    object_unparent(OBJECT(dev));
+}
+
+void pcie_cap_slot_hot_unplug_request_cb(HotplugHandler *hotplug_dev,
+                                         DeviceState *dev, Error **errp)
 {
     uint8_t *exp_cap;
+    PCIDevice *pci_dev = PCI_DEVICE(dev);
+    PCIBus *bus = pci_dev->bus;
 
     pcie_cap_slot_hotplug_common(PCI_DEVICE(hotplug_dev), dev, &exp_cap, errp);
+
+    /* In case user cancel the operation of multi-function hot-add,
+     * remove the function that is unexposed to guest individually,
+     * without interaction with guest.
+     */
+    if (pci_dev->devfn &&
+        !bus->devices[0]) {
+        pcie_unplug_device(bus, pci_dev, NULL);
+
+        return;
+    }
 
     pcie_cap_slot_push_attention_button(PCI_DEVICE(hotplug_dev));
 }
@@ -379,11 +396,6 @@ void pcie_cap_slot_reset(PCIDevice *dev)
     hotplug_event_update_event_status(dev);
 }
 
-static void pcie_unplug_device(PCIBus *bus, PCIDevice *dev, void *opaque)
-{
-    object_unparent(OBJECT(dev));
-}
-
 void pcie_cap_slot_write_config(PCIDevice *dev,
                                 uint32_t addr, uint32_t val, int len)
 {
@@ -414,13 +426,13 @@ void pcie_cap_slot_write_config(PCIDevice *dev,
      */
     if ((sltsta & PCI_EXP_SLTSTA_PDS) && (val & PCI_EXP_SLTCTL_PCC) &&
         ((val & PCI_EXP_SLTCTL_PIC_OFF) == PCI_EXP_SLTCTL_PIC_OFF)) {
-            PCIBus *sec_bus = pci_bridge_get_sec_bus(PCI_BRIDGE(dev));
-            pci_for_each_device(sec_bus, pci_bus_num(sec_bus),
-                                pcie_unplug_device, NULL);
+        PCIBus *sec_bus = pci_bridge_get_sec_bus(PCI_BRIDGE(dev));
+        pci_for_each_device(sec_bus, pci_bus_num(sec_bus),
+                            pcie_unplug_device, NULL);
 
-            pci_word_test_and_clear_mask(exp_cap + PCI_EXP_SLTSTA,
-                                         PCI_EXP_SLTSTA_PDS);
-            pci_word_test_and_set_mask(exp_cap + PCI_EXP_SLTSTA,
+        pci_word_test_and_clear_mask(exp_cap + PCI_EXP_SLTSTA,
+                                     PCI_EXP_SLTSTA_PDS);
+        pci_word_test_and_set_mask(exp_cap + PCI_EXP_SLTSTA,
                                        PCI_EXP_SLTSTA_PDC);
     }
 
@@ -497,9 +509,10 @@ void pcie_cap_flr_write_config(PCIDevice *dev,
     }
 }
 
-/* Alternative Routing-ID Interpretation (ARI) */
-/* ari forwarding support for down stream port */
-void pcie_cap_ari_init(PCIDevice *dev)
+/* Alternative Routing-ID Interpretation (ARI)
+ * forwarding support for root and downstream ports
+ */
+void pcie_cap_arifwd_init(PCIDevice *dev)
 {
     uint32_t pos = dev->exp.exp_cap;
     pci_long_test_and_set_mask(dev->config + pos + PCI_EXP_DEVCAP2,
@@ -508,13 +521,13 @@ void pcie_cap_ari_init(PCIDevice *dev)
                                PCI_EXP_DEVCTL2_ARI);
 }
 
-void pcie_cap_ari_reset(PCIDevice *dev)
+void pcie_cap_arifwd_reset(PCIDevice *dev)
 {
     uint8_t *devctl2 = dev->config + dev->exp.exp_cap + PCI_EXP_DEVCTL2;
     pci_long_test_and_clear_mask(devctl2, PCI_EXP_DEVCTL2_ARI);
 }
 
-bool pcie_cap_is_ari_enabled(const PCIDevice *dev)
+bool pcie_cap_is_arifwd_enabled(const PCIDevice *dev)
 {
     if (!pci_is_express(dev)) {
         return false;
@@ -528,7 +541,7 @@ bool pcie_cap_is_ari_enabled(const PCIDevice *dev)
 }
 
 /**************************************************************************
- * pci express extended capability allocation functions
+ * pci express extended capability list management functions
  * uint16_t ext_cap_id (16 bit)
  * uint8_t cap_ver (4 bit)
  * uint16_t cap_offset (12 bit)
@@ -630,5 +643,5 @@ void pcie_ari_init(PCIDevice *dev, uint16_t offset, uint16_t nextfn)
 {
     pcie_add_capability(dev, PCI_EXT_CAP_ID_ARI, PCI_ARI_VER,
                         offset, PCI_ARI_SIZEOF);
-    pci_set_long(dev->config + offset + PCI_ARI_CAP, PCI_ARI_CAP_NFN(nextfn));
+    pci_set_long(dev->config + offset + PCI_ARI_CAP, (nextfn & 0xff) << 8);
 }
