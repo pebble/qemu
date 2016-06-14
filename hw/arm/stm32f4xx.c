@@ -72,6 +72,8 @@ static const char *stm32f4xx_periph_name_arr[] = {
     ENUM_STRING(STM32_GPIOJ),
     ENUM_STRING(STM32_GPIOK),
 
+    ENUM_STRING(STM32_QSPI),
+
     ENUM_STRING(STM32_PERIPH_COUNT)
 };
 
@@ -98,6 +100,7 @@ void stm32f4xx_init(
             ram_addr_t ram_size,          /* in KBytes */
             const char *kernel_filename,
             Stm32Gpio **stm32_gpio,
+            const uint32_t *gpio_idr_masks,
             Stm32Uart **stm32_uart,
             Stm32Timer **stm32_timer,
             DeviceState **stm32_rtc,
@@ -169,6 +172,7 @@ void stm32f4xx_init(
         gpio_dev[i] = qdev_create(NULL, "stm32f2xx_gpio");
         gpio_dev[i]->id = stm32f4xx_periph_name_arr[periph];
         qdev_prop_set_int32(gpio_dev[i], "periph", periph);
+        qdev_prop_set_uint32(gpio_dev[i], "idr-mask", gpio_idr_masks[i]);
         // qdev_prop_set_ptr(gpio_dev[i], "stm32_rcc", rcc_dev);
         stm32_init_periph(gpio_dev[i], periph, 0x40020000 + (i * 0x400), NULL /*irq*/);
         stm32_gpio[i] = (Stm32Gpio *)gpio_dev[i];
@@ -272,6 +276,11 @@ void stm32f4xx_init(
         stm32_init_periph(stm->spi_dev[i], periph, spi_desc[i].addr,
                           qdev_get_gpio_in(nvic, spi_desc[i].irq_idx));
     }
+
+    /* QSPI */
+    stm->qspi_dev = qdev_create(NULL, "stm32f412_qspi");
+    stm->qspi_dev->id = stm32f4xx_periph_name_arr[STM32_QSPI];
+    stm32_init_periph(stm->qspi_dev, STM32_QSPI, 0xA0001000, qdev_get_gpio_in(nvic, STM32_QSPI_IRQ));
 
     /* ADC */
     DeviceState *adc_dev = qdev_create(NULL, "stm32f2xx_adc");

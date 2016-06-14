@@ -55,6 +55,7 @@ struct stm32f2xx_gpio {
     MemoryRegion iomem;
 
     stm32_periph_t periph;
+    uint32_t idr_mask;
 
     qemu_irq pin[STM32_GPIO_PIN_COUNT];
     qemu_irq exti[STM32_GPIO_PIN_COUNT];
@@ -197,8 +198,8 @@ stm32f2xx_gpio_reset(DeviceState *dev)
         s->regs[R_GPIO_PUPDR] = 0x00000000;
         break;
     }
-    /* XXX default IDR to all-1s */
-    s->regs[R_GPIO_IDR] = 0x0000ffff;
+    /* Mask out the IDR bits as specified */
+    s->regs[R_GPIO_IDR] = 0x0000ffff & ~(s->idr_mask);
 }
 
 static void
@@ -253,6 +254,7 @@ stm32f2xx_gpio_init(SysBusDevice *dev)
 
 static Property stm32f2xx_gpio_properties[] = {
     DEFINE_PROP_INT32("periph", stm32f2xx_gpio, periph, -1),
+    DEFINE_PROP_UINT32("idr-mask", stm32f2xx_gpio, idr_mask, 0),
     DEFINE_PROP_END_OF_LIST()
 };
 

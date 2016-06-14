@@ -9,6 +9,7 @@
 
 struct stm32f4xx {
     DeviceState *spi_dev[STM32F4XX_SPI_COUNT];
+    DeviceState *qspi_dev;
 
     qemu_irq display_done_signal;
 };

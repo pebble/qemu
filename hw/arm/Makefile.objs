@@ -31,4 +31,5 @@ obj-y += stm32f2xx_dma.o
 obj-y += stm32f2xx_pwr.o
 obj-y += pebble.o
 obj-y += pebble_control.o
+obj-y += pebble_silk.o
 

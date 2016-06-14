@@ -446,7 +446,7 @@ f2xx_rtc_write(void *arg, hwaddr addr, uint64_t data, unsigned int size)
         if (s->regs[R_RTC_CR] & R_RTC_CR_WUTE) {
             int64_t elapsed = f2xx_wut_period_ns(s, s->regs[R_RTC_WUTR]);
             DPRINTF("%s: scheduling WUT to fire in %f ms\n", __func__, (float)elapsed/1000000.0);
-            timer_mod(s->wu_timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + elapsed);
+            timer_mod(s->wu_timer, qemu_clock_get_ns(QEMU_CLOCK_REALTIME) + elapsed);
         } else {
             DPRINTF("%s: Cancelling WUT\n", __func__);
             qemu_set_irq(s->wut_irq, 0);
@@ -584,7 +584,7 @@ f2xx_wu_timer(void *arg)
 
     // Reschedule again
     int64_t elapsed = f2xx_wut_period_ns(s, s->regs[R_RTC_WUTR]);
-    timer_mod(s->wu_timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + elapsed);
+    timer_mod(s->wu_timer, qemu_clock_get_ns(QEMU_CLOCK_REALTIME) + elapsed);
 }
 
 
@@ -652,7 +652,7 @@ f2xx_rtc_init(SysBusDevice *dev)
     s->timer = timer_new_ns(QEMU_CLOCK_HOST, f2xx_timer, s);
     timer_mod(s->timer, qemu_clock_get_ns(QEMU_CLOCK_HOST) + period_ns);
 
-    s->wu_timer = timer_new_ns(QEMU_CLOCK_HOST, f2xx_wu_timer, s);
+    s->wu_timer = timer_new_ns(QEMU_CLOCK_REALTIME, f2xx_wu_timer, s);
     return 0;
 }
 

@@ -43,15 +43,14 @@
 #define DPRINTF(fmt, ...)
 #endif
 
-
 const static PblBoardConfig s_board_config_bb2_ev1_ev2 = {
     .dbgserial_uart_index = 2,       // USART3
     .pebble_control_uart_index = 1,  // USART2
     .button_map = {
-        {STM32_GPIOC_INDEX, 3},   /* back */
-        {STM32_GPIOA_INDEX, 2},   /* up */
-        {STM32_GPIOC_INDEX, 6},   /* select */
-        {STM32_GPIOA_INDEX, 1},   /* down */
+        {STM32_GPIOC_INDEX, 3},   // back
+        {STM32_GPIOA_INDEX, 2},   // up
+        {STM32_GPIOC_INDEX, 6},   // select
+        {STM32_GPIOA_INDEX, 1},   // down
     },
     .flash_size = 4096,  /* Kbytes - larger to aid in development and debugging */
     .ram_size = 128,  /* Kbytes */
@@ -67,10 +66,10 @@ const static PblBoardConfig s_board_config_bigboard = {
     .dbgserial_uart_index = 2,       // USART3
     .pebble_control_uart_index = 1,  // USART2
     .button_map = {
-        {STM32_GPIOA_INDEX, 2},
-        {STM32_GPIOA_INDEX, 1},
-        {STM32_GPIOA_INDEX, 3},
-        {STM32_GPIOC_INDEX, 9}
+        {STM32_GPIOA_INDEX, 2}, // back
+        {STM32_GPIOA_INDEX, 1}, // up
+        {STM32_GPIOA_INDEX, 3}, // select
+        {STM32_GPIOC_INDEX, 9}, // down
     },
     .flash_size = 4096,  /* Kbytes - larger to aid in development and debugging */
     .ram_size = 128,  /* Kbytes */
@@ -86,10 +85,10 @@ const static PblBoardConfig s_board_config_snowy_bb = {
     .dbgserial_uart_index = 2,       // USART3
     .pebble_control_uart_index = 1,  // USART2
     .button_map = {
-        {STM32_GPIOG_INDEX, 4},
-        {STM32_GPIOG_INDEX, 3},
-        {STM32_GPIOG_INDEX, 1},
-        {STM32_GPIOG_INDEX, 2},
+        {STM32_GPIOG_INDEX, 4}, // back
+        {STM32_GPIOG_INDEX, 3}, // up
+        {STM32_GPIOG_INDEX, 1}, // select
+        {STM32_GPIOG_INDEX, 2}, // down
     },
     .flash_size = 4096,  /* Kbytes - larger to aid in development and debugging */
     .ram_size = 256,  /* Kbytes */
@@ -257,7 +256,13 @@ void pebble_init_buttons(Stm32Gpio *gpio[], const PblButtonMap *map)
 {
     int i;
     for (i = 0; i < PBL_NUM_BUTTONS; i++) {
-        s_button_irq[i] = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
+        qemu_irq irq = qdev_get_gpio_in((DeviceState *)gpio[map[i].gpio], map[i].pin);
+        if (map[i].active_high) {
+            s_button_irq[i] = qemu_irq_invert(irq);
+
+        } else {
+            s_button_irq[i] = irq;
+        }
     }
     // GPIO A, pin 0 is the WKUP pin.
     s_button_wakeup = qdev_get_gpio_in((DeviceState *)gpio[STM32_GPIOA_INDEX], 0);
@@ -374,6 +379,7 @@ static void pebble_32f2_init(MachineState *machine, const PblBoardConfig *board_
     /* Display */
     spi = (SSIBus *)qdev_get_child_bus(stm.spi_dev[1], "ssi");
     DeviceState *display_dev = ssi_create_slave_no_init(spi, "sm-lcd");
+    qdev_prop_set_bit(display_dev, "rotate_display", true);
     qdev_init_nofail(display_dev);
 
     qemu_irq backlight_enable;
@@ -396,7 +402,6 @@ static void pebble_32f2_init(MachineState *machine, const PblBoardConfig *board_
 
     // Init the buttons
     pebble_init_buttons(gpio, board_config->button_map);
-
 
     // Create the board device and wire it up
     qemu_irq display_vibe;
@@ -426,6 +431,7 @@ void pebble_32f439_init(MachineState *machine, const PblBoardConfig *board_confi
                    board_config->ram_size,
                    machine->kernel_filename,
                    gpio,
+                   board_config->gpio_idr_masks,
                    uart,
                    timer,
                    &rtc_dev,

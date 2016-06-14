@@ -163,6 +163,8 @@ enum {
     STM32_CRYP_PERIPH,
     STM32_HASH_PERIPH,
     STM32_RNG_PERIPH,
+    STM32_QSPI,
+
     STM32_PERIPH_COUNT,
 };
 
@@ -281,6 +283,8 @@ const char *stm32_periph_name(stm32_periph_t periph);
 #define STM32_SPI4_IRQ 84
 #define STM32_SPI5_IRQ 85
 #define STM32_SPI6_IRQ 86
+
+#define STM32_QSPI_IRQ 92
 
 #define STM32_MAX_IRQ  95
 
@@ -479,6 +483,7 @@ void stm32f4xx_init(
                     ram_addr_t ram_size,
                     const char *kernel_filename,
                     Stm32Gpio **stm32_gpio,
+                    const uint32_t *gpio_idr_masks,
                     Stm32Uart **stm32_uart,
                     Stm32Timer **stm32_timer,
                     DeviceState **stm32_rtc,

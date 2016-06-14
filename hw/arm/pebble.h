@@ -16,6 +16,7 @@ typedef enum {
 typedef struct {
     int gpio;
     int pin;
+    bool active_high;
 } PblButtonMap;
 
 typedef struct {
@@ -23,6 +24,8 @@ typedef struct {
   int pebble_control_uart_index;
 
   PblButtonMap button_map[PBL_NUM_BUTTONS];
+  uint32_t gpio_idr_masks[STM32F4XX_GPIO_COUNT];
+
   // memory sizes
   uint32_t flash_size;
   uint32_t ram_size;

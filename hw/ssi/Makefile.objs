@@ -6,3 +6,4 @@ common-obj-$(CONFIG_XILINX_SPIPS) += xilinx_spips.o
 obj-$(CONFIG_OMAP) += omap_spi.o
 
 obj-y += stm32f2xx_spi.o
+obj-y += stm32f412_qspi.o

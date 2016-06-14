@@ -63,6 +63,11 @@ typedef struct {
     int    vibrate_offset;
 
     bool power_on;
+
+    /* Tintin display was installed 'upside-down'.
+     * Use the "rotate_display" property to flip it.
+     */
+    bool rotate_display;
 } lcd_state;
 
 static uint8_t
@@ -206,9 +211,9 @@ static void sm_lcd_update_display(void *arg)
 
     for (y = 0; y < NUM_ROWS; y++) {
         for (x = 0; x < NUM_COLS; x++) {
-            /* Rotate display - installed 'upside-down' in pebble. */
-            int xr = NUM_COLS - 1 - x;
-            int yr = NUM_ROWS - 1 - y;
+            /* Rotate the display if necessary */
+            int xr = (s->rotate_display) ? NUM_COLS - 1 - x : x;
+            int yr = (s->rotate_display) ? NUM_ROWS - 1 - y : y;
             bool on = s->framebuffer[yr * NUM_COL_BYTES + xr / 8] & 1 << (xr % 8);
             colour = on ? colour_on : colour_off;
             switch(bpp) {
@@ -342,14 +347,21 @@ static int sm_lcd_init(SSISlave *dev)
     return 0;
 }
 
+static Property sm_lcd_init_properties[] = {
+    DEFINE_PROP_BOOL("rotate_display", lcd_state, rotate_display, true),
+    DEFINE_PROP_END_OF_LIST()
+};
+
 static void sm_lcd_class_init(ObjectClass *klass, void *data)
 {
+    DeviceClass *dc = DEVICE_CLASS(klass);
     SSISlaveClass *k = SSI_SLAVE_CLASS(klass);
 
     k->init = sm_lcd_init;
     k->transfer = sm_lcd_transfer;
     k->cs_polarity = SSI_CS_LOW;
     k->parent_class.reset = sm_lcd_reset;
+    dc->props = sm_lcd_init_properties;
 }
 
 static const TypeInfo sm_lcd_info = {
