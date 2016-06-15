@@ -3102,8 +3102,6 @@ void vnc_init_state(VncState *vs)
     vs->as.fmt = AUD_FMT_S16;
     vs->as.endianness = 0;
 
-    vs->tls = NULL;
-
     qemu_mutex_init(&vs->output_mutex);
     vs->bh = qemu_bh_new(vnc_jobs_bh, vs);
 
