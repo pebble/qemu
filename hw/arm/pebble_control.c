@@ -161,7 +161,7 @@ struct PebbleControl {
     // The uart used by the emulated Pebble. We send data to it using its IOHandler
     // callbacks. Data written to the UART by the emulated Pebble gets passed onto us
     // because we provide the UART device a pointer to our pebble_control_write() method.
-    Stm32Uart *uart;
+    void *uart;
     IOEventHandler *uart_chr_event;
     IOCanReadHandler *uart_chr_can_read;
     IOReadHandler *uart_chr_read;
@@ -512,6 +512,39 @@ PebbleControl *pebble_control_create(CharDriverState *chr, Stm32Uart *uart)
 
         // Save away the receive handlers that the uart installed into chr
         stm32_uart_get_rcv_handlers(uart, &s->uart_chr_can_read, &s->uart_chr_read, &s->uart_chr_event);
+
+        // Install our own receive handlers into the CharDriver
+        qemu_chr_add_handlers(
+                        chr,
+                        pebble_control_can_receive,
+                        pebble_control_receive,
+                        pebble_control_event,
+                        (void *)s);
+    }
+
+    return s;
+}
+
+// -----------------------------------------------------------------------------------
+PebbleControl *pebble_control_create_stm32f7xx(CharDriverState *chr, Stm32F7xxUart *uart)
+{
+    PebbleControl *s = malloc(sizeof(PebbleControl));
+    memset(s, 0, sizeof(*s));
+
+    if (chr) {
+        s->chr = chr;
+        s->uart = uart;
+
+        // The timer we use to pump more data to the uart
+        s->target_send_timer = timer_new_ms(QEMU_CLOCK_HOST,
+                                  (QEMUTimerCB *)pebble_control_parse_receive_buffer, s);
+
+
+        // Have the UART send writes to us
+        stm32f7xx_uart_set_write_handler(uart, s, pebble_control_write);
+
+        // Save away the receive handlers that the uart installed into chr
+        stm32f7xx_uart_get_rcv_handlers(uart, &s->uart_chr_can_read, &s->uart_chr_read, &s->uart_chr_event);
 
         // Install our own receive handlers into the CharDriver
         qemu_chr_add_handlers(

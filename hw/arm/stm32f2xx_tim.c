@@ -120,9 +120,10 @@ f2xx_tim_timer(void *arg)
     if (s->regs[R_TIM_CR1] & 1) {
         timer_mod(s->timer, f2xx_tim_next_transition(s, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL)));
     }
-    if (!(s->regs[R_TIM_SR] & 1))
+    if (!(s->regs[R_TIM_SR] & 1)) {
         //printf("f2xx tim timer expired, setting int\n");
-    s->regs[R_TIM_SR] |= 1;
+        s->regs[R_TIM_SR] |= 1;
+    }
     qemu_set_irq(s->irq, 1);
 }
 
@@ -284,7 +285,7 @@ f2xx_tim_init(SysBusDevice *dev)
 {
     f2xx_tim *s = FROM_SYSBUS(f2xx_tim, dev);
 
-    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_tim_ops, s, "tim", 0x3ff);
+    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_tim_ops, s, "tim", 0xa0);
     sysbus_init_mmio(dev, &s->iomem);
     //s->regs[R_RTC_ISR] = R_RTC_ISR_RESET;
     ////s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;

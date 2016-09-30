@@ -59,6 +59,8 @@ const static PblBoardConfig s_board_config_bb2_ev1_ev2 = {
     .num_border_rows = 2,  /* not currently used */
     .num_border_cols = 2,  /* not currently used */
     .row_major = false,  /* not currently used */
+    .row_inverted = false,  /* not currently used */
+    .col_inverted = false,  /* not currently used */
     .round_mask = false  /* not currently used */
 };
 
@@ -78,6 +80,8 @@ const static PblBoardConfig s_board_config_bigboard = {
     .num_border_rows = 2,  /* not currently used */
     .num_border_cols = 2,  /* not currently used */
     .row_major = false,  /* not currently used */
+    .row_inverted = false,  /* not currently used */
+    .col_inverted = false,  /* not currently used */
     .round_mask = false  /* not currently used */
 };
 
@@ -97,6 +101,8 @@ const static PblBoardConfig s_board_config_snowy_bb = {
     .num_border_rows = 2,
     .num_border_cols = 2,
     .row_major = false,
+    .row_inverted = true,
+    .col_inverted = false,
     .round_mask = false
 };
 
@@ -116,6 +122,8 @@ const static PblBoardConfig s_board_config_s4_bb = {
     .num_border_rows = 0,
     .num_border_cols = 0,
     .row_major = true,
+    .row_inverted = false,
+    .col_inverted = false,
     .round_mask = true
 };
 
@@ -247,6 +255,17 @@ void pebble_connect_uarts(Stm32Uart *uart[], const PblBoardConfig *board_config)
                                              uart[board_config->pebble_control_uart_index]);
 
     stm32_uart_connect(uart[board_config->dbgserial_uart_index], serial_hds[2], 0);
+}
+
+void pebble_connect_uarts_stm32f7xx(Stm32F7xxUart *uart[], const PblBoardConfig *board_config)
+{
+    // This UART is used for control messages, put in our pebble_control device in between
+    // the qemu serial chr and the uart. This enables us to intercept and act selectively
+    // act on messages sent to the Pebble in QEMU before they get to it.
+    s_pebble_control = pebble_control_create_stm32f7xx(serial_hds[1],
+            uart[board_config->pebble_control_uart_index]);
+
+    stm32f7xx_uart_connect(uart[board_config->dbgserial_uart_index], serial_hds[2], 0);
 }
 
 
@@ -482,6 +501,8 @@ void pebble_32f439_init(MachineState *machine, const PblBoardConfig *board_confi
     qdev_prop_set_int32(display_dev, "num_border_rows", board_config->num_border_rows);
     qdev_prop_set_int32(display_dev, "num_border_cols", board_config->num_border_cols);
     qdev_prop_set_uint8(display_dev, "row_major", board_config->row_major);
+    qdev_prop_set_uint8(display_dev, "row_inverted", board_config->row_inverted);
+    qdev_prop_set_uint8(display_dev, "col_inverted", board_config->col_inverted);
     qdev_prop_set_uint8(display_dev, "round_mask", board_config->round_mask);
 
     qdev_init_nofail(display_dev);

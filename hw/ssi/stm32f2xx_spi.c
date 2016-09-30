@@ -70,7 +70,7 @@ stm32f2xx_spi_read(void *arg, hwaddr offset, unsigned size)
     Stm32Spi *s = arg;
     uint16_t r = UINT16_MAX;
 
-    if (!(size == 2 || size == 4 || (offset & 0x3) != 0)) {
+    if (!(size == 1 || size == 2 || size == 4 || (offset & 0x3) != 0)) {
         STM32_BAD_REG(offset, size);
     }
     offset >>= 2;

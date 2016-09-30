@@ -171,7 +171,8 @@ qcrypto_tls_session_new(QCryptoTLSCreds *creds,
             goto error;
         }
 
-        if (creds->endpoint == QCRYPTO_TLS_CREDS_ENDPOINT_SERVER) {
+        if (creds->endpoint == QCRYPTO_TLS_CREDS_ENDPOINT_SERVER &&
+            creds->verifyPeer) {
             /* This requests, but does not enforce a client cert.
              * The cert checking code later does enforcement */
             gnutls_certificate_server_set_request(session->handle,

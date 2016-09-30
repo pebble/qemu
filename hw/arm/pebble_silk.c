@@ -23,6 +23,8 @@ const static PblBoardConfig s_board_config_silk_bb = {
     .num_border_rows = 2,  /* not currently used */
     .num_border_cols = 2,  /* not currently used */
     .row_major = false,  /* not currently used */
+    .row_inverted = false,  /* not currently used */
+    .col_inverted = false,  /* not currently used */
     .round_mask = false  /* not currently used */
 };
 

@@ -65,11 +65,13 @@ void vncws_tls_handshake_io(void *opaque)
     VncState *vs = (VncState *)opaque;
     Error *err = NULL;
 
-    vs->tls = qcrypto_tls_session_new(vs->vd->tlscreds,
-                                      NULL,
-                                      vs->vd->tlsaclname,
-                                      QCRYPTO_TLS_CREDS_ENDPOINT_SERVER,
-                                      &err);
+    if (!vs->tls) {
+        vs->tls = qcrypto_tls_session_new(vs->vd->tlscreds,
+                                          NULL,
+                                          vs->vd->tlsaclname,
+                                          QCRYPTO_TLS_CREDS_ENDPOINT_SERVER,
+                                          &err);
+    }
     if (!vs->tls) {
         VNC_DEBUG("Failed to setup TLS %s\n",
                   error_get_pretty(err));

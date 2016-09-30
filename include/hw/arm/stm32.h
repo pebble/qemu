@@ -142,6 +142,7 @@ enum {
     STM32_I2C1,
     STM32_I2C2,
     STM32_I2C3,
+    STM32_I2C4,
     STM32_I2S2,
     STM32_I2S3,
     STM32_WWDG,
@@ -164,6 +165,7 @@ enum {
     STM32_HASH_PERIPH,
     STM32_RNG_PERIPH,
     STM32_QSPI,
+    STM32_LPTIM1,
 
     STM32_PERIPH_COUNT,
 };
@@ -285,8 +287,12 @@ const char *stm32_periph_name(stm32_periph_t periph);
 #define STM32_SPI6_IRQ 86
 
 #define STM32_QSPI_IRQ 92
+#define STM32_LPTIM1_IRQ 93
 
-#define STM32_MAX_IRQ  95
+#define STM32_I2C4_EV_IRQ 95
+#define STM32_I2C4_ER_IRQ 96
+
+#define STM32_MAX_IRQ  127
 
 
 
@@ -383,6 +389,9 @@ typedef struct Stm32Timer Stm32Timer;
 #define STM32_TIM_COUNT   14
 
 
+/* LPTIM */
+typedef struct Stm32F7xxLPTimer Stm32F7xxLPTimer;
+
 
 /* UART */
 #define STM32_UART_COUNT 5
@@ -408,6 +417,40 @@ void stm32_uart_get_rcv_handlers(Stm32Uart *s, IOCanReadHandler **can_read,
                                  IOReadHandler **read, IOEventHandler **event);
 
 void stm32_create_uart_dev(
+        Object *stm32_container,
+        stm32_periph_t periph,
+        int uart_num,
+        DeviceState *rcc_dev,
+        DeviceState **gpio_dev,
+        DeviceState *afio_dev,
+        hwaddr addr,
+        qemu_irq irq);
+
+
+/* STM32F7xx UART */
+#define STM32F7XX_UART_COUNT 8
+
+typedef struct Stm32F7xxUart Stm32F7xxUart;
+
+#define TYPE_STM32F7XX_UART "stm32f7xx-uart"
+#define STM32F7XX_UART(obj) OBJECT_CHECK(Stm32F7xxUart, (obj), TYPE_STM32F7XX_UART)
+
+/* Connects the character driver to the specified UART.  The
+ * board's pin mapping should be passed in.  This will be used to
+ * verify the correct mapping is configured by the software.
+ */
+void stm32f7xx_uart_connect(Stm32F7xxUart *s, CharDriverState *chr,
+                        uint32_t afio_board_map);
+
+/* Low level methods that let you connect a UART device to any other instance
+ * that has read/write handlers. These can be used in place of stm32_uart_connect
+ * if not connecting to a CharDriverState instance. */
+void stm32f7xx_uart_set_write_handler(Stm32F7xxUart *s, void *obj,
+        int (*chr_write_handler)(void *chr_write_obj, const uint8_t *buf, int len));
+void stm32f7xx_uart_get_rcv_handlers(Stm32F7xxUart *s, IOCanReadHandler **can_read,
+                                 IOReadHandler **read, IOEventHandler **event);
+
+void stm32f7xx_create_uart_dev(
         Object *stm32_container,
         stm32_periph_t periph,
         int uart_num,
@@ -490,6 +533,22 @@ void stm32f4xx_init(
                     uint32_t osc_freq,
                     uint32_t osc32_freq,
                     struct stm32f4xx *stm,
+                    ARMCPU **cpu);
+
+struct stm32f7xx;
+void stm32f7xx_init(
+                    ram_addr_t flash_size,
+                    ram_addr_t ram_size,
+                    const char *kernel_filename,
+                    Stm32Gpio **stm32_gpio,
+                    const uint32_t *gpio_idr_masks,
+                    Stm32F7xxUart **stm32_uart,
+                    Stm32Timer **stm32_timer,
+                    Stm32F7xxLPTimer **lptimer,
+                    DeviceState **stm32_rtc,
+                    uint32_t osc_freq,
+                    uint32_t osc32_freq,
+                    struct stm32f7xx *stm,
                     ARMCPU **cpu);
 
 #endif /* STM32_H */

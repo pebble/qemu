@@ -16,20 +16,21 @@ obj-$(CONFIG_XLNX_ZYNQMP) += xlnx-zynqmp.o xlnx-ep108.o
 obj-$(CONFIG_FSL_IMX25) += fsl-imx25.o imx25_pdk.o
 obj-$(CONFIG_FSL_IMX31) += fsl-imx31.o kzm.o
 
-obj-y += stm32.o stm32_rcc.o stm32_clktree.o stm32_p103.o 
-obj-y += stm32f1xx.o stm32f2xx.o stm32f4xx.o stm32_flash.o
+obj-y += stm32.o stm32_rcc.o stm32_clktree.o stm32_p103.o
+obj-y += stm32f1xx.o stm32f2xx.o stm32f4xx.o stm32f7xx.o stm32_flash.o
 obj-y += stm32f1xx_rcc.o stm32f2xx_rcc.o
 obj-y += stm32f2xx_gpio.o stm32f2xx_adc.o
 obj-y += stm32_exti.o stm32f2xx_syscfg.o
 obj-y += stm32f2xx_rtc.o
 obj-y += stm32f2xx_flash.o
 obj-y += stm32f2xx_dummy.o
-obj-y += stm32f2xx_tim.o
-obj-y += stm32f2xx_i2c.o
+obj-y += stm32f2xx_tim.o stm32f7xx_lptim.o
+obj-y += stm32f2xx_i2c.o stm32f7xx_i2c.o
 obj-y += stm32f2xx_crc.o
 obj-y += stm32f2xx_dma.o
 obj-y += stm32f2xx_pwr.o
 obj-y += pebble.o
 obj-y += pebble_control.o
+obj-y += pebble_robert.o
 obj-y += pebble_silk.o
 

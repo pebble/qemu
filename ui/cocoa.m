@@ -1144,6 +1144,9 @@ QemuCocoaView *cocoaView;
 /* Verifies if the user really wants to quit */
 - (BOOL)verifyQuit
 {
+#ifdef SKIP_QUIT_PROMPT
+    return YES;
+#else
     NSAlert *alert = [NSAlert new];
     [alert autorelease];
     [alert setMessageText: @"Are you sure you want to quit QEMU?"];
@@ -1154,6 +1157,7 @@ QemuCocoaView *cocoaView;
     } else {
         return NO;
     }
+#endif
 }
 
 @end
