@@ -14,10 +14,10 @@ const static PblBoardConfig s_board_config_robert_bb = {
     },
     .flash_size = 4096,  /* Kbytes - larger to aid in development and debugging */
     .ram_size = 512,  /* Kbytes */
-    .num_rows = 232, // 228 pixels plus the top and bottom border (2 pixels each)
-    .num_cols = 204, // 200 pixels plus the left and right border (2 pixels each)
-    .num_border_rows = 2,
-    .num_border_cols = 2,
+    .num_rows = 228,
+    .num_cols = 200,
+    .num_border_rows = 0,
+    .num_border_cols = 0,
     .row_major = true,
     .row_inverted = true,
     .col_inverted = true,
