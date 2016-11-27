@@ -54,6 +54,7 @@
 #define R_DMA_Sx_REGS            6
 #define R_DMA_SxCR           (0x00 / 4)
 #define R_DMA_SxCR_EN   0x00000001
+#define R_DMA_SxCR_DIR	0x000000C0
 #define R_DMA_SxNDTR         (0x04 / 4)
 #define R_DMA_SxNDTR_EN 0x00000001
 #define R_DMA_SxPAR          (0x08 / 4)
@@ -204,12 +205,24 @@ f2xx_dma_stream_start(f2xx_dma_stream *s, int stream_no)
     }
 
     /* XXX hack do the entire transfer here for now. */
-    DPRINTF("%s: transferring %d x %d byte(s) from 0x%08x to 0x%08x\n", __func__, s->ndtr,
+    /* Read from peripheral and store to memory */
+    if ((s->cr & R_DMA_SxCR_DIR) == 0x00) {
+	DPRINTF("%s: DIR 0 transferring %d x %d byte(s) from 0x%08x to 0x%08x\n", __func__, s->ndtr,
+              msize, s->par, s->m0ar);
+	while (s->ndtr--) {
+	    cpu_physical_memory_read(s->par, buf, msize);
+	    cpu_physical_memory_write(s->m0ar, buf, msize);
+	    s->m0ar += msize;
+	}
+	/* Read from memory and store to peripheral */
+    } else if ((s->cr & R_DMA_SxCR_DIR) == 0x40) {
+	DPRINTF("%s: DIR 1 transferring %d x %d byte(s) from 0x%08x to 0x%08x\n", __func__, s->ndtr,
               msize, s->m0ar, s->par);
-    while (s->ndtr--) {
-        cpu_physical_memory_read(s->m0ar, buf, msize);
-        cpu_physical_memory_write(s->par, buf, msize);
-        s->m0ar += msize;
+	while (s->ndtr--) {
+	    cpu_physical_memory_read(s->m0ar, buf, msize);
+	    cpu_physical_memory_write(s->par, buf, msize);
+	    s->m0ar += msize;
+	}
     }
     /* Transfer complete. */
     s->cr &= ~R_DMA_SxCR_EN;

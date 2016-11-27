@@ -285,7 +285,7 @@ f2xx_tim_init(SysBusDevice *dev)
 {
     f2xx_tim *s = FROM_SYSBUS(f2xx_tim, dev);
 
-    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_tim_ops, s, "tim", 0xa0);
+    memory_region_init_io(&s->iomem, OBJECT(s), &f2xx_tim_ops, s, "tim", 0x3ff);
     sysbus_init_mmio(dev, &s->iomem);
     //s->regs[R_RTC_ISR] = R_RTC_ISR_RESET;
     ////s->regs[R_RTC_PRER] = R_RTC_PRER_RESET;
