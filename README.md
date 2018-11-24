@@ -22,9 +22,12 @@ Install the `devel/glib20` and `x11/pixman` ports.
 ## Building
 Commands for a typical build:
 
-        ./configure --disable-werror --enable-debug --target-list="arm-softmmu" \
-        --extra-cflags=-DSTM32_UART_NO_BAUD_DELAY
-        make
+```
+git submodule update --init dtc
+./configure --disable-werror --enable-debug --target-list="arm-softmmu" \
+    --extra-cflags="-DSTM32_UART_NO_BAUD_DELAY -std=c99"
+make
+```
 
 Summary set of configure options that are useful when developing (tested only on OS X 10.9.5):
 
@@ -33,8 +36,8 @@ Summary set of configure options that are useful when developing (tested only on
         --enable-debug --disable-werror --target-list="arm-softmmu" \
         --extra-cflags=-DDEBUG_CLKTREE --extra-cflags=-DDEBUG_STM32_RCC \
         --extra-cflags=-DDEBUG_STM32_UART --extra-cflags=-DSTM32_UART_NO_BAUD_DELAY \
-        --extra-cflags=-DDEBUG_GIC 
-        
+        --extra-cflags=-DDEBUG_GIC
+
 ####Configure options which control the STM32 implementation:
 
     --extra-cflags=-DDEBUG_CLKTREE
@@ -102,7 +105,7 @@ The generated executable is arm-softmmu/qemu-system-arm .
 Example:
 
         qemu-system-arm -rtc base=localtime -machine pebble-bb2 -cpu cortex-m3 -s \
-        -pflash qemu_micro_flash.bin -mtdblock qemu_spi_flash.bin 
+        -pflash qemu_micro_flash.bin -mtdblock qemu_spi_flash.bin
 
 Adding `-S` to the commandline will have QEMU wait in the monitor at start;
 the _c_ontinue command is necessary to start the virtual CPU.
