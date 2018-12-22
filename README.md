@@ -1,6 +1,7 @@
 # Pebble Smartwatch QEMU Implementation
 
 ## Overview
+
 This is a derivative of QEMU v2.1.1 that has been modified to include an implementation of the STM32F2xx microcontroller.
 This is based off of a QEMU fork that is targeting the STM32F103: https://github.com/beckus/qemu_stm32.
 This repo contains both beckus' STM32F1xx implementation and Pebble's STM32F2xx additions.
@@ -8,9 +9,17 @@ This repo contains both beckus' STM32F1xx implementation and Pebble's STM32F2xx 
 __DANGER DANGER: It is very much a work-in-progress! Only some of the peripherals are working at the moment. Please contribute!__
 
 ## Dependencies
+
 QEMU requires that development packages for glib20 and pixman are installed.
 
+### Ubuntu
+
+```
+sudo apt install libpixman-1-dev
+```
+
 ### FreeBSD
+
 Install the `devel/glib20` and `x11/pixman` ports.
 
 ### Linux
@@ -20,25 +29,43 @@ Install the `devel/glib20` and `x11/pixman` ports.
 ### Windows
 
 ## Building
+
 Commands for a typical build:
 
 ```
 git submodule update --init dtc
+```
+
+Typeical config:
+
+```
 ./configure --disable-werror --enable-debug --target-list="arm-softmmu" \
-    --extra-cflags="-DSTM32_UART_NO_BAUD_DELAY -std=c99"
+    --extra-cflags="-DSTM32_UART_NO_BAUD_DELAY"
 make
+```
+
+Debugging config:
+
+```
+./configure --disable-werror --enable-debug --target-list="arm-softmmu" \
+    --extra-cflags="-DSTM32_UART_NO_BAUD_DELAY" \
+    --extra-cflags="-DDEBUG_CLKTREE" \
+    --extra-cflags="-DDEBUG_STM32_RCC" \
+    --extra-cflags="-DDEBUG_STM32_UART"
 ```
 
 Summary set of configure options that are useful when developing (tested only on OS X 10.9.5):
 
-        ./configure --enable-tcg-interpreter --extra-ldflags=-g \
+```
+./configure --enable-tcg-interpreter --extra-ldflags=-g \
         --with-coroutine=gthread --enable-debug-tcg --enable-cocoa \
         --enable-debug --disable-werror --target-list="arm-softmmu" \
         --extra-cflags=-DDEBUG_CLKTREE --extra-cflags=-DDEBUG_STM32_RCC \
         --extra-cflags=-DDEBUG_STM32_UART --extra-cflags=-DSTM32_UART_NO_BAUD_DELAY \
         --extra-cflags=-DDEBUG_GIC
+```
 
-####Configure options which control the STM32 implementation:
+#### Configure options which control the STM32 implementation:
 
     --extra-cflags=-DDEBUG_CLKTREE
         Print out clock tree debug statements.
@@ -61,11 +88,11 @@ Summary set of configure options that are useful when developing (tested only on
         software.  Although less realisitic, it is safer NOT to use this, in case the VM is
         running slow.
 
-####Other QEMU configure options which are useful for troubleshooting:
+#### Other QEMU configure options which are useful for troubleshooting:
     --extra-cflags=-DDEBUG_GIC
         Extra logging around which interrupts are asserted
 
-####qemu-system-arm options which are useful for troubleshooting:
+#### qemu-system-arm options which are useful for troubleshooting:
     -d ?
         To see available log levels
 
@@ -81,6 +108,7 @@ Useful make commands when rebuilding:
         make clean
 
 ## Generating Images
+
 * Use `./waf build qemu_image_spi` to generate `qemu_spi_flash.bin` from tintin.
 * Use `./waf build qemu_image_micro` to generate `qemu_micro_flash.bin` from tintin.
 
@@ -96,6 +124,7 @@ like so:
 	truncate -s 512k micro_flash.bin
 
 ## Running
+
 There is a convenience script `pebble.sh` that runs QEMU. It depends on the existence of (symlinked) images `qemu_micro_flash.bin` and `qemu_spi_flash.bin`.
 
 ### More details about running QEMU
@@ -104,16 +133,20 @@ The generated executable is arm-softmmu/qemu-system-arm .
 
 Example:
 
-        qemu-system-arm -rtc base=localtime -machine pebble-bb2 -cpu cortex-m3 -s \
+```
+qemu-system-arm -rtc base=localtime -machine pebble-bb2 -cpu cortex-m3 -s \
         -pflash qemu_micro_flash.bin -mtdblock qemu_spi_flash.bin
+```
 
 Adding `-S` to the commandline will have QEMU wait in the monitor at start;
 the _c_ontinue command is necessary to start the virtual CPU.
 
 ## QEMU Docs
+
 Read original the documentation in qemu-doc.html or on http://wiki.qemu.org
 
 ## QEMU Modifications
+
 This emulator consists largely of new hardware device models; it includes
 only minor changes to existing QEMU functionality.
 
