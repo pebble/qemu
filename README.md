@@ -29,13 +29,29 @@ Install the `devel/glib20` and `x11/pixman` ports.
 ### Windows
 
 ## Building
+
 Commands for a typical build:
 
 ```
 git submodule update --init dtc
+```
+
+Typeical config:
+
+```
 ./configure --disable-werror --enable-debug --target-list="arm-softmmu" \
     --extra-cflags="-DSTM32_UART_NO_BAUD_DELAY"
 make
+```
+
+Debugging config:
+
+```
+./configure --disable-werror --enable-debug --target-list="arm-softmmu" \
+    --extra-cflags="-DSTM32_UART_NO_BAUD_DELAY" \
+    --extra-cflags="-DDEBUG_CLKTREE" \
+    --extra-cflags="-DDEBUG_STM32_RCC" \
+    --extra-cflags="-DDEBUG_STM32_UART"
 ```
 
 Summary set of configure options that are useful when developing (tested only on OS X 10.9.5):
